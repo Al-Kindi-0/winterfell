@@ -81,10 +81,10 @@ pub trait Trace: Sized {
         // make sure the width align; if they don't something went terribly wrong
         assert_eq!(
             self.width(),
-            air.trace_width(),
+            air.trace_full_width(),
             "inconsistent trace width: expected {}, but was {}",
             self.width(),
-            air.trace_width()
+            air.trace_full_width()
         );
 
         // --- 1. make sure the assertions are valid ----------------------------------------------

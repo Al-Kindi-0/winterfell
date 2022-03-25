@@ -40,6 +40,19 @@ mod tests;
 
 const MIN_CYCLE_LENGTH: usize = 2;
 
+/// Possible number of segment in an execution trace of a computation.
+pub const NUM_TRACE_SEGMENTS: usize = 2;
+
+// TYPE ALIASES
+// ================================================================================================
+
+/// Widths (number of columns) of execution trace segments for a computation.
+///
+/// Currently, only two trace segments are possible. The width of the first segment cannot be zero.
+/// If a computation's trace consists of a single segment, width of the second segment must be set
+/// to zero.
+pub type TraceWidthInfo = [usize; NUM_TRACE_SEGMENTS];
+
 // AIR TRAIT
 // ================================================================================================
 /// Describes algebraic intermediate representation of a computation.
@@ -351,12 +364,21 @@ pub trait Air: Send + Sync {
         self.context().trace_info.length()
     }
 
-    /// Returns width of the execution trace for an instance of the computation described by
-    /// this AIR.
+    /// Returns the total number of columns in the execution trace for an instance of the
+    /// computation described by this AIR.
     ///
-    /// This is guaranteed to be between 1 and 255.
-    fn trace_width(&self) -> usize {
-        self.context().trace_info.width()
+    /// The total number of columns is defined as the number of columns in all trace segments.
+    /// This value is guaranteed to be between 1 and 255.
+    fn trace_full_width(&self) -> usize {
+        self.context().trace_info.full_width()
+    }
+
+    /// Returns the number of columns for all execution trace segments.
+    ///
+    /// Currently, the number of segments is limited to two. The first segment width is guaranteed
+    /// to be greater than zero.
+    fn trace_segment_widths(&self) -> TraceWidthInfo {
+        self.context().trace_info.segment_widths()
     }
 
     /// Returns degree of trace polynomials for an instance of the computation described by
@@ -506,7 +528,7 @@ pub trait Air: Send + Sync {
         H: Hasher,
     {
         let mut t_coefficients = Vec::new();
-        for _ in 0..self.trace_width() {
+        for _ in 0..self.trace_full_width() {
             t_coefficients.push(public_coin.draw_triple()?);
         }
 
@@ -540,7 +562,7 @@ fn prepare_assertions<B: StarkField>(
 
     for assertion in assertions.into_iter() {
         assertion
-            .validate_trace_width(context.trace_info.width())
+            .validate_trace_width(context.trace_info.full_width())
             .unwrap_or_else(|err| {
                 panic!("assertion {} is invalid: {}", assertion, err);
             });
