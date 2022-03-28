@@ -45,6 +45,5 @@ mod air;
 pub use air::{
     Air, AirContext, Assertion, BoundaryConstraint, BoundaryConstraintGroup,
     ConstraintCompositionCoefficients, ConstraintDivisor, DeepCompositionCoefficients,
-    EvaluationFrame, TraceInfo, TraceWidthInfo, TransitionConstraintDegree,
-    TransitionConstraintGroup,
+    EvaluationFrame, TraceInfo, TraceLayout, TransitionConstraintDegree, TransitionConstraintGroup,
 };

@@ -12,7 +12,7 @@ use utils::{
 };
 
 mod trace_info;
-pub use trace_info::TraceInfo;
+pub use trace_info::{TraceInfo, TraceLayout};
 
 mod context;
 pub use context::AirContext;
@@ -39,19 +39,6 @@ mod tests;
 // ================================================================================================
 
 const MIN_CYCLE_LENGTH: usize = 2;
-
-/// Possible number of segment in an execution trace of a computation.
-pub const NUM_TRACE_SEGMENTS: usize = 2;
-
-// TYPE ALIASES
-// ================================================================================================
-
-/// Widths (number of columns) of execution trace segments for a computation.
-///
-/// Currently, only two trace segments are possible. The width of the first segment cannot be zero.
-/// If a computation's trace consists of a single segment, width of the second segment must be set
-/// to zero.
-pub type TraceWidthInfo = [usize; NUM_TRACE_SEGMENTS];
 
 // AIR TRAIT
 // ================================================================================================
@@ -373,14 +360,6 @@ pub trait Air: Send + Sync {
         self.context().trace_info.full_width()
     }
 
-    /// Returns the number of columns for all execution trace segments.
-    ///
-    /// Currently, the number of segments is limited to two. The first segment width is guaranteed
-    /// to be greater than zero.
-    fn trace_segment_widths(&self) -> TraceWidthInfo {
-        self.context().trace_info.segment_widths()
-    }
-
     /// Returns degree of trace polynomials for an instance of the computation described by
     /// this AIR.
     ///
@@ -484,6 +463,33 @@ pub trait Air: Send + Sync {
     /// execution trace except for the last one.
     fn transition_constraint_divisor(&self) -> ConstraintDivisor<Self::BaseField> {
         ConstraintDivisor::from_transition(self.trace_length())
+    }
+
+    // TRACE SEGMENT RANDOMNESS
+    // --------------------------------------------------------------------------------------------
+
+    /// Returns a vector of field elements required for construction of a trace segment with the
+    /// specified index.
+    ///
+    /// The elements are drawn uniformly at random from the provided public coin.
+    fn get_trace_segment_random_elements<E, H>(
+        &self,
+        segment_idx: usize,
+        public_coin: &mut RandomCoin<Self::BaseField, H>,
+    ) -> Result<Vec<E>, RandomCoinError>
+    where
+        E: FieldElement<BaseField = Self::BaseField>,
+        H: Hasher,
+    {
+        let num_elements = self
+            .trace_info()
+            .layout()
+            .get_aux_segment_rand_elements(segment_idx);
+        let mut result = Vec::with_capacity(num_elements);
+        for _ in 0..num_elements {
+            result.push(public_coin.draw()?);
+        }
+        Ok(result)
     }
 
     // LINEAR COMBINATION COEFFICIENTS
