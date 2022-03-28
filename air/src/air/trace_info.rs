@@ -4,7 +4,8 @@
 // LICENSE file in the root directory of this source tree.
 
 use utils::{
-    collections::Vec, ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable,
+    collections::Vec, string::ToString, ByteReader, ByteWriter, Deserializable,
+    DeserializationError, Serializable,
 };
 
 // CONSTANTS
