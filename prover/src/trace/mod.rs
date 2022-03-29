@@ -6,6 +6,7 @@
 use super::Matrix;
 use air::{Air, EvaluationFrame, TraceInfo, TraceLayout};
 use math::{polynom, FieldElement, StarkField};
+use utils::collections::Vec;
 
 mod poly_table;
 pub use poly_table::TracePolyTable;
