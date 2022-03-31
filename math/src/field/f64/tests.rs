@@ -113,6 +113,17 @@ fn inv() {
     assert_eq!(BaseElement::ZERO, BaseElement::inv(BaseElement::ZERO));
 }
 
+
+#[test]
+fn inv_gcd() {
+    assert_eq!(BaseElement::ONE, (BaseElement::from(1u64)).inv_gcd());
+    assert_eq!(BaseElement::ZERO, (BaseElement::from(0u64)).inv_gcd());
+    assert_eq!(
+        BaseElement::inv(BaseElement::from(4232346u64).inv_gcd()),
+        BaseElement::from(4232346u64)
+    );
+}
+
 #[test]
 fn element_as_int() {
     let v = u64::MAX;

@@ -39,6 +39,9 @@ mod tests;
 // Field modulus = 2^64 - 2^32 + 1
 const M: u64 = 0xFFFFFFFF00000001;
 
+// (p+1)/2
+pub const MOD_2: u64 = (0xFFFFFFFF00000001 + 1u64) >> 1;
+
 // Epsilon = 2^32 - 1;
 const E: u64 = 0xFFFFFFFF;
 
@@ -62,6 +65,37 @@ impl BaseElement {
     /// equal to the field modulus, modular reduction is silently performed.
     pub const fn new(value: u64) -> Self {
         Self(value % M)
+    }
+    pub const fn half(self) -> Self {
+        // If self is even, then return self/2.
+        // If self is odd, then return (self-1)/2 + (M+1)/2 = (x+M)/2.
+        Self((self.0 >> 1).wrapping_add((self.0 & 1).wrapping_neg() & MOD_2))
+    }
+
+    /// Return the inverse of "self" modulo the prime modulus.
+    /// Based on Algorithm1 in https://eprint.iacr.org/2020/972.pdf
+    pub fn inv_gcd(&mut self) -> BaseElement {
+        let mut a = self.0;
+        let mut u = BaseElement::from(1u64);
+        let mut b = BaseElement::MODULUS;
+        let mut v = BaseElement::from(0u64);
+
+        while a != 0 {
+            if a & 0x1 == 0x0 {
+                a >>= 1;
+                u = u.half();
+            } else {
+                if a < b {
+                    mem::swap(&mut a, &mut b);
+                    mem::swap(&mut u, &mut v);
+                }
+                a -= b;
+                a >>= 1;
+                u -= v;
+                u = u.half();
+            }
+        }
+        return v;
     }
 }
 
