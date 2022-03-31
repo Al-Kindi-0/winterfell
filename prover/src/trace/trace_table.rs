@@ -357,7 +357,7 @@ impl<B: StarkField> Trace for TraceTable<B> {
         &self.trace
     }
 
-    fn build_aux_segment<E>(&mut self, _rand_elements: &[E]) -> Option<&Matrix<Self::BaseField>>
+    fn build_aux_segment<E>(&mut self, _rand_elements: &[E]) -> Option<&Matrix<E>>
     where
         E: FieldElement<BaseField = Self::BaseField>,
     {

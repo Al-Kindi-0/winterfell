@@ -7,6 +7,9 @@ use super::Matrix;
 use air::{Air, AuxTraceSegmentRandElements, EvaluationFrame, TraceInfo, TraceLayout};
 use math::{polynom, FieldElement, StarkField};
 
+mod trace_lde;
+pub use trace_lde::TraceLde;
+
 mod poly_table;
 pub use poly_table::TracePolyTable;
 
@@ -64,7 +67,7 @@ pub trait Trace: Sized {
 
     /// Builds and returns the next auxiliary trace segment. If there are no more segments to
     /// build (i.e., the trace is complete), None is returned.
-    fn build_aux_segment<E>(&mut self, rand_elements: &[E]) -> Option<&Matrix<Self::BaseField>>
+    fn build_aux_segment<E>(&mut self, rand_elements: &[E]) -> Option<&Matrix<E>>
     where
         E: FieldElement<BaseField = Self::BaseField>;
 
