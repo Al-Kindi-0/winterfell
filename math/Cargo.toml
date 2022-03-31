@@ -16,16 +16,9 @@ rust-version = "1.60"
 bench = false
 
 [[bench]]
-name = "fft"
+name = "inv"
 harness = false
 
-[[bench]]
-name = "field"
-harness = false
-
-[[bench]]
-name = "polynom"
-harness = false
 
 [features]
 concurrent = ["utils/concurrent", "std"]
