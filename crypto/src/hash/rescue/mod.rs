@@ -23,3 +23,12 @@ fn exp_acc<B: StarkField, const N: usize, const M: usize>(base: [B; N], tail: [B
     result.iter_mut().zip(tail).for_each(|(r, t)| *r *= t);
     result
 }
+
+#[inline(always)]
+fn exp_acc_one<B: StarkField, const M: usize>(base: B, tail: B) -> B {
+    let mut result = base;
+    for _ in 0..M {
+        result = result.square();
+    }
+    result * tail
+}

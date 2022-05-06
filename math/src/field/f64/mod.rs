@@ -14,10 +14,7 @@
 //!
 //! Internally, the values are stored in the range $[0, 2^{64})$ using `u64` as the backing type.
 
-use super::{
-    traits::{FieldElement, StarkField},
-    ExtensibleField,
-};
+use super::{ExtensibleField, FieldElement, StarkField};
 use core::{
     convert::{TryFrom, TryInto},
     fmt::{Debug, Display, Formatter},
@@ -38,9 +35,6 @@ mod tests;
 
 // Field modulus = 2^64 - 2^32 + 1
 const M: u64 = 0xFFFFFFFF00000001;
-
-// (p+1)/2
-pub const MOD_2: u64 = (0xFFFFFFFF00000001 + 1u64) >> 1;
 
 // Epsilon = 2^32 - 1;
 const E: u64 = 0xFFFFFFFF;
@@ -65,37 +59,6 @@ impl BaseElement {
     /// equal to the field modulus, modular reduction is silently performed.
     pub const fn new(value: u64) -> Self {
         Self(value % M)
-    }
-    pub const fn half(self) -> Self {
-        // If self is even, then return self/2.
-        // If self is odd, then return (self-1)/2 + (M+1)/2 = (x+M)/2.
-        Self((self.0 >> 1).wrapping_add((self.0 & 1).wrapping_neg() & MOD_2))
-    }
-
-    /// Return the inverse of "self" modulo the prime modulus.
-    /// Based on Algorithm1 in https://eprint.iacr.org/2020/972.pdf
-    pub fn inv_gcd(&mut self) -> BaseElement {
-        let mut a = self.0;
-        let mut u = BaseElement::from(1u64);
-        let mut b = BaseElement::MODULUS;
-        let mut v = BaseElement::from(0u64);
-
-        while a != 0 {
-            if a & 0x1 == 0x0 {
-                a >>= 1;
-                u = u.half();
-            } else {
-                if a < b {
-                    mem::swap(&mut a, &mut b);
-                    mem::swap(&mut u, &mut v);
-                }
-                a -= b;
-                a >>= 1;
-                u -= v;
-                u = u.half();
-            }
-        }
-        return v;
     }
 }
 
@@ -133,33 +96,7 @@ impl FieldElement for BaseElement {
     #[inline]
     #[allow(clippy::many_single_char_names)]
     fn inv(self) -> Self {
-        // compute base^(M - 2) using 72 multiplications
-        // M - 2 = 0b1111111111111111111111111111111011111111111111111111111111111111
-
-        // compute base^11
-        let t2 = self.square() * self;
-
-        // compute base^111
-        let t3 = t2.square() * self;
-
-        // compute base^111111 (6 ones)
-        let t6 = exp_acc::<3>(t3, t3);
-
-        // compute base^111111111111 (12 ones)
-        let t12 = exp_acc::<6>(t6, t6);
-
-        // compute base^111111111111111111111111 (24 ones)
-        let t24 = exp_acc::<12>(t12, t12);
-
-        // compute base^1111111111111111111111111111111 (31 ones)
-        let t30 = exp_acc::<6>(t24, t6);
-        let t31 = t30.square() * self;
-
-        // compute base^111111111111111111111111111111101111111111111111111111111111111
-        let t63 = exp_acc::<32>(t31, t31);
-
-        // compute base^1111111111111111111111111111111011111111111111111111111111111111
-        t63.square() * self
+        try_inverse_u64(self).unwrap()
     }
 
     fn conjugate(&self) -> Self {
@@ -387,6 +324,13 @@ impl ExtensibleField<2> for BaseElement {
     }
 
     #[inline(always)]
+    fn mul_base(a: [Self; 2], b: Self) -> [Self; 2] {
+        // multiplying an extension field element by a base field element requires just 2
+        // multiplications in the base field.
+        [a[0] * b, a[1] * b]
+    }
+
+    #[inline(always)]
     fn frobenius(x: [Self; 2]) -> [Self; 2] {
         [x[0] + x[1], -x[1]]
     }
@@ -424,6 +368,13 @@ impl ExtensibleField<3> for BaseElement {
             a0b1_a1b0_a1b2_a2b1_a2b2,
             a0b2_a1b1_a2b0_a2b2,
         ]
+    }
+
+    #[inline(always)]
+    fn mul_base(a: [Self; 3], b: Self) -> [Self; 3] {
+        // multiplying an extension field element by a base field element requires just 3
+        // multiplications in the base field.
+        [a[0] * b, a[1] * b, a[2] * b]
     }
 
     #[inline(always)]
@@ -594,4 +545,161 @@ fn exp_acc<const N: usize>(base: BaseElement, tail: BaseElement) -> BaseElement 
         result = result.square();
     }
     result * tail
+}
+
+#[allow(clippy::many_single_char_names)]
+pub(crate) fn try_inverse_u64(x: BaseElement) -> Option<BaseElement> {
+    let mut f = x.0;
+    let mut g = M;
+    // NB: These two are very rarely such that their absolute
+    // value exceeds (p-1)/2; we are paying the price of i128 for
+    // the whole calculation, just for the times they do
+    // though. Measurements suggest a further 10% time saving if c
+    // and d could be replaced with i64's.
+    let mut c = 1i128;
+    let mut d = 0i128;
+
+    if f == 0 {
+        return Some(BaseElement::ZERO);
+    }
+
+    // f and g must always be odd.
+    let mut k = f.trailing_zeros();
+    f >>= k;
+    if f == 1 {
+        return Some(inverse_2exp(k as usize));
+    }
+
+    // The first two iterations are unrolled. This is to handle
+    // the case where f and g are both large and f+g can
+    // overflow. log2(max{f,g}) goes down by at least one each
+    // iteration though, so after two iterations we can be sure
+    // that f+g won't overflow.
+
+    // Iteration 1:
+    safe_iteration(&mut f, &mut g, &mut c, &mut d, &mut k);
+
+    if f == 1 {
+        // c must be -1 or 1 here.
+        if c == -1 {
+            return Some(-inverse_2exp(k as usize));
+        }
+        debug_assert!(c == 1, "bug in try_inverse_u64");
+        return Some(inverse_2exp(k as usize));
+    }
+
+    // Iteration 2:
+    safe_iteration(&mut f, &mut g, &mut c, &mut d, &mut k);
+
+    // Remaining iterations:
+    while f != 1 {
+        unsafe {
+            unsafe_iteration(&mut f, &mut g, &mut c, &mut d, &mut k);
+        }
+    }
+
+    // The following two loops adjust c so it's in the canonical range
+    // [0, F::ORDER).
+
+    // The maximum number of iterations observed here is 2; should
+    // prove this.
+    while c < 0 {
+        c += M as i128;
+    }
+
+    // The maximum number of iterations observed here is 1; should
+    // prove this.
+    while c >= M as i128 {
+        c -= M as i128;
+    }
+
+    // Precomputing the binary inverses rather than using inverse_2exp
+    // saves ~5ns on my machine.
+    let res = BaseElement::new(c as u64) * inverse_2exp(k as usize);
+    debug_assert!(x * res == BaseElement::ONE, "bug in try_inverse_u64");
+    Some(res)
+}
+
+/// This is a 'safe' iteration for the modular inversion algorithm. It
+/// is safe in the sense that it will produce the right answer even
+/// when f + g >= 2^64.
+#[inline(always)]
+fn safe_iteration(f: &mut u64, g: &mut u64, c: &mut i128, d: &mut i128, k: &mut u32) {
+    if f < g {
+        std::mem::swap(f, g);
+        std::mem::swap(c, d);
+    }
+    if *f & 3 == *g & 3 {
+        // f - g = 0 (mod 4)
+        *f -= *g;
+        *c -= *d;
+
+        // kk >= 2 because f is now 0 (mod 4).
+        let kk = f.trailing_zeros();
+        *f >>= kk;
+        *d <<= kk;
+        *k += kk;
+    } else {
+        // f + g = 0 (mod 4)
+        *f = (*f >> 2) + (*g >> 2) + 1u64;
+        *c += *d;
+        let kk = f.trailing_zeros();
+        *f >>= kk;
+        *d <<= kk + 2;
+        *k += kk + 2;
+    }
+}
+
+/// This is an 'unsafe' iteration for the modular inversion
+/// algorithm. It is unsafe in the sense that it might produce the
+/// wrong answer if f + g >= 2^64.
+#[inline(always)]
+unsafe fn unsafe_iteration(f: &mut u64, g: &mut u64, c: &mut i128, d: &mut i128, k: &mut u32) {
+    if *f < *g {
+        std::mem::swap(f, g);
+        std::mem::swap(c, d);
+    }
+    if *f & 3 == *g & 3 {
+        // f - g = 0 (mod 4)
+        *f -= *g;
+        *c -= *d;
+    } else {
+        // f + g = 0 (mod 4)
+        *f += *g;
+        *c += *d;
+    }
+
+    // kk >= 2 because f is now 0 (mod 4).
+    let kk = f.trailing_zeros();
+    *f >>= kk;
+    *d <<= kk;
+    *k += kk;
+}
+
+#[inline]
+fn inverse_2exp(exp: usize) -> BaseElement {
+    // The inverse of 2^exp is p-(p-1)/2^exp when char(F) = p and
+    // exp is at most the t=TWO_ADICITY of the prime field. When
+    // exp exceeds t, we repeatedly multiply by 2^-t and reduce
+    // exp until it's in the right range.
+
+    const TWO_ADICITY: usize = 32;
+    let p = M;
+
+    if exp > TWO_ADICITY {
+        // NB: This should be a compile-time constant
+        let inverse_2_pow_adicity =
+            BaseElement::new(p - ((p - 1) >> TWO_ADICITY));
+
+        let mut res = inverse_2_pow_adicity;
+        let mut e = exp - TWO_ADICITY;
+
+        while e > TWO_ADICITY {
+            res *= inverse_2_pow_adicity;
+            e -= TWO_ADICITY;
+        }
+        res * BaseElement::new(p - ((p - 1) >> e))
+    } else {
+        BaseElement::new(p - ((p - 1) >> exp))
+    }
 }

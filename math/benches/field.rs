@@ -73,8 +73,7 @@ where
     });
 
     group.bench_function("inv", |bench| {
-        let x = rand_value::<B>();
-        bench.iter(|| x.inv())
+        bench.iter_batched(|| rand_value::<B>(), |x| x.inv(), BatchSize::SmallInput)
     });
 
     batch_ops::<B, WallTime>(&mut group, "base");

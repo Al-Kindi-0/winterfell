@@ -3,7 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use super::{exp_acc, Digest, ElementHasher, Hasher};
+use super::{exp_acc, exp_acc_one, Digest, ElementHasher, Hasher};
 use core::convert::TryInto;
 use core::ops::Range;
 use math::{fields::f64::BaseElement, FieldElement, StarkField};
@@ -268,37 +268,171 @@ impl Rp64_256 {
     /// The output of the hash function can be read from state elements 4, 5, 6, and 7.
     pub const DIGEST_RANGE: Range<usize> = DIGEST_RANGE;
 
+    /// MDS matrix used for computing the linear layer in a Rescue Prime round.
+    pub const MDS: [[BaseElement; STATE_WIDTH]; STATE_WIDTH] = MDS;
+
+    /// Inverse of the MDS matrix.
+    pub const INV_MDS: [[BaseElement; STATE_WIDTH]; STATE_WIDTH] = INV_MDS;
+
+    /// Round constants added to the hasher state in the first half of the Rescue Prime round.
+    pub const ARK1: [[BaseElement; STATE_WIDTH]; NUM_ROUNDS] = ARK1;
+
+    /// Round constants added to the hasher state in the second half of the Rescue Prime round.
+    pub const ARK2: [[BaseElement; STATE_WIDTH]; NUM_ROUNDS] = ARK2;
+
     // RESCUE PERMUTATION
     // --------------------------------------------------------------------------------------------
 
     /// Applies Rescue-XLIX permutation to the provided state.
     pub fn apply_permutation(state: &mut [BaseElement; STATE_WIDTH]) {
-        // implementation is based on algorithm 3 from <https://eprint.iacr.org/2020/1143.pdf>
-        // apply round function 7 times; this provides 128-bit security with 40% security margin
-        for i in 0..NUM_ROUNDS {
-            Self::apply_round(state, i);
-        }
+
+        //Self::apply_round(state, 0);
+        //Self::apply_round(state, 1);
+        //Self::apply_round(state, 2);
+        //Self::apply_round(state, 3);
+        //Self::apply_round(state, 4);
+        //Self::apply_round(state, 5);
+        //Self::apply_round(state, 6);
+
+        // rescue prime: 3 full rounds, 4 half rounds
+        Self::apply_rp_half_round(state, 0);
+        Self::apply_rp_full_round(state, 1);
+        Self::apply_rp_half_round(state, 2);
+        Self::apply_rp_full_round(state, 3);
+        Self::apply_rp_half_round(state, 4);
+        Self::apply_rp_full_round(state, 5);
+        Self::apply_rp_half_round(state, 6);
+
+        // 7 forward rounds
+        //Self::apply_rp_half_round(state, 0);
+        //Self::apply_rp_half_round(state, 1);
+        //Self::apply_rp_half_round(state, 2);
+        //Self::apply_rp_half_round(state, 3);
+        //Self::apply_rp_half_round(state, 4);
+        //Self::apply_rp_half_round(state, 5);
+        //Self::apply_rp_half_round(state, 6);
+
+
+        // 2 inverse rounds, 5 rescue prime half rounds
+        //Self::apply_inverse_round(state, 0);
+        //Self::apply_rp_half_round(state, 1);
+        //Self::apply_rp_half_round(state, 2);
+        //Self::apply_rp_half_round(state, 3);
+        //Self::apply_rp_half_round(state, 4);
+        //Self::apply_rp_half_round(state, 5);
+        //Self::apply_inverse_round(state, 6);
+
+        // alternating inverse and half-rounds
+        //Self::apply_rp_half_round(state, 0);       
+        //Self::apply_inverse_round(state, 1);
+        //Self::apply_rp_half_round(state, 2);
+        //Self::apply_inverse_round(state, 3);
+        //Self::apply_rp_half_round(state, 4);
+        //Self::apply_inverse_round(state, 5);
+        //Self::apply_rp_half_round(state, 6);
+
+        // 7 rounds of x^(-7)
+        //Self::apply_alpha_inverse_round(state, 0);
+        //Self::apply_alpha_inverse_round(state, 1);
+        //Self::apply_alpha_inverse_round(state, 2);
+        //Self::apply_alpha_inverse_round(state, 3);
+        //Self::apply_alpha_inverse_round(state, 4);
+        //Self::apply_alpha_inverse_round(state, 5);
+        //Self::apply_alpha_inverse_round(state, 6);
+
+        // 2 half-rounds of x^(-7) and 5 half-rounds of x^(7)
+        //Self::apply_half_round_2(state, 0);
+        //Self::apply_half_round_1(state, 1);
+        //Self::apply_half_round_1(state, 2);
+        //Self::apply_half_round_1(state, 3);
+        //Self::apply_half_round_1(state, 4);
+        //Self::apply_half_round_1(state, 5);
+        //Self::apply_half_round_2(state, 6);
+
+        // 7 rounds of interleaved x^7 and x^(-1)
+        //Self::apply_interleaved_round(state, 0);       
+        //Self::apply_interleaved_round(state, 1);
+        //Self::apply_interleaved_round(state, 2);
+        //Self::apply_interleaved_round(state, 3);
+        //Self::apply_interleaved_round(state, 4);
+        //Self::apply_interleaved_round(state, 5);
+        //Self::apply_interleaved_round(state, 6);
     }
 
     /// Rescue-XLIX round function.
     #[inline(always)]
-    pub fn apply_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+    fn apply_rp_full_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
         // apply first half of Rescue round
         Self::apply_sbox(state);
         Self::apply_mds(state);
         Self::add_constants(state, &ARK1[round]);
 
         // apply second half of Rescue round
-        Self::apply_inv_sbox(state);
+        Self::apply_inv_sbox_new(state);
         Self::apply_mds(state);
         Self::add_constants(state, &ARK2[round]);
+    }
+
+    #[inline(always)]
+    fn apply_rp_half_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        // apply first half of Rescue round
+        Self::apply_sbox(state);
+        Self::apply_mds(state);
+        Self::add_constants(state, &ARK1[round]);
+    }
+
+    #[inline(always)]
+    fn apply_inverse_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        Self::apply_inv_sbox_new(state);
+        Self::apply_mds(state);
+        Self::add_constants(state, &ARK1[round]);
+    }
+
+    #[inline(always)]
+    fn apply_round_2(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        Self::apply_sbox(state);        
+        Self::add_constants(state, &ARK1[round]);
+        Self::apply_inv_sbox_new(state);
+        Self::apply_mds(state);
+        Self::add_constants(state, &ARK2[round]);
+    }
+
+    #[inline(always)]
+    fn apply_alpha_inverse_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        Self::apply_sbox(state);
+        Self::apply_inv_sbox_new(state);
+        Self::apply_mds(state);
+        Self::add_constants(state, &ARK1[round]);
+    }
+
+    #[inline(always)]
+    fn apply_interleaved_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        for i in 0..6 {
+            let t2 = state[i].square();
+            let t4 = t2.square();
+            state[i] = state[i] * t2 * t4;
+        }
+        Self::apply_inv_sbox_half(&mut state[6..]);
+
+
+        Self::apply_mds(state);
+        Self::add_constants(state, &ARK1[round]);
+    }
+
+    #[inline(always)]
+    fn apply_one_plus_eleven_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        Self::apply_sbox(state);
+        Self::apply_mds(state);
+        Self::add_constants(state, &ARK1[round]);
+
+        state[0] = Self::apply_inv_sbox_one(state[0]);
     }
 
     // HELPER FUNCTIONS
     // --------------------------------------------------------------------------------------------
 
     #[inline(always)]
-    fn apply_mds(state: &mut [BaseElement; STATE_WIDTH]) {
+    fn apply_mds_old(state: &mut [BaseElement; STATE_WIDTH]) {
         let mut result = [BaseElement::ZERO; STATE_WIDTH];
         result.iter_mut().zip(MDS).for_each(|(r, mds_row)| {
             state.iter().zip(mds_row).for_each(|(&s, m)| {
@@ -308,6 +442,49 @@ impl Rp64_256 {
         *state = result
     }
 
+    const MDS_MATRIX_EXPS: [u64; 12] = [0, 0, 1, 0, 3, 5, 1, 8, 12, 3, 16, 10];
+
+    #[inline(always)]
+    fn apply_mds(state_: &mut [BaseElement; STATE_WIDTH]) {
+        let mut result = [BaseElement::ZERO; STATE_WIDTH];
+
+        let mut state = [0u64; STATE_WIDTH];
+        for r in 0..STATE_WIDTH {
+            state[r] = state_[r].as_int();
+        }
+
+        // This is a hacky way of fully unrolling the loop.
+        for r in 0..12 {
+            if r < STATE_WIDTH {
+                let sum = Self::mds_row_shf(r, &state);
+                result[r] = BaseElement::from(sum);
+            }
+        }
+
+        *state_ = result;
+    }
+
+    #[inline(always)]
+    fn mds_row_shf(r: usize, v: &[u64; STATE_WIDTH]) -> u128 {
+        debug_assert!(r < STATE_WIDTH);
+        // The values of MDS_MATRIX_EXPS are known to be small, so we can
+        // accumulate all the products for each row and reduce just once
+        // at the end (done by the caller).
+
+        // NB: Unrolling this, calculating each term independently, and
+        // summing at the end, didn't improve performance for me.
+        let mut res = 0u128;
+
+        // This is a hacky way of fully unrolling the loop.
+        for i in 0..12 {
+            if i < STATE_WIDTH {
+                res += (v[(i + r) % STATE_WIDTH] as u128) << Self::MDS_MATRIX_EXPS[i];
+            }
+        }
+
+        res
+    }
+
     #[inline(always)]
     fn add_constants(state: &mut [BaseElement; STATE_WIDTH], ark: &[BaseElement; STATE_WIDTH]) {
         state.iter_mut().zip(ark).for_each(|(s, &k)| *s += k);
@@ -315,11 +492,70 @@ impl Rp64_256 {
 
     #[inline(always)]
     fn apply_sbox(state: &mut [BaseElement; STATE_WIDTH]) {
-        state.iter_mut().for_each(|v| {
-            let t2 = v.square();
-            let t4 = t2.square();
-            *v *= t2 * t4;
-        });
+        state[0] = Self::pow_7(state[0]);
+        state[1] = Self::pow_7(state[1]);
+        state[2] = Self::pow_7(state[2]);
+        state[3] = Self::pow_7(state[3]);
+        state[4] = Self::pow_7(state[4]);
+        state[5] = Self::pow_7(state[5]);
+        state[6] = Self::pow_7(state[6]);
+        state[7] = Self::pow_7(state[7]);
+        state[8] = Self::pow_7(state[8]);
+        state[9] = Self::pow_7(state[9]);
+        state[10] = Self::pow_7(state[10]);
+        state[11] = Self::pow_7(state[11]);
+    }
+
+    #[inline(always)]
+    fn pow_7(x: BaseElement) -> BaseElement {
+        let x2 = x.square();
+        let x4 = x2.square();
+        let x3 = x * x2;
+        x3 * x4
+    }
+
+    #[inline(always)]
+    fn apply_inv_sbox_new(state: &mut [BaseElement; STATE_WIDTH]) {
+        let input = *state;
+        let mut last = BaseElement::ONE;
+        for (result, &value) in state.iter_mut().zip(input.iter()) {
+            *result = last;
+            if value != BaseElement::ZERO {
+                last *= value;
+            }
+        }
+
+        last = last.inv();
+
+        for i in (0..input.len()).rev() {
+            if input[i] == BaseElement::ZERO {
+                state[i] = BaseElement::ZERO;
+            } else {
+                state[i] *= last;
+                last *= input[i];
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn apply_inv_sbox_half(state: &mut [BaseElement]) {
+        let mut input = [BaseElement::ZERO; 6];
+        let mut last = BaseElement::ONE;
+        for i in 0..6 {
+            input[i] = last;
+            if state[i] != BaseElement::ZERO {
+                last *= state[i];
+            }
+        }
+
+        last = last.inv();
+
+        for i in 0..6 {
+            if state[i] != BaseElement::ZERO {
+                state[i] *= last;
+                last *= input[i];
+            }
+        }
     }
 
     #[inline(always)]
@@ -356,6 +592,38 @@ impl Rp64_256 {
             let b = t1[i] * t2[i] * *s;
             *s = a * b;
         }
+    }
+
+    #[inline(always)]
+    fn apply_inv_sbox_one(value: BaseElement) -> BaseElement {
+        // compute base^10540996611094048183 using 72 multiplications per array element
+        // 10540996611094048183 = b1001001001001001001001001001000110110110110110110110110110110111
+
+        // compute base^10
+        let t1 = value.square();
+
+        // compute base^100
+        let t2 = t1.square();
+
+        // compute base^100100
+        let t3 = exp_acc_one::<BaseElement, 3>(t2, t2);
+
+        // compute base^100100100100
+        let t4 = exp_acc_one::<BaseElement, 6>(t3, t3);
+
+        // compute base^100100100100100100100100
+        let t5 = exp_acc_one::<BaseElement, 12>(t4, t4);
+
+        // compute base^100100100100100100100100100100
+        let t6 = exp_acc_one::<BaseElement, 6>(t5, t3);
+
+        // compute base^1001001001001001001001001001000100100100100100100100100100100
+        let t7 = exp_acc_one::<BaseElement, 31>(t6, t6);
+
+        // compute base^1001001001001001001001001001000110110110110110110110110110110111
+        let a = (t7.square() * t6).square().square();
+        let b = t1 * t2 * value;
+        a * b
     }
 }
 
@@ -531,6 +799,180 @@ const MDS: [[BaseElement; STATE_WIDTH]; STATE_WIDTH] = [
         BaseElement::new(12096331252283646217),
         BaseElement::new(13208137848575217268),
         BaseElement::new(5548519654341606996),
+    ],
+];
+
+/// Rescue Inverse MDS matrix
+/// Computed using algorithm 4 from <https://eprint.iacr.org/2020/1143.pdf> and then
+/// inverting the resulting matrix.
+const INV_MDS: [[BaseElement; STATE_WIDTH]; STATE_WIDTH] = [
+    [
+        BaseElement::new(1025714968950054217),
+        BaseElement::new(2820417286206414279),
+        BaseElement::new(4993698564949207576),
+        BaseElement::new(12970218763715480197),
+        BaseElement::new(15096702659601816313),
+        BaseElement::new(5737881372597660297),
+        BaseElement::new(13327263231927089804),
+        BaseElement::new(4564252978131632277),
+        BaseElement::new(16119054824480892382),
+        BaseElement::new(6613927186172915989),
+        BaseElement::new(6454498710731601655),
+        BaseElement::new(2510089799608156620),
+    ],
+    [
+        BaseElement::new(14311337779007263575),
+        BaseElement::new(10306799626523962951),
+        BaseElement::new(7776331823117795156),
+        BaseElement::new(4922212921326569206),
+        BaseElement::new(8669179866856828412),
+        BaseElement::new(936244772485171410),
+        BaseElement::new(4077406078785759791),
+        BaseElement::new(2938383611938168107),
+        BaseElement::new(16650590241171797614),
+        BaseElement::new(16578411244849432284),
+        BaseElement::new(17600191004694808340),
+        BaseElement::new(5913375445729949081),
+    ],
+    [
+        BaseElement::new(13640353831792923980),
+        BaseElement::new(1583879644687006251),
+        BaseElement::new(17678309436940389401),
+        BaseElement::new(6793918274289159258),
+        BaseElement::new(3594897835134355282),
+        BaseElement::new(2158539885379341689),
+        BaseElement::new(12473871986506720374),
+        BaseElement::new(14874332242561185932),
+        BaseElement::new(16402478875851979683),
+        BaseElement::new(9893468322166516227),
+        BaseElement::new(8142413325661539529),
+        BaseElement::new(3444000755516388321),
+    ],
+    [
+        BaseElement::new(14009777257506018221),
+        BaseElement::new(18218829733847178457),
+        BaseElement::new(11151899210182873569),
+        BaseElement::new(14653120475631972171),
+        BaseElement::new(9591156713922565586),
+        BaseElement::new(16622517275046324812),
+        BaseElement::new(3958136700677573712),
+        BaseElement::new(2193274161734965529),
+        BaseElement::new(15125079516929063010),
+        BaseElement::new(3648852869044193741),
+        BaseElement::new(4405494440143722315),
+        BaseElement::new(15549070131235639125),
+    ],
+    [
+        BaseElement::new(14324333194410783741),
+        BaseElement::new(12565645879378458115),
+        BaseElement::new(4028590290335558535),
+        BaseElement::new(17936155181893467294),
+        BaseElement::new(1833939650657097992),
+        BaseElement::new(14310984655970610026),
+        BaseElement::new(4701042357351086687),
+        BaseElement::new(1226379890265418475),
+        BaseElement::new(2550212856624409740),
+        BaseElement::new(5670703442709406167),
+        BaseElement::new(3281485106506301394),
+        BaseElement::new(9804247840970323440),
+    ],
+    [
+        BaseElement::new(7778523590474814059),
+        BaseElement::new(7154630063229321501),
+        BaseElement::new(17790326505487126055),
+        BaseElement::new(3160574440608126866),
+        BaseElement::new(7292349907185131376),
+        BaseElement::new(1916491575080831825),
+        BaseElement::new(11523142515674812675),
+        BaseElement::new(2162357063341827157),
+        BaseElement::new(6650415936886875699),
+        BaseElement::new(11522955632464608509),
+        BaseElement::new(16740856792338897018),
+        BaseElement::new(16987840393715133187),
+    ],
+    [
+        BaseElement::new(14499296811525152023),
+        BaseElement::new(118549270069446537),
+        BaseElement::new(3041471724857448013),
+        BaseElement::new(3827228106225598612),
+        BaseElement::new(2081369067662751050),
+        BaseElement::new(15406142490454329462),
+        BaseElement::new(8943531526276617760),
+        BaseElement::new(3545513411057560337),
+        BaseElement::new(11433277564645295966),
+        BaseElement::new(9558995950666358829),
+        BaseElement::new(7443251815414752292),
+        BaseElement::new(12335092608217610725),
+    ],
+    [
+        BaseElement::new(184304165023253232),
+        BaseElement::new(11596940249585433199),
+        BaseElement::new(18170668175083122019),
+        BaseElement::new(8318891703682569182),
+        BaseElement::new(4387895409295967519),
+        BaseElement::new(14599228871586336059),
+        BaseElement::new(2861651216488619239),
+        BaseElement::new(567601091253927304),
+        BaseElement::new(10135289435539766316),
+        BaseElement::new(14905738261734377063),
+        BaseElement::new(3345637344934149303),
+        BaseElement::new(3159874422865401171),
+    ],
+    [
+        BaseElement::new(1134458872778032479),
+        BaseElement::new(4102035717681749376),
+        BaseElement::new(14030271225872148070),
+        BaseElement::new(10312336662487337312),
+        BaseElement::new(12938229830489392977),
+        BaseElement::new(17758804398255988457),
+        BaseElement::new(15482323580054918356),
+        BaseElement::new(1010277923244261213),
+        BaseElement::new(12904552397519353856),
+        BaseElement::new(5073478003078459047),
+        BaseElement::new(11514678194579805863),
+        BaseElement::new(4419017610446058921),
+    ],
+    [
+        BaseElement::new(2916054498252226520),
+        BaseElement::new(9880379926449218161),
+        BaseElement::new(15314650755395914465),
+        BaseElement::new(8335514387550394159),
+        BaseElement::new(8955267746483690029),
+        BaseElement::new(16353914237438359160),
+        BaseElement::new(4173425891602463552),
+        BaseElement::new(14892581052359168234),
+        BaseElement::new(17561678290843148035),
+        BaseElement::new(7292975356887551984),
+        BaseElement::new(18039512759118984712),
+        BaseElement::new(5411253583520971237),
+    ],
+    [
+        BaseElement::new(9848042270158364544),
+        BaseElement::new(809689769037458603),
+        BaseElement::new(5884047526712050760),
+        BaseElement::new(12956871945669043745),
+        BaseElement::new(14265127496637532237),
+        BaseElement::new(6211568220597222123),
+        BaseElement::new(678544061771515015),
+        BaseElement::new(16295989318674734123),
+        BaseElement::new(11782767968925152203),
+        BaseElement::new(1359397660819991739),
+        BaseElement::new(16148400912425385689),
+        BaseElement::new(14440017265059055146),
+    ],
+    [
+        BaseElement::new(1634272668217219807),
+        BaseElement::new(16290589064070324125),
+        BaseElement::new(5311838222680798126),
+        BaseElement::new(15044064140936894715),
+        BaseElement::new(15775025788428030421),
+        BaseElement::new(12586374713559327349),
+        BaseElement::new(8118943473454062014),
+        BaseElement::new(13223746794660766349),
+        BaseElement::new(13059674280609257192),
+        BaseElement::new(16605443174349648289),
+        BaseElement::new(13586971219878687822),
+        BaseElement::new(16337009014471658360),
     ],
 ];
 
