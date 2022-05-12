@@ -11,6 +11,20 @@ pub use rp62_248::Rp62_248;
 mod rp64_256;
 pub use rp64_256::Rp64_256;
 
+mod rp64_1;
+pub use rp64_1::Rp64_256 as Rp_64_1;
+
+mod rp64_2;
+pub use rp64_2::Rp64_256 as Rp_64_2;
+
+mod rp64_3;
+pub use rp64_3::Rp64_256 as Rp_64_3;
+
+mod rp64_4;
+pub use rp64_4::Rp64_256 as Rp_64_4;
+
+mod rp64_5;
+pub use rp64_5::Rp64_256 as Rp_64_5;
 // HELPER FUNCTIONS
 // ================================================================================================
 

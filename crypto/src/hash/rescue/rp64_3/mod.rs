@@ -11,9 +11,6 @@ use math::{fields::f64::BaseElement, FieldElement, StarkField};
 mod digest;
 pub use digest::ElementDigest;
 
-#[cfg(test)]
-mod tests;
-
 // CONSTANTS
 // ================================================================================================
 
@@ -40,23 +37,13 @@ const DIGEST_SIZE: usize = DIGEST_RANGE.end - DIGEST_RANGE.start;
 
 /// The number of rounds is set to 7 to target 128-bit security level with 40% security margin;
 /// computed using algorithm 7 from <https://eprint.iacr.org/2020/1143.pdf>
-const NUM_ROUNDS: usize = 7;
-
-/// S-Box and Inverse S-Box powers;
-/// computed using algorithm 6 from <https://eprint.iacr.org/2020/1143.pdf>
-///
-/// The constants are defined for tests only because the exponentiations in the code are unrolled
-/// for efficiency reasons.
-#[cfg(test)]
-const ALPHA: u64 = 7;
-#[cfg(test)]
-const INV_ALPHA: u64 = 10540996611094048183;
+const NUM_ROUNDS: usize = 7 + 8;
 
 // HASHER IMPLEMENTATION
 // ================================================================================================
 
-/// Implementation of [Hasher] trait for Rescue Prime hash function with 256-bit output.
-///
+/// Implementation of [Hasher] trait for Rescue Prime hash function with 256-bit output and permutation
+/// ((F) (I) (F) (I) (F) (I) (F) (I) (F) (I) (F) (I) (F) (I) (F))
 /// The hash function is implemented according to the Rescue Prime
 /// [specifications](https://eprint.iacr.org/2020/1143.pdf) with the following exception:
 /// * We set the number of rounds to 7, which implies a 40% security margin instead of the 50%
@@ -285,27 +272,37 @@ impl Rp64_256 {
 
     /// Applies Rescue-XLIX permutation to the provided state.
     pub fn apply_permutation(state: &mut [BaseElement; STATE_WIDTH]) {
-        Self::apply_rp_full_round(state, 0);
-        Self::apply_rp_full_round(state, 1);
-        Self::apply_rp_full_round(state, 2);
-        Self::apply_rp_full_round(state, 3);
-        Self::apply_rp_full_round(state, 4);
-        Self::apply_rp_full_round(state, 5);
-        Self::apply_rp_full_round(state, 6);
+        // alternating inverse and half-rounds
+        Self::apply_rp_half_round(state, 0);
+        Self::apply_inverse_round(state, 1);
+        Self::apply_rp_half_round(state, 2);
+        Self::apply_inverse_round(state, 3);
+        Self::apply_rp_half_round(state, 4);
+        Self::apply_inverse_round(state, 5);
+        Self::apply_rp_half_round(state, 6);
+        Self::apply_inverse_round(state, 7);
+        Self::apply_rp_half_round(state, 8);
+        Self::apply_inverse_round(state, 9);
+        Self::apply_rp_half_round(state, 10);
+        Self::apply_inverse_round(state, 11);
+        Self::apply_rp_half_round(state, 12);
+        Self::apply_inverse_round(state, 13);
+        Self::apply_rp_half_round(state, 14);
     }
 
-    /// Rescue-XLIX round function.
     #[inline(always)]
-    fn apply_rp_full_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+    fn apply_rp_half_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
         // apply first half of Rescue round
         Self::apply_sbox(state);
         Self::apply_mds(state);
         Self::add_constants(state, &ARK1[round]);
+    }
 
-        // apply second half of Rescue round
+    #[inline(always)]
+    fn apply_inverse_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
         Self::apply_inv_sbox_new(state);
         Self::apply_mds(state);
-        Self::add_constants(state, &ARK2[round]);
+        Self::add_constants(state, &ARK1[round]);
     }
 
     // HELPER FUNCTIONS
@@ -863,6 +860,118 @@ const ARK1: [[BaseElement; STATE_WIDTH]; NUM_ROUNDS] = [
         BaseElement::new(8787650312632423701),
         BaseElement::new(7431110942091427450),
     ],
+    [
+        BaseElement::new(13917550007135091859),
+        BaseElement::new(16002276252647722320),
+        BaseElement::new(4729924423368391595),
+        BaseElement::new(10059693067827680263),
+        BaseElement::new(9804807372516189948),
+        BaseElement::new(15666751576116384237),
+        BaseElement::new(10150587679474953119),
+        BaseElement::new(13627942357577414247),
+        BaseElement::new(2323786301545403792),
+        BaseElement::new(615170742765998613),
+        BaseElement::new(8870655212817778103),
+        BaseElement::new(10534167191270683080),
+    ],
+    [
+        BaseElement::new(14572151513649018290),
+        BaseElement::new(9445470642301863087),
+        BaseElement::new(6565801926598404534),
+        BaseElement::new(12667566692985038975),
+        BaseElement::new(7193782419267459720),
+        BaseElement::new(11874811971940314298),
+        BaseElement::new(17906868010477466257),
+        BaseElement::new(1237247437760523561),
+        BaseElement::new(6829882458376718831),
+        BaseElement::new(2140011966759485221),
+        BaseElement::new(1624379354686052121),
+        BaseElement::new(50954653459374206),
+    ],
+    [
+        BaseElement::new(16288075653722020941),
+        BaseElement::new(13294924199301620952),
+        BaseElement::new(13370596140726871456),
+        BaseElement::new(611533288599636281),
+        BaseElement::new(12865221627554828747),
+        BaseElement::new(12269498015480242943),
+        BaseElement::new(8230863118714645896),
+        BaseElement::new(13466591048726906480),
+        BaseElement::new(10176988631229240256),
+        BaseElement::new(14951460136371189405),
+        BaseElement::new(5882405912332577353),
+        BaseElement::new(18125144098115032453),
+    ],
+    [
+        BaseElement::new(6076976409066920174),
+        BaseElement::new(7466617867456719866),
+        BaseElement::new(5509452692963105675),
+        BaseElement::new(14692460717212261752),
+        BaseElement::new(12980373618703329746),
+        BaseElement::new(1361187191725412610),
+        BaseElement::new(6093955025012408881),
+        BaseElement::new(5110883082899748359),
+        BaseElement::new(8578179704817414083),
+        BaseElement::new(9311749071195681469),
+        BaseElement::new(16965242536774914613),
+        BaseElement::new(5747454353875601040),
+    ],
+    [
+        BaseElement::new(13684212076160345083),
+        BaseElement::new(19445754899749561),
+        BaseElement::new(16618768069125744845),
+        BaseElement::new(278225951958825090),
+        BaseElement::new(4997246680116830377),
+        BaseElement::new(782614868534172852),
+        BaseElement::new(16423767594935000044),
+        BaseElement::new(9990984633405879434),
+        BaseElement::new(16757120847103156641),
+        BaseElement::new(2103861168279461168),
+        BaseElement::new(16018697163142305052),
+        BaseElement::new(6479823382130993799),
+    ],
+    [
+        BaseElement::new(13957683526597936825),
+        BaseElement::new(9702819874074407511),
+        BaseElement::new(18357323897135139931),
+        BaseElement::new(3029452444431245019),
+        BaseElement::new(1809322684009991117),
+        BaseElement::new(12459356450895788575),
+        BaseElement::new(11985094908667810946),
+        BaseElement::new(12868806590346066108),
+        BaseElement::new(7872185587893926881),
+        BaseElement::new(10694372443883124306),
+        BaseElement::new(8644995046789277522),
+        BaseElement::new(1422920069067375692),
+    ],
+    [
+        BaseElement::new(17619517835351328008),
+        BaseElement::new(6173683530634627901),
+        BaseElement::new(15061027706054897896),
+        BaseElement::new(4503753322633415655),
+        BaseElement::new(11538516425871008333),
+        BaseElement::new(12777459872202073891),
+        BaseElement::new(17842814708228807409),
+        BaseElement::new(13441695826912633916),
+        BaseElement::new(5950710620243434509),
+        BaseElement::new(17040450522225825296),
+        BaseElement::new(8787650312632423701),
+        BaseElement::new(7431110942091427450),
+    ],
+    [
+        BaseElement::new(13957683526597936825),
+        BaseElement::new(9702819874074407511),
+        BaseElement::new(18357323897135139931),
+        BaseElement::new(3029452444431245019),
+        BaseElement::new(1809322684009991117),
+        BaseElement::new(12459356450895788575),
+        BaseElement::new(11985094908667810946),
+        BaseElement::new(12868806590346066108),
+        BaseElement::new(7872185587893926881),
+        BaseElement::new(10694372443883124306),
+        BaseElement::new(8644995046789277522),
+        BaseElement::new(1422920069067375692),
+    ],
 ];
 
 const ARK2: [[BaseElement; STATE_WIDTH]; NUM_ROUNDS] = [
@@ -963,5 +1072,117 @@ const ARK2: [[BaseElement; STATE_WIDTH]; NUM_ROUNDS] = [
         BaseElement::new(12717309295554119359),
         BaseElement::new(4130723396860574906),
         BaseElement::new(7706153020203677238),
+    ],
+    [
+        BaseElement::new(7989257206380839449),
+        BaseElement::new(8639509123020237648),
+        BaseElement::new(6488561830509603695),
+        BaseElement::new(5519169995467998761),
+        BaseElement::new(2972173318556248829),
+        BaseElement::new(14899875358187389787),
+        BaseElement::new(14160104549881494022),
+        BaseElement::new(5969738169680657501),
+        BaseElement::new(5116050734813646528),
+        BaseElement::new(12120002089437618419),
+        BaseElement::new(17404470791907152876),
+        BaseElement::new(2718166276419445724),
+    ],
+    [
+        BaseElement::new(2485377440770793394),
+        BaseElement::new(14358936485713564605),
+        BaseElement::new(3327012975585973824),
+        BaseElement::new(6001912612374303716),
+        BaseElement::new(17419159457659073951),
+        BaseElement::new(11810720562576658327),
+        BaseElement::new(14802512641816370470),
+        BaseElement::new(751963320628219432),
+        BaseElement::new(9410455736958787393),
+        BaseElement::new(16405548341306967018),
+        BaseElement::new(6867376949398252373),
+        BaseElement::new(13982182448213113532),
+    ],
+    [
+        BaseElement::new(10436926105997283389),
+        BaseElement::new(13237521312283579132),
+        BaseElement::new(668335841375552722),
+        BaseElement::new(2385521647573044240),
+        BaseElement::new(3874694023045931809),
+        BaseElement::new(12952434030222726182),
+        BaseElement::new(1972984540857058687),
+        BaseElement::new(14000313505684510403),
+        BaseElement::new(976377933822676506),
+        BaseElement::new(8407002393718726702),
+        BaseElement::new(338785660775650958),
+        BaseElement::new(4208211193539481671),
+    ],
+    [
+        BaseElement::new(2284392243703840734),
+        BaseElement::new(4500504737691218932),
+        BaseElement::new(3976085877224857941),
+        BaseElement::new(2603294837319327956),
+        BaseElement::new(5760259105023371034),
+        BaseElement::new(2911579958858769248),
+        BaseElement::new(18415938932239013434),
+        BaseElement::new(7063156700464743997),
+        BaseElement::new(16626114991069403630),
+        BaseElement::new(163485390956217960),
+        BaseElement::new(11596043559919659130),
+        BaseElement::new(2976841507452846995),
+    ],
+    [
+        BaseElement::new(15090073748392700862),
+        BaseElement::new(3496786927732034743),
+        BaseElement::new(8646735362535504000),
+        BaseElement::new(2460088694130347125),
+        BaseElement::new(3944675034557577794),
+        BaseElement::new(14781700518249159275),
+        BaseElement::new(2857749437648203959),
+        BaseElement::new(8505429584078195973),
+        BaseElement::new(18008150643764164736),
+        BaseElement::new(720176627102578275),
+        BaseElement::new(7038653538629322181),
+        BaseElement::new(8849746187975356582),
+    ],
+    [
+        BaseElement::new(17427790390280348710),
+        BaseElement::new(1159544160012040055),
+        BaseElement::new(17946663256456930598),
+        BaseElement::new(6338793524502945410),
+        BaseElement::new(17715539080731926288),
+        BaseElement::new(4208940652334891422),
+        BaseElement::new(12386490721239135719),
+        BaseElement::new(10010817080957769535),
+        BaseElement::new(5566101162185411405),
+        BaseElement::new(12520146553271266365),
+        BaseElement::new(4972547404153988943),
+        BaseElement::new(5597076522138709717),
+    ],
+    [
+        BaseElement::new(18338863478027005376),
+        BaseElement::new(115128380230345639),
+        BaseElement::new(4427489889653730058),
+        BaseElement::new(10890727269603281956),
+        BaseElement::new(7094492770210294530),
+        BaseElement::new(7345573238864544283),
+        BaseElement::new(6834103517673002336),
+        BaseElement::new(14002814950696095900),
+        BaseElement::new(15939230865809555943),
+        BaseElement::new(12717309295554119359),
+        BaseElement::new(4130723396860574906),
+        BaseElement::new(7706153020203677238),
+    ],
+    [
+        BaseElement::new(10436926105997283389),
+        BaseElement::new(13237521312283579132),
+        BaseElement::new(668335841375552722),
+        BaseElement::new(2385521647573044240),
+        BaseElement::new(3874694023045931809),
+        BaseElement::new(12952434030222726182),
+        BaseElement::new(1972984540857058687),
+        BaseElement::new(14000313505684510403),
+        BaseElement::new(976377933822676506),
+        BaseElement::new(8407002393718726702),
+        BaseElement::new(338785660775650958),
+        BaseElement::new(4208211193539481671),
     ],
 ];

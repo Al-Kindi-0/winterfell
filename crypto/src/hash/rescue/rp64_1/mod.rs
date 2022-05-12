@@ -11,9 +11,6 @@ use math::{fields::f64::BaseElement, FieldElement, StarkField};
 mod digest;
 pub use digest::ElementDigest;
 
-#[cfg(test)]
-mod tests;
-
 // CONSTANTS
 // ================================================================================================
 
@@ -42,20 +39,10 @@ const DIGEST_SIZE: usize = DIGEST_RANGE.end - DIGEST_RANGE.start;
 /// computed using algorithm 7 from <https://eprint.iacr.org/2020/1143.pdf>
 const NUM_ROUNDS: usize = 7;
 
-/// S-Box and Inverse S-Box powers;
-/// computed using algorithm 6 from <https://eprint.iacr.org/2020/1143.pdf>
-///
-/// The constants are defined for tests only because the exponentiations in the code are unrolled
-/// for efficiency reasons.
-#[cfg(test)]
-const ALPHA: u64 = 7;
-#[cfg(test)]
-const INV_ALPHA: u64 = 10540996611094048183;
-
 // HASHER IMPLEMENTATION
 // ================================================================================================
 
-/// Implementation of [Hasher] trait for Rescue Prime hash function with 256-bit output.
+/// Implementation of [Hasher] trait for Rescue Prime hash function with 256-bit output and permutation (F) (FB) (F) (FB) (F) (FB) (F).
 ///
 /// The hash function is implemented according to the Rescue Prime
 /// [specifications](https://eprint.iacr.org/2020/1143.pdf) with the following exception:
@@ -285,13 +272,14 @@ impl Rp64_256 {
 
     /// Applies Rescue-XLIX permutation to the provided state.
     pub fn apply_permutation(state: &mut [BaseElement; STATE_WIDTH]) {
-        Self::apply_rp_full_round(state, 0);
+        // rescue prime: 3 full rounds, 4 half rounds  i.e. (F) (FB) (F) (FB) (F) (FB) (F)
+        Self::apply_rp_half_round(state, 0);
         Self::apply_rp_full_round(state, 1);
-        Self::apply_rp_full_round(state, 2);
+        Self::apply_rp_half_round(state, 2);
         Self::apply_rp_full_round(state, 3);
-        Self::apply_rp_full_round(state, 4);
+        Self::apply_rp_half_round(state, 4);
         Self::apply_rp_full_round(state, 5);
-        Self::apply_rp_full_round(state, 6);
+        Self::apply_rp_half_round(state, 6);
     }
 
     /// Rescue-XLIX round function.
@@ -306,6 +294,14 @@ impl Rp64_256 {
         Self::apply_inv_sbox_new(state);
         Self::apply_mds(state);
         Self::add_constants(state, &ARK2[round]);
+    }
+
+    #[inline(always)]
+    fn apply_rp_half_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        // apply first half of Rescue round
+        Self::apply_sbox(state);
+        Self::apply_mds(state);
+        Self::add_constants(state, &ARK1[round]);
     }
 
     // HELPER FUNCTIONS

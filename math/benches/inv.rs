@@ -20,10 +20,10 @@ pub fn field_ops(c: &mut Criterion, field_name: &str) {
         bench.iter(|| BaseElement64::inv(x))
     });
 
-    group.bench_function("inv64_gcd", |bench| {
-        let mut x: BaseElement64 = rand_value();
-        bench.iter(|| x.inv_gcd())
-    });
+    //group.bench_function("inv64_gcd", |bench| {
+        //let mut x: BaseElement64 = rand_value();
+        //bench.iter(|| x.inv_gcd())
+    //});
 
 
 }

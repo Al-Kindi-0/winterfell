@@ -39,7 +39,7 @@ fn test_inv_sbox() {
     expected.iter_mut().for_each(|v| *v = v.exp(INV_ALPHA));
 
     let mut actual = state;
-    Rp64_256::apply_inv_sbox(&mut actual);
+    Rp64_256::apply_inv_sbox_new(&mut actual);
 
     assert_eq!(expected, actual);
 }
