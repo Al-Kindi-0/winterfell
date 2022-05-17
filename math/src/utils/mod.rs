@@ -165,28 +165,102 @@ where
 /// # Examples
 /// ```
 /// # use winter_math::batch_inversion;
+/// # use winter_math::batch_inversion_mut;
 /// # use winter_math::{fields::{f128::BaseElement}, FieldElement};
 /// # use rand_utils::rand_vector;
+/// # use std::time::Instant;
 /// let a: Vec<BaseElement> = rand_vector(2048);
+/// let mut a_ = a.clone();
+/// let now = Instant::now();
 /// let b = batch_inversion(&a);
-///
+/// let elapsed = now.elapsed();
+/// eprintln!("Out of place took {}", elapsed.as_secs());
+/// let now = Instant::now();
+/// batch_inversion_mut(&mut a_);
+/// let elapsed = now.elapsed();
+/// eprintln!("In place took {}",elapsed.as_secs());
 /// for (&a, &b) in a.iter().zip(b.iter()) {
 ///     assert_eq!(a.inv(), b);
+///
+/// }
+/// for (&x, &y) in b.iter().zip(a_.iter()){
+///     assert_eq!(x,y);
 /// }
 /// ```
+///
+
+#[cfg(test)]
+mod tests {
+
+    
+    use super::*;
+
+    #[test]
+    fn test_batch_inversions() {
+        use rayon::prelude::*;
+        use rand_utils::rand_vector;
+        use std::time::Instant;
+        use super::batch_inversion;
+        use super::batch_inversion_mut;
+        use crate::fields::f64::BaseElement;
+        use  super::FieldElement;
+
+        let mut a: Vec<BaseElement> = rand_vector(10000);
+        let mut a_ = a.clone();
+
+        // Out of place batch inversion
+        let now = Instant::now();
+        let b = batch_inversion(&a);
+        let elapsed = now.elapsed();
+        eprintln!("Out of place took {}", elapsed.as_micros());
+
+        // In place batch inversion
+        let now = Instant::now();
+        batch_inversion_mut(&mut a_);
+        let elapsed = now.elapsed();
+        eprintln!("In place took {}", elapsed.as_micros());
+
+        // Classical inversion
+        let now = Instant::now();
+        a.par_iter_mut().for_each(|a| {a.inv();});
+        let elapsed = now.elapsed();
+        eprintln!("Classical inversion took {}",elapsed.as_micros());
+
+        // Sanity check
+        for (&a, &b) in a.iter().zip(b.iter()) {
+            assert_eq!(a.inv(), b);
+        }
+
+        // Check that the in-place batch inversion matches the out of place one
+        for (&x, &y) in b.iter().zip(a_.iter()) {
+            assert_eq!(x, y);
+        }
+    }
+}
+
 pub fn batch_inversion<E>(values: &[E]) -> Vec<E>
 where
     E: FieldElement,
 {
     let mut result: Vec<E> = unsafe { uninit_vector(values.len()) };
-    batch_iter_mut!(&mut result, 1024, |batch: &mut [E], batch_offset: usize| {
+    batch_iter_mut!(&mut result, 40, |batch: &mut [E], batch_offset: usize| {
         let start = batch_offset;
         let end = start + batch.len();
         serial_batch_inversion(&values[start..end], batch);
     });
     result
 }
-
+pub fn batch_inversion_mut<E>(values: &mut [E])
+where
+    E: FieldElement,
+{
+    let mut result: Vec<E> = unsafe { uninit_vector(values.len()) };
+    batch_iter_mut!(&mut result, 40, |batch: &mut [E], batch_offset: usize| {
+        let start = batch_offset;
+        let end = start + batch.len();
+        serial_batch_inversion_mut(&mut values[start..end], batch);
+    });
+}
 /// Returns base 2 logarithm of `n`, where `n` is a power of two.
 ///
 /// # Panics
@@ -233,6 +307,28 @@ fn serial_batch_inversion<E: FieldElement>(values: &[E], result: &mut [E]) {
         } else {
             result[i] *= last;
             last *= values[i];
+        }
+    }
+}
+
+fn serial_batch_inversion_mut<E: FieldElement>(values: &mut [E], result: &mut [E]) {
+    let mut last = E::ONE;
+    for (result, &value) in result.iter_mut().zip(values.iter()) {
+        *result = last;
+        if value != E::ZERO {
+            last *= value;
+        }
+    }
+
+    last = last.inv();
+
+    for i in (0..values.len()).rev() {
+        if values[i] == E::ZERO {
+            result[i] = E::ZERO;
+        } else {
+            let tmp = last * values[i];
+            values[i] = last * result[i];
+            last = tmp;
         }
     }
 }

@@ -3,7 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use super::{Digest, ElementHasher, Hasher};
+use super::{Digest, ElementHasher, Hasher, exp_acc};
 use core::convert::TryInto;
 use core::ops::Range;
 use math::{fields::f64::BaseElement, FieldElement, StarkField};
@@ -291,7 +291,7 @@ impl Rp64_256 {
         Self::add_constants(state, &ARK1[round]);
 
         // apply second half of Rescue round
-        Self::apply_inv_sbox_new(state);
+        Self::apply_inv_sbox(state);
         Self::apply_mds(state);
         Self::add_constants(state, &ARK2[round]);
     }
@@ -399,6 +399,42 @@ impl Rp64_256 {
                 state[i] *= last;
                 last *= input[i];
             }
+        }
+    }
+    
+    #[inline(always)]
+    fn apply_inv_sbox(state: &mut [BaseElement; STATE_WIDTH]) {
+        // compute base^10540996611094048183 using 72 multiplications per array element
+        // 10540996611094048183 = b1001001001001001001001001001000110110110110110110110110110110111
+
+        // compute base^10
+        let mut t1 = *state;
+        t1.iter_mut().for_each(|t| *t = t.square());
+
+        // compute base^100
+        let mut t2 = t1;
+        t2.iter_mut().for_each(|t| *t = t.square());
+
+        // compute base^100100
+        let t3 = exp_acc::<BaseElement, STATE_WIDTH, 3>(t2, t2);
+
+        // compute base^100100100100
+        let t4 = exp_acc::<BaseElement, STATE_WIDTH, 6>(t3, t3);
+
+        // compute base^100100100100100100100100
+        let t5 = exp_acc::<BaseElement, STATE_WIDTH, 12>(t4, t4);
+
+        // compute base^100100100100100100100100100100
+        let t6 = exp_acc::<BaseElement, STATE_WIDTH, 6>(t5, t3);
+
+        // compute base^1001001001001001001001001001000100100100100100100100100100100
+        let t7 = exp_acc::<BaseElement, STATE_WIDTH, 31>(t6, t6);
+
+        // compute base^1001001001001001001001001001000110110110110110110110110110110111
+        for (i, s) in state.iter_mut().enumerate() {
+            let a = (t7[i].square() * t6[i]).square().square();
+            let b = t1[i] * t2[i] * *s;
+            *s = a * b;
         }
     }
 }

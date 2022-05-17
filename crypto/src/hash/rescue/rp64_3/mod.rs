@@ -6,10 +6,13 @@
 use super::{Digest, ElementHasher, Hasher};
 use core::convert::TryInto;
 use core::ops::Range;
-use math::{fields::f64::BaseElement, FieldElement, StarkField};
-
+use math::{batch_inversion, fields::f64::BaseElement, FieldElement, StarkField};
+use utils::{batch_iter_mut, iter_mut};
 mod digest;
 pub use digest::ElementDigest;
+
+#[cfg(test)]
+mod test;
 
 // CONSTANTS
 // ================================================================================================
@@ -38,6 +41,8 @@ const DIGEST_SIZE: usize = DIGEST_RANGE.end - DIGEST_RANGE.start;
 /// The number of rounds is set to 7 to target 128-bit security level with 40% security margin;
 /// computed using algorithm 7 from <https://eprint.iacr.org/2020/1143.pdf>
 const NUM_ROUNDS: usize = 7 + 8;
+
+const BATCH_SIZE: usize = 1 << 8;
 
 // HASHER IMPLEMENTATION
 // ================================================================================================
@@ -267,6 +272,8 @@ impl Rp64_256 {
     /// Round constants added to the hasher state in the second half of the Rescue Prime round.
     pub const ARK2: [[BaseElement; STATE_WIDTH]; NUM_ROUNDS] = ARK2;
 
+    //pub const BATCH_SIZE: usize = 1 << 5;
+
     // RESCUE PERMUTATION
     // --------------------------------------------------------------------------------------------
 
@@ -300,11 +307,108 @@ impl Rp64_256 {
 
     #[inline(always)]
     fn apply_inverse_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        //eprintln!("Round: {} *** Correct state {:?}",round, state);
         Self::apply_inv_sbox_new(state);
+        //eprintln!("Round: {} *** Correct state inverted {:?}",round, state);
         Self::apply_mds(state);
         Self::add_constants(state, &ARK1[round]);
     }
 
+    /// Applies a group of modified Rescue-XLIX permutation using batched inversion to the provided group of states.
+    pub fn apply_permutation_batch(state: &mut [[BaseElement; STATE_WIDTH]; BATCH_SIZE]) {
+        // alternating inverse and half-rounds
+        Self::apply_rp_half_round_batch(state, 0);
+        Self::apply_inverse_round_batch(state, 1);
+        Self::apply_rp_half_round_batch(state, 2);
+        Self::apply_inverse_round_batch(state, 3);
+        Self::apply_rp_half_round_batch(state, 4);
+        Self::apply_inverse_round_batch(state, 5);
+        Self::apply_rp_half_round_batch(state, 6);
+        Self::apply_inverse_round_batch(state, 7);
+        Self::apply_rp_half_round_batch(state, 8);
+        Self::apply_inverse_round_batch(state, 9);
+        Self::apply_rp_half_round_batch(state, 10);
+        Self::apply_inverse_round_batch(state, 11);
+        Self::apply_rp_half_round_batch(state, 12);
+        Self::apply_inverse_round_batch(state, 13);
+        Self::apply_rp_half_round_batch(state, 14);
+    }
+
+    #[inline(always)]
+    fn apply_rp_half_round_batch(
+        state: &mut [[BaseElement; STATE_WIDTH]; BATCH_SIZE],
+        round: usize,
+    ) {
+        use rayon::prelude::*;
+        // apply first half of Rescue round
+
+        state.par_iter_mut().for_each(|state| {
+            Self::apply_sbox(state);
+            Self::apply_mds(state);
+            Self::add_constants(state, &ARK1[round]);
+        });
+    }
+
+    #[inline(always)]
+    fn apply_inverse_round_batch(
+        state: &mut [[BaseElement; STATE_WIDTH]; BATCH_SIZE],
+        round: usize,
+    ) {
+        use rayon::prelude::*;
+
+        /*
+        let a: [BaseElement; STATE_WIDTH * BATCH_SIZE]= state.iter().flat_map(|s| *s).collect();
+        math::batch_inversion(&a).chunks(STATE_WIDTH).enumerate().for_each(
+            |(i,chunk)| {
+                state[i] = *arrayref::array_ref!(chunk, 0, 12);
+            }
+        );
+        */
+
+        //eprintln!("Round: {} *** Original state {:?}", round, state);
+        let a = utils::flatten_slice_elements_mut(state);
+        //eprintln!("flattened state {:?}", a);
+        math::batch_inversion_mut(a);
+
+        //eprintln!("Round: {} *** Original state inverted {:?}", round, state);
+        //eprintln!("Round: {} *** flattened state inverted {:?}", round, a);
+        //let a: [[BaseElement];1]group_slice_elements(a);
+        //let state = group_slice_elements(a);
+        //let a: [BaseElement; STATE_WIDTH * BATCH_SIZE] = state.iter_mut().flat_map(|s| s).collect();
+        (state).par_iter_mut().for_each(|state| {
+            //Self::apply_inv_sbox_new(state);
+            Self::apply_mds(state);
+            Self::add_constants(state, &ARK1[round]);
+        });
+    }
+
+/*
+    #[inline(always)]
+    fn apply_inverse_round_batch(
+        state: &mut [[BaseElement; STATE_WIDTH]; BATCH_SIZE],
+        round: usize,
+    ) {
+        use rayon::prelude::*;
+
+        //eprintln!("Round: {} *** Original state {:?}", round, state);
+        let a = utils::flatten_slice_elements(state);
+        //eprintln!("flattened state {:?}", a);
+        let mut a = math::batch_inversion(a);
+
+        //eprintln!("Round: {} *** Original state inverted {:?}", round, state);
+        //eprintln!("Round: {} *** flattened state inverted {:?}", round, a);
+        //let a: [[BaseElement];1]group_slice_elements(a);
+        //let state = group_slice_elements(a);
+        //let a: [BaseElement; STATE_WIDTH * BATCH_SIZE] = state.iter_mut().flat_map(|s| s).collect();
+        (a).par_chunks_mut(STATE_WIDTH).enumerate().for_each(|(i,st)| {
+            //Self::apply_inv_sbox_new(state);
+            
+            Self::apply_mds(&mut state[i]);
+            Self::add_constants(&mut state[i], &ARK1[round]);
+            state[i].copy_from_slice(&st[0..STATE_WIDTH]);
+        });
+    }
+    */
     // HELPER FUNCTIONS
     // --------------------------------------------------------------------------------------------
 

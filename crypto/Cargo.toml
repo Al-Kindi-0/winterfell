@@ -16,6 +16,10 @@ rust-version = "1.60"
 bench = false
 
 [[bench]]
+name = "inversion"
+harness = false
+
+[[bench]]
 name = "hash"
 harness = false
 
@@ -34,6 +38,8 @@ blake3 = { version = "1.0", default-features = false }
 math = { version = "0.4", path = "../math", package = "winter-math", default-features = false }
 sha3 = { version = "0.10", default-features = false }
 utils = { version = "0.4", path = "../utils/core", package = "winter-utils", default-features = false }
+rayon = "1.5"
+arrayref = "0.3.6"
 
 [dev-dependencies]
 criterion = "0.3"

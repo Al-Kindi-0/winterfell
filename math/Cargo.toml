@@ -40,6 +40,7 @@ criterion = "0.3"
 num-bigint = "0.4"
 proptest = "1.0"
 rand-utils = { version = "0.4", path = "../utils/rand", package = "winter-rand-utils" }
+rayon = "1.5"
 
 # Allow math in docs
 [package.metadata.docs.rs]

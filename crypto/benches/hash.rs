@@ -15,6 +15,7 @@ use winter_crypto::{
     hashers::{Rp64_256, Rp_64_1, Rp_64_2, Rp_64_3, Rp_64_4, Rp_64_5},
     Hasher,
 };
+use math::{batch_inversion, batch_inversion_mut, FieldElement};
 /*
 type Blake3 = Blake3_256<f128::BaseElement>;
 type Blake3Digest = <Blake3 as Hasher>::Digest;
@@ -178,6 +179,7 @@ fn rescue256_3(c: &mut Criterion) {
         },
     );
 }
+
 fn rescue256_4(c: &mut Criterion) {
     let v: [Rp64_256Digest4; 2] = [Rp_64_4::hash(&[1u8]), Rp_64_4::hash(&[2u8])];
     c.bench_function(
@@ -198,6 +200,7 @@ fn rescue256_4(c: &mut Criterion) {
         )
     });
 }
+
 fn rescue256_5(c: &mut Criterion) {
     let v: [Rp64_256Digest5; 2] = [Rp_64_5::hash(&[1u8]), Rp_64_5::hash(&[2u8])];
     c.bench_function(
@@ -221,9 +224,39 @@ fn rescue256_5(c: &mut Criterion) {
         },
     );
 }
+
+fn rescue256_3_permutation(c: &mut Criterion) {
+    use math::{fields::f64::BaseElement};
+    use rayon::prelude::*;
+
+    let mut v = [[
+        BaseElement::new(4568812 as u64),
+        BaseElement::new(4542812 as u64),
+        BaseElement::new(4568412 as u64),
+        BaseElement::new(4756812 as u64),
+        BaseElement::new(4567812 as u64),
+        BaseElement::new(4568312 as u64),
+        BaseElement::new(4568132 as u64),
+        BaseElement::new(4563812 as u64),
+        BaseElement::new(4506812 as u64),
+        BaseElement::new(4568012 as u64),
+        BaseElement::new(4516812 as u64),
+        BaseElement::new(4526812 as u64),
+    ]; 1 << 8];
+    c.bench_function("hash_rp64_3 Permutation serial", |bench| {
+        bench.iter(|| {
+            v.par_iter_mut()
+                .for_each(|state| Rp_64_3::apply_permutation(black_box(state)))
+        })
+    });
+    c.bench_function("hash_rp64_3 Permutation Parallel", |bench| {
+        bench.iter(|| Rp_64_3::apply_permutation_batch(black_box(&mut v)))
+    });
+}
 //criterion_group!(hash_group, blake3, sha3, rescue248, rescue256);
 criterion_group!(
     hash_group,
+    rescue256_3_permutation,
     rescue256,
     rescue256_1,
     rescue256_2,

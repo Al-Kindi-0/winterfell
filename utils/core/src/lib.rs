@@ -517,6 +517,11 @@ pub fn flatten_slice_elements<T, const N: usize>(source: &[[T; N]]) -> &[T] {
     unsafe { slice::from_raw_parts(p as *const T, len) }
 }
 
+pub fn flatten_slice_elements_mut<T, const N: usize>(source: &mut [[T; N]]) -> &mut [T] {
+    let p = source.as_ptr();
+    let len = source.len() * N;
+    unsafe { slice::from_raw_parts_mut(p as *mut T, len) }
+}
 /// Transmutes a vector of `n` arrays each of length `N`, into a vector of `N` * `n` elements.
 ///
 /// This function just re-interprets the underlying memory and is thus zero-copy.

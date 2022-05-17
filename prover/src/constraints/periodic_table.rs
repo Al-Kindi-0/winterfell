@@ -119,15 +119,17 @@ mod tests {
             .collect::<Vec<_>>();
         let air = MockAir::with_periodic_columns(vec![col1, col2], trace_length);
 
+        eprintln!("the periodic values are {:?}", air.get_periodic_column_values());
         // build a table of periodic values
         let table = super::PeriodicValueTable::new(&air);
 
         assert_eq!(2, table.width);
         assert_eq!(4 * air.ce_blowup_factor(), table.length);
-
+        eprintln!("the ce blowup factor is {:?} and domain size {:?} and table length {:?}", air.ce_blowup_factor(),air.ce_domain_size(),table.length);
         let polys = air.get_periodic_column_polys();
         let domain = build_ce_domain(air.ce_domain_size(), air.domain_offset());
 
+        eprintln!("ce domain size {:?}", (air).ce_domain_size());
         // build expected values by evaluating polynomials over shifted ce_domain
         let expected = polys
             .iter()
