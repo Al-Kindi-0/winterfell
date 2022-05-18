@@ -14,8 +14,10 @@ use winter_crypto::{
 use winter_crypto::{
     hashers::{Rp64_256, Rp_64_1, Rp_64_2, Rp_64_3, Rp_64_4, Rp_64_5},
     Hasher,
+    
+    
 };
-use math::{batch_inversion, batch_inversion_mut, FieldElement};
+use math::{batch_inversion, batch_inversion_mut, FieldElement,};
 /*
 type Blake3 = Blake3_256<f128::BaseElement>;
 type Blake3Digest = <Blake3 as Hasher>::Digest;
@@ -228,6 +230,8 @@ fn rescue256_5(c: &mut Criterion) {
 fn rescue256_3_permutation(c: &mut Criterion) {
     use math::{fields::f64::BaseElement};
     use rayon::prelude::*;
+    pub const BATCH_SIZE: usize = 1 << 5;
+
 
     let mut v = [[
         BaseElement::new(4568812 as u64),
@@ -242,10 +246,10 @@ fn rescue256_3_permutation(c: &mut Criterion) {
         BaseElement::new(4568012 as u64),
         BaseElement::new(4516812 as u64),
         BaseElement::new(4526812 as u64),
-    ]; 1 << 8];
+    ]; BATCH_SIZE];
     c.bench_function("hash_rp64_3 Permutation serial", |bench| {
         bench.iter(|| {
-            v.par_iter_mut()
+            v.iter_mut()
                 .for_each(|state| Rp_64_3::apply_permutation(black_box(state)))
         })
     });

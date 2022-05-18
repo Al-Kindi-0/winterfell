@@ -332,3 +332,27 @@ fn serial_batch_inversion_mut<E: FieldElement>(values: &mut [E], result: &mut [E
         }
     }
 }
+
+/*
+fn serial_batch_inversion_mut_no_tmp<E: FieldElement>(state: &mut [E], input: &mut [E]) {
+    let mut last = E::ONE;
+    for (result, &value) in state.iter_mut().zip(input.iter()) {
+        *result = last;
+        if value != E::ZERO {
+            last *= value;
+        }
+    }
+
+    last = last.inv();
+
+    for i in (0..input.len()).rev() {
+        if input[i] == E::ZERO {
+            state[i] = E::ZERO;
+        } else {
+        
+            state[i] *= last;
+            last *= input[i];
+        }
+    }
+}
+*/
