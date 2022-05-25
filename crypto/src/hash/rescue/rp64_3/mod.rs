@@ -275,7 +275,7 @@ impl Rp64_256 {
 
     //pub const BATCH_SIZE: usize = 1 << 5;
 
-    // RESCUE PERMUTATION
+    // RESCUE PERMUTATION (Without batch inversion)
     // --------------------------------------------------------------------------------------------
 
     /// Applies Rescue-XLIX permutation to the provided state.
@@ -315,6 +315,8 @@ impl Rp64_256 {
         Self::add_constants(state, &ARK1[round]);
     }
 
+    // RESCUE PERMUTATION (batch inversion)
+    // --------------------------------------------------------------------------------------------
     /// Applies a group of modified Rescue-XLIX permutation using batched inversion to the provided group of states.
     pub fn apply_permutation_batch(state: &mut [[BaseElement; STATE_WIDTH]; BATCH_SIZE]) {
         // alternating inverse and half-rounds
@@ -355,8 +357,6 @@ impl Rp64_256 {
         state: &mut [[BaseElement; STATE_WIDTH]; BATCH_SIZE],
         round: usize,
     ) {
-
-
         use rayon::prelude::*;
         //eprintln!("Round: {} *** Original state {:?}", round, state);
         let a = utils::flatten_slice_elements_mut(state);
@@ -375,7 +375,68 @@ impl Rp64_256 {
         });
     }
 
-/*
+
+    // RESCUE PERMUTATION (batch inversion + MDS frequency)
+    // --------------------------------------------------------------------------------------------
+    /// Applies a group of modified Rescue-XLIX permutation using batched inversion to the provided group of states.
+    pub fn apply_permutation_batch_freq(state: &mut [[BaseElement; STATE_WIDTH]; BATCH_SIZE]) {
+        // alternating inverse and half-rounds
+        Self::apply_rp_half_round_batch_freq(state, 0);
+        Self::apply_inverse_round_batch_freq(state, 1);
+        Self::apply_rp_half_round_batch_freq(state, 2);
+        Self::apply_inverse_round_batch_freq(state, 3);
+        Self::apply_rp_half_round_batch_freq(state, 4);
+        Self::apply_inverse_round_batch_freq(state, 5);
+        Self::apply_rp_half_round_batch_freq(state, 6);
+        Self::apply_inverse_round_batch_freq(state, 7);
+        Self::apply_rp_half_round_batch_freq(state, 8);
+        Self::apply_inverse_round_batch_freq(state, 9);
+        Self::apply_rp_half_round_batch_freq(state, 10);
+        Self::apply_inverse_round_batch_freq(state, 11);
+        Self::apply_rp_half_round_batch_freq(state, 12);
+        Self::apply_inverse_round_batch_freq(state, 13);
+        Self::apply_rp_half_round_batch_freq(state, 14);
+    }
+
+    #[inline(always)]
+    fn apply_rp_half_round_batch_freq(
+        state: &mut [[BaseElement; STATE_WIDTH]; BATCH_SIZE],
+        round: usize,
+    ) {
+        // apply first half of Rescue round
+
+        use rayon::prelude::*;
+        state.iter_mut().for_each(|state| {
+            Self::apply_sbox(state);
+            Self::apply_mds_freq(state);
+            Self::add_constants(state, &ARK1[round]);
+        });
+    }
+
+    #[inline(always)]
+    fn apply_inverse_round_batch_freq(
+        state: &mut [[BaseElement; STATE_WIDTH]; BATCH_SIZE],
+        round: usize,
+    ) {
+        use rayon::prelude::*;
+        //eprintln!("Round: {} *** Original state {:?}", round, state);
+        let a = utils::flatten_slice_elements_mut(state);
+        //eprintln!("flattened state {:?}", a);
+        math::batch_inversion_mut(a);
+
+        //eprintln!("Round: {} *** Original state inverted {:?}", round, state);
+        //eprintln!("Round: {} *** flattened state inverted {:?}", round, a);
+        //let a: [[BaseElement];1]group_slice_elements(a);
+        //let state = group_slice_elements(a);
+        //let a: [BaseElement; STATE_WIDTH * BATCH_SIZE] = state.iter_mut().flat_map(|s| s).collect();
+        (state).iter_mut().for_each(|state| {
+            //Self::apply_inv_sbox_new(state);
+            Self::apply_mds_freq(state);
+            Self::add_constants(state, &ARK1[round]);
+        });
+    }
+
+    /*
     #[inline(always)]
     fn apply_inverse_round_batch(
         state: &mut [[BaseElement; STATE_WIDTH]; BATCH_SIZE],
@@ -395,7 +456,7 @@ impl Rp64_256 {
         //let a: [BaseElement; STATE_WIDTH * BATCH_SIZE] = state.iter_mut().flat_map(|s| s).collect();
         (a).par_chunks_mut(STATE_WIDTH).enumerate().for_each(|(i,st)| {
             //Self::apply_inv_sbox_new(state);
-            
+
             Self::apply_mds(&mut state[i]);
             Self::add_constants(&mut state[i], &ARK1[round]);
             state[i].copy_from_slice(&st[0..STATE_WIDTH]);
@@ -406,6 +467,8 @@ impl Rp64_256 {
     // --------------------------------------------------------------------------------------------
 
     const MDS_MATRIX_EXPS: [u64; 12] = [0, 0, 1, 0, 3, 5, 1, 8, 12, 3, 16, 10];
+    //const MDS_MATRIX_COL: [u64; 12] = [1, 1024, 65536, 8, 4096, 256, 2, 32, 8, 1, 2, 1];
+
 
     #[inline(always)]
     fn apply_mds(state_: &mut [BaseElement; STATE_WIDTH]) {
@@ -500,6 +563,161 @@ impl Rp64_256 {
             }
         }
     }
+
+
+    /* TODO: Elaborate more.
+    We use split 3 x 4 FFT transform in order to transform our vectors into the frequency domain.
+    We use the real FFT to avoid redundant computations. See https://www.mdpi.com/2076-3417/12/9/4700  */
+    #[inline(always)]
+    fn fft2_real(x: [u64; 2]) -> [i64; 2] {
+        return [(x[0] as i64 + x[1] as i64), (x[0] as i64 - x[1] as i64)];
+    }
+
+    #[inline(always)]
+    fn ifft2_real(y: [i64; 2]) -> [u64; 2] {
+        return [(y[0] + y[1]) as u64 >> 1, (y[0] - y[1]) as u64 >> 1];
+    }
+
+    #[inline(always)]
+    fn fft4_real(x: [u64; 4]) -> (i64, (i64, i64), i64) {
+        let [z0, z2] = Self::fft2_real([x[0], x[2]]);
+        let [z1, z3] = Self::fft2_real([x[1], x[3]]);
+        let y0 = z0 + z1;
+        let y1 = (z2, -z3);
+        let y2 = z0 - z1;
+        return (y0, y1, y2);
+    }
+
+    #[inline(always)]
+    fn ifft4_real(y: (i64, (i64, i64), i64)) -> [u64; 4] {
+        let z0 = (y.0 + y.2) >> 1;
+        let z1 = (y.0 - y.2) >> 1;
+        let z2 = y.1 .0;
+        let z3 = -y.1 .1;
+
+        let [x0, x2] = Self::ifft2_real([z0, z2]);
+        let [x1, x3] = Self::ifft2_real([z1, z3]);
+
+        return [x0, x1, x2, x3];
+    }
+/*
+    #[inline(always)]
+    fn fft4x3(x: [u64; 12]) -> ([i64; 3], [(i64, i64); 3], [i64; 3]) {
+        let [x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11] = x;
+        let (y0, y1, y2) = Self::fft4_real([x0, x3, x6, x9]);
+        let (y4, y5, y6) = Self::fft4_real([x1, x4, x7, x10]);
+        let (y8, y9, y10) = Self::fft4_real([x2, x5, x8, x11]);
+
+        return ([y0, y4, y8], [y1, y5, y9], [y2, y6, y10]);
+    }
+*/
+    #[inline(always)]
+    fn block1(x: [i64; 3], y: [i64; 3]) -> [i64; 3] {
+        let [x0, x1, x2] = x;
+        let [y0, y1, y2] = y;
+        let z0 = x0 * y0 + x1 * y2 + x2 * y1;
+        let z1 = x0 * y1 + x1 * y0 + x2 * y2;
+        let z2 = x0 * y2 + x1 * y1 + x2 * y0;
+
+        return [z0, z1, z2];
+    }
+
+    #[inline(always)]
+    fn block2(x: [(i64, i64); 3], y: [(i64, i64); 3]) -> [(i64, i64); 3] {
+        let [(x0r, x0i), (x1r, x1i), (x2r, x2i)] = x;
+        let [(y0r, y0i), (y1r, y1i), (y2r, y2i)] = y;
+        let x0s = x0r + x0i;
+        let x1s = x1r + x1i;
+        let x2s = x2r + x2i;
+        let y0s = y0r + y0i;
+        let y1s = y1r + y1i;
+        let y2s = y2r + y2i;
+
+        // Compute x0​y0​−ix1​y2​−ix2​y1​ using Karatsuba
+        let m0 = (x0r * y0r, x0i * y0i);
+        let m1 = (x1r * y2r, x1i * y2i);
+        let m2 = (x2r * y1r, x2i * y1i);
+        let z0r = (m0.0 - m0.1) + (x1s * y2s - m1.0 - m1.1) + (x2s * y1s - m2.0 - m2.1);
+        let z0i = (x0s * y0s - m0.0 - m0.1) + (-m1.0 + m1.1) + (-m2.0 + m2.1);
+        let z0 = (z0r, z0i);
+
+        // Compute x0​y1​+x1​y0​−ix2​y2 using Karatsuba
+        let m0 = (x0r * y1r, x0i * y1i);
+        let m1 = (x1r * y0r, x1i * y0i);
+        let m2 = (x2r * y2r, x2i * y2i);
+        let z1r = (m0.0 - m0.1) + (m1.0 - m1.1) + (x2s * y2s - m2.0 - m2.1);
+        let z1i = (x0s * y1s - m0.0 - m0.1) + (x1s * y0s - m1.0 - m1.1) + (-m2.0 + m2.1);
+        let z1 = (z1r, z1i);
+
+        // Compute x0​y2​+x1​y1​+x2​y0​ using Karatsuba
+        let m0 = (x0r * y2r, x0i * y2i);
+        let m1 = (x1r * y1r, x1i * y1i);
+        let m2 = (x2r * y0r, x2i * y0i);
+        let z2r = (m0.0 - m0.1) + (m1.0 - m1.1) + (m2.0 - m2.1);
+        let z2i = (x0s * y2s - m0.0 - m0.1) + (x1s * y1s - m1.0 - m1.1) + (x2s * y0s - m2.0 - m2.1);
+        let z2 = (z2r, z2i);
+
+        return [z0, z1, z2];
+    }
+
+    // The 3*FFT4 representation of the MDS matrix
+    const MDS_FREQ_BLOCK_ONE: [i64; 3] = [12, 5154, 65801];
+    const MDS_FREQ_BLOCK_TWO: [(i64, i64); 3] = [(-1, -7), (992, -4094), (65528, -255)];
+    const MDS_FREQ_BLOCK_THREE: [i64; 3] = [-6, -3042, 65287];
+
+    #[inline(always)]
+    fn block3(x: [i64; 3], y: [i64; 3]) -> [i64; 3] {
+        let [x0, x1, x2] = x;
+        let [y0, y1, y2] = y;
+        let z0 = x0 * y0 - x1 * y2 - x2 * y1;
+        let z1 = x0 * y1 + x1 * y0 - x2 * y2;
+        let z2 = x0 * y2 + x1 * y1 + x2 * y0;
+
+        return [z0, z1, z2];
+    }
+
+    #[inline(always)]
+    fn mds_multiply_freq(state: [u64; 12]) -> [u64; 12] {
+        let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = state;
+
+        let (u0, u1, u2) = Self::fft4_real([s0, s3, s6, s9]);
+        let (u4, u5, u6) = Self::fft4_real([s1, s4, s7, s10]);
+        let (u8, u9, u10) = Self::fft4_real([s2, s5, s8, s11]);
+
+        let [v0, v4, v8] = Self::block1([u0, u4, u8], Self::MDS_FREQ_BLOCK_ONE);
+        let [v1, v5, v9] = Self::block2([u1, u5, u9], Self::MDS_FREQ_BLOCK_TWO);
+        let [v2, v6, v10] = Self::block3([u2, u6, u10], Self::MDS_FREQ_BLOCK_THREE);
+
+        let [s0, s3, s6, s9] = Self::ifft4_real((v0, v1, v2));
+        let [s1, s4, s7, s10] = Self::ifft4_real((v4, v5, v6));
+        let [s2, s5, s8, s11] = Self::ifft4_real((v8, v9, v10));
+
+        return [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11];
+    }
+
+    #[inline(always)]
+    fn apply_mds_freq(state_: &mut [BaseElement; STATE_WIDTH]) {
+        let mut result = [BaseElement::ZERO; STATE_WIDTH];
+
+        let mut state_l =[0u64; STATE_WIDTH];
+        let mut state_h = [0u64; STATE_WIDTH];
+
+        for r in 0..STATE_WIDTH {
+            let s = state_[r].as_int();
+            state_h[r] = s >> 32;
+            state_l[r] = (s as u32) as u64;
+        }
+
+        let state_h = Self::mds_multiply_freq(state_h);
+        let state_l = Self::mds_multiply_freq(state_l);
+
+        for r in 0..STATE_WIDTH {
+            let s = state_l[r] as u128 + ((state_h[r] as u128) << 32);
+            result[r] = s.into();
+        }
+        *state_ = result;
+    }
+
 }
 
 // MDS
