@@ -728,14 +728,13 @@ impl Rp64_256 {
             state_l[r] = (s as u32) as u64;
         }
 
-        let state_h = Self::mds_multiply_freq(state_h);
-        let state_l = Self::mds_multiply_freq(state_l);
+        let state_h = Self::mds_multiply_freq_original(state_h);
+        let state_l = Self::mds_multiply_freq_original(state_l);
 
         for r in 0..STATE_WIDTH {
             let s = state_l[r] as u128 + ((state_h[r] as u128) << 32);
             result[r] = s.into();
         }
-        result[0] += state_[0] * BaseElement::from(8u64);
         *state_ = result;
     }
     #[inline(always)]
