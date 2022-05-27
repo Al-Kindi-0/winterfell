@@ -5,7 +5,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
 //use math::fields::f128;
-use rand_utils::rand_value;
+use rand_utils::{rand_value, rand_array, rand_vector};
 /*
 use winter_crypto::{
     hashers::{Sha3_256, Blake3_256, Rp62_248}
@@ -247,12 +247,41 @@ fn rescue256_permutation(c: &mut Criterion) {
         BaseElement::new(4516812 as u64),
         BaseElement::new(4526812 as u64),
     ];
-    c.bench_function("hash_rp64_1 (FB) (FB) (FB) (FB) (FB) (FB) (FB) Permutation: Naive MDS mul", |bench| {
-        bench.iter(|| {Rp64_256::apply_permutation(black_box(&mut v))
+    let mut a1: Vec<[BaseElement;12]> = vec![];
+    for _ in 0..10000{
+        let s: [BaseElement;12] = rand_array();
+        a1.push(s);
+    }
+    c.bench_function("hash_rp64 (FB) (FB) (FB) (FB) (FB) (FB) (FB) Permutation: Naive MDS (Original) mul", |bench| {
+
+        bench.iter(|| {
+            a1.par_iter_mut()
+                .for_each(|a| {Rp64_256::apply_permutation(black_box( a));})
         })
     });
-    c.bench_function("hash_rp64_1 (FB) (FB) (FB) (FB) (FB) (FB) (FB) Permutation: FFT MDS mul", |bench| {
-        bench.iter(|| Rp64_256::apply_permutation_freq(black_box(&mut v)))
+    c.bench_function("hash_rp64 (FB) (FB) (FB) (FB) (FB) (FB) (FB) Permutation: FFT MDS (Original) mul", |bench| {
+        bench.iter(|| {
+            a1.par_iter_mut()
+                .for_each(|a| {Rp64_256::apply_permutation_freq_original(black_box( a));})
+        })
+    });
+    c.bench_function("hash_rp64 (FB) (FB) (FB) (FB) (FB) (FB) (FB) Permutation: FFT MDS (New) mul", |bench| {
+        bench.iter(|| {
+            a1.par_iter_mut()
+                .for_each(|a| {Rp64_256::apply_permutation_freq(black_box( a));})
+        })
+    });
+    c.bench_function("hash_rp64 (FB) (FB) (FB) (FB) (FB) (FB) (FB) Permutation: FFT MDS (New) inlined", |bench| {
+        bench.iter(|| {
+            a1.par_iter_mut()
+                .for_each(|a| {Rp64_256::apply_permutation_freq_light(black_box( a));})
+        })
+    });
+    c.bench_function("hash_rp64 (FB) (FB) (FB) (FB) (FB) (FB) (FB) Permutation: FFT MDS (New) inlined + SIMD", |bench| {
+        bench.iter(|| {
+            a1.par_iter_mut()
+                .for_each(|a| {Rp64_256::apply_permutation_freq_light_simd(black_box( a));})
+        })
     });
 }
 

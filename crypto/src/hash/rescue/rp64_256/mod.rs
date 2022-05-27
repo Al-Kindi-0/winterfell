@@ -2,8 +2,9 @@
 //
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
+use core_simd::*;
 
-use super::{Digest, ElementHasher, Hasher, exp_acc};
+use super::{exp_acc, Digest, ElementHasher, Hasher};
 use core::convert::TryInto;
 use core::ops::Range;
 use math::{fields::f64::BaseElement, FieldElement, StarkField};
@@ -441,14 +442,52 @@ impl Rp64_256 {
         }
     }
 
-
     //////////////////////////////////////////////////////////////////////////////////////////////////
     /// With FFT-based multiplication
-    /// 
+    ///
     /// //////////////////////////////////////////////////////////////////////////////////////////////
-    /// 
-    /// 
-    
+    ///
+    ///
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    /// Using the original matrix
+    ///
+    /// //////////////////////////////////////////////////////////////////////////////////////////////
+    ///
+    ///
+
+    /// Applies Rescue-XLIX permutation to the provided state.
+    pub fn apply_permutation_freq_original(state: &mut [BaseElement; STATE_WIDTH]) {
+        Self::apply_rp_full_round_freq_original(state, 0);
+        Self::apply_rp_full_round_freq_original(state, 1);
+        Self::apply_rp_full_round_freq_original(state, 2);
+        Self::apply_rp_full_round_freq_original(state, 3);
+        Self::apply_rp_full_round_freq_original(state, 4);
+        Self::apply_rp_full_round_freq_original(state, 5);
+        Self::apply_rp_full_round_freq_original(state, 6);
+    }
+
+    /// Rescue-XLIX round function.
+    #[inline(always)]
+    fn apply_rp_full_round_freq_original(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        // apply first half of Rescue round
+        Self::apply_sbox(state);
+        Self::apply_mds_freq_original(state);
+        Self::add_constants(state, &ARK1[round]);
+
+        // apply second half of Rescue round
+        Self::apply_inv_sbox(state);
+        Self::apply_mds_freq_original(state);
+        Self::add_constants(state, &ARK2[round]);
+    }
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    /// Using the light-weight-in-frequency-domain matrix
+    ///
+    /// //////////////////////////////////////////////////////////////////////////////////////////////
+    ///
+    ///
+
     /// Applies Rescue-XLIX permutation to the provided state.
     pub fn apply_permutation_freq(state: &mut [BaseElement; STATE_WIDTH]) {
         Self::apply_rp_full_round_freq(state, 0);
@@ -459,7 +498,6 @@ impl Rp64_256 {
         Self::apply_rp_full_round_freq(state, 5);
         Self::apply_rp_full_round_freq(state, 6);
     }
-
     /// Rescue-XLIX round function.
     #[inline(always)]
     fn apply_rp_full_round_freq(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
@@ -473,7 +511,75 @@ impl Rp64_256 {
         Self::apply_mds_freq(state);
         Self::add_constants(state, &ARK2[round]);
     }
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    /// Using the light-weight-in-frequency-domain matrix with inlined operations
+    ///
+    /// //////////////////////////////////////////////////////////////////////////////////////////////
+    ///
+    ///
+
+    /// Applies Rescue-XLIX permutation to the provided state.
+    pub fn apply_permutation_freq_light(state: &mut [BaseElement; STATE_WIDTH]) {
+        Self::apply_rp_full_round_freq_light(state, 0);
+        Self::apply_rp_full_round_freq_light(state, 1);
+        Self::apply_rp_full_round_freq_light(state, 2);
+        Self::apply_rp_full_round_freq_light(state, 3);
+        Self::apply_rp_full_round_freq_light(state, 4);
+        Self::apply_rp_full_round_freq_light(state, 5);
+        Self::apply_rp_full_round_freq_light(state, 6);
+    }
+
+    /// Rescue-XLIX round function.
+    #[inline(always)]
+    fn apply_rp_full_round_freq_light(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        // apply first half of Rescue round
+        Self::apply_sbox(state);
+        Self::apply_mds_freq_light(state);
+        Self::add_constants(state, &ARK1[round]);
+
+        // apply second half of Rescue round
+        Self::apply_inv_sbox(state);
+        Self::apply_mds_freq_light(state);
+        Self::add_constants(state, &ARK2[round]);
+    }
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    /// Using the light-weight-in-frequency-domain matrix with inlined operations and SIMD
+    ///
+    /// //////////////////////////////////////////////////////////////////////////////////////////////
+    ///
+    ///
     
+    /// Applies Rescue-XLIX permutation to the provided state.
+    pub fn apply_permutation_freq_light_simd(state: &mut [BaseElement; STATE_WIDTH]) {
+        Self::apply_rp_full_round_freq_light_simd(state, 0);
+        Self::apply_rp_full_round_freq_light_simd(state, 1);
+        Self::apply_rp_full_round_freq_light_simd(state, 2);
+        Self::apply_rp_full_round_freq_light_simd(state, 3);
+        Self::apply_rp_full_round_freq_light_simd(state, 4);
+        Self::apply_rp_full_round_freq_light_simd(state, 5);
+        Self::apply_rp_full_round_freq_light_simd(state, 6);
+    }
+
+    /// Rescue-XLIX round function.
+    #[inline(always)]
+    fn apply_rp_full_round_freq_light_simd(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        // apply first half of Rescue round
+        Self::apply_sbox(state);
+        Self::apply_mds_freq_light_simd(state);
+        Self::add_constants(state, &ARK1[round]);
+
+        // apply second half of Rescue round
+        Self::apply_inv_sbox(state);
+        Self::apply_mds_freq_light_simd(state);
+        Self::add_constants(state, &ARK2[round]);
+    }
+    //////////////////////////////////////////////////////////////////////////////////////////////
+    /// Helper functions for FFT-based multiplication
+    /// 
+    /// 
+    /// /////////////////////////////////////////////////////////////////////////////////////////
+    /// 
     /* TODO: Elaborate more.
     We use split 3 x 4 FFT transform in order to transform our vectors into the frequency domain.
     We use the real FFT to avoid redundant computations. See https://www.mdpi.com/2076-3417/12/9/4700  */
@@ -509,17 +615,17 @@ impl Rp64_256 {
 
         return [x0, x1, x2, x3];
     }
-/*
-    #[inline(always)]
-    fn fft4x3(x: [u64; 12]) -> ([i64; 3], [(i64, i64); 3], [i64; 3]) {
-        let [x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11] = x;
-        let (y0, y1, y2) = Self::fft4_real([x0, x3, x6, x9]);
-        let (y4, y5, y6) = Self::fft4_real([x1, x4, x7, x10]);
-        let (y8, y9, y10) = Self::fft4_real([x2, x5, x8, x11]);
+    /*
+        #[inline(always)]
+        fn fft4x3(x: [u64; 12]) -> ([i64; 3], [(i64, i64); 3], [i64; 3]) {
+            let [x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11] = x;
+            let (y0, y1, y2) = Self::fft4_real([x0, x3, x6, x9]);
+            let (y4, y5, y6) = Self::fft4_real([x1, x4, x7, x10]);
+            let (y8, y9, y10) = Self::fft4_real([x2, x5, x8, x11]);
 
-        return ([y0, y4, y8], [y1, y5, y9], [y2, y6, y10]);
-    }
-*/
+            return ([y0, y4, y8], [y1, y5, y9], [y2, y6, y10]);
+        }
+    */
     #[inline(always)]
     fn block1(x: [i64; 3], y: [i64; 3]) -> [i64; 3] {
         let [x0, x1, x2] = x;
@@ -568,12 +674,6 @@ impl Rp64_256 {
 
         return [z0, z1, z2];
     }
-
-    // The 3*FFT4 representation of the MDS matrix
-    const MDS_FREQ_BLOCK_ONE: [i64; 3] = [12, 5154, 65801];
-    const MDS_FREQ_BLOCK_TWO: [(i64, i64); 3] = [(-1, -7), (992, -4094), (65528, -255)];
-    const MDS_FREQ_BLOCK_THREE: [i64; 3] = [-6, -3042, 65287];
-
     #[inline(always)]
     fn block3(x: [i64; 3], y: [i64; 3]) -> [i64; 3] {
         let [x0, x1, x2] = x;
@@ -585,6 +685,59 @@ impl Rp64_256 {
         return [z0, z1, z2];
     }
 
+    // The 3*FFT4 representation of the MDS matrix
+    const MDS_FREQ_BLOCK_ONE_ORIGINAL: [i64; 3] = [12, 5154, 65801];
+    const MDS_FREQ_BLOCK_TWO_ORIGINAL: [(i64, i64); 3] = [(-1, -7), (992, -4094), (65528, -255)];
+    const MDS_FREQ_BLOCK_THREE_ORIGINAL: [i64; 3] = [-6, -3042, 65287];
+
+    const MDS_FREQ_BLOCK_ONE: [i64; 3] = [64, 128, 64];
+    const MDS_FREQ_BLOCK_TWO: [(i64, i64); 3] = [(4, -2), (-8, 2), (32, 2)];
+    const MDS_FREQ_BLOCK_THREE: [i64; 3] = [-4, -32, 8];
+
+    #[inline(always)]
+    fn mds_multiply_freq_original(state: [u64; 12]) -> [u64; 12] {
+        let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = state;
+
+        let (u0, u1, u2) = Self::fft4_real([s0, s3, s6, s9]);
+        let (u4, u5, u6) = Self::fft4_real([s1, s4, s7, s10]);
+        let (u8, u9, u10) = Self::fft4_real([s2, s5, s8, s11]);
+
+        let [v0, v4, v8] = Self::block1([u0, u4, u8], Self::MDS_FREQ_BLOCK_ONE_ORIGINAL);
+        let [v1, v5, v9] = Self::block2([u1, u5, u9], Self::MDS_FREQ_BLOCK_TWO_ORIGINAL);
+        let [v2, v6, v10] = Self::block3([u2, u6, u10], Self::MDS_FREQ_BLOCK_THREE_ORIGINAL);
+
+        let [s0, s3, s6, s9] = Self::ifft4_real((v0, v1, v2));
+        let [s1, s4, s7, s10] = Self::ifft4_real((v4, v5, v6));
+        let [s2, s5, s8, s11] = Self::ifft4_real((v8, v9, v10));
+
+        return [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11];
+    }
+
+    #[inline(always)]
+    fn apply_mds_freq_original(state_: &mut [BaseElement; STATE_WIDTH]) {
+        let mut result = [BaseElement::ZERO; STATE_WIDTH];
+
+        // Using the linearity of the operations we can split the state into a low||high decomposition
+        // and operate on each with no overflow and then combine/reduce the result to a field element.
+        let mut state_l = [0u64; STATE_WIDTH];
+        let mut state_h = [0u64; STATE_WIDTH];
+
+        for r in 0..STATE_WIDTH {
+            let s = state_[r].as_int();
+            state_h[r] = s >> 32;
+            state_l[r] = (s as u32) as u64;
+        }
+
+        let state_h = Self::mds_multiply_freq(state_h);
+        let state_l = Self::mds_multiply_freq(state_l);
+
+        for r in 0..STATE_WIDTH {
+            let s = state_l[r] as u128 + ((state_h[r] as u128) << 32);
+            result[r] = s.into();
+        }
+        result[0] += state_[0] * BaseElement::from(8u64);
+        *state_ = result;
+    }
     #[inline(always)]
     fn mds_multiply_freq(state: [u64; 12]) -> [u64; 12] {
         let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = state;
@@ -608,7 +761,9 @@ impl Rp64_256 {
     fn apply_mds_freq(state_: &mut [BaseElement; STATE_WIDTH]) {
         let mut result = [BaseElement::ZERO; STATE_WIDTH];
 
-        let mut state_l =[0u64; STATE_WIDTH];
+        // Using the linearity of the operations we can split the state into a low||high decomposition
+        // and operate on each with no overflow and then combine/reduce the result to a field element.
+        let mut state_l = [0u64; STATE_WIDTH];
         let mut state_h = [0u64; STATE_WIDTH];
 
         for r in 0..STATE_WIDTH {
@@ -624,9 +779,294 @@ impl Rp64_256 {
             let s = state_l[r] as u128 + ((state_h[r] as u128) << 32);
             result[r] = s.into();
         }
+        result[0] += state_[0] * BaseElement::from(8u64);
         *state_ = result;
     }
 
+    #[inline(always)]
+    fn mds_multiply_freq_light(state: &mut [u64; 12]) -> [u64; 12] {
+        let mut fft_s = [0i64; 12];
+        let diag_entry = state[0];
+        for i in 0..3 {
+            let s0 = state[i + 0] as i64;
+            let s3 = state[i + 3] as i64;
+            let s6 = state[i + 6] as i64;
+            let s9 = state[i + 9] as i64;
+            let z0 = s0 + s6;
+            let z2 = s0 - s6;
+            let z1 = s3 + s9;
+            let z3 = s9 - s3;
+
+            fft_s[i + 0] = z0 + z1;
+            fft_s[i + 3] = z0 - z1;
+            fft_s[i + 6] = z2;
+            fft_s[i + 9] = z3;
+        }
+
+        let x0r = fft_s[6];
+        let x0i = fft_s[9];
+        let x1r = fft_s[7];
+        let x1i = fft_s[10];
+        let x2r = fft_s[8];
+        let x2i = fft_s[11];
+
+        //let (z0r, z0i) = (x0i + 2*x0r + 16*x1i + x1r - 4*x2i + x2r, 2*x0i - x0r + x1i - 16*x1r + x2i + 4*x2r);
+        //let (z1r, z1i) = (-x0i - 4*x0r + x1i + 2*x1r + 16*x2i + x2r, -4*x0i + x0r + 2*x1i - x1r + x2i - 16*x2r);
+        //let (z2r, z2i) = (-x0i + 16*x0r - x1i - 4*x1r + x2i + 2*x2r, 16*x0i + x0r - 4*x1i + x1r + 2*x2i - x2r);
+
+        let (z0r, z0i) = (
+            x0i + (x0r << 1) + (x1i << 4) + x1r - (x2i << 2) + x2r,
+            (x0i << 1) - x0r + x1i - (x1r << 4) + x2i + (x2r << 2),
+        );
+        let (z1r, z1i) = (
+            -x0i - (x0r << 2) + x1i + (x1r << 1) + (x2i << 4) + x2r,
+            (x0i << 2) + x0r + (x1i << 1) - x1r + x2i - (x2r << 4),
+        );
+        let (z2r, z2i) = (
+            -x0i + (x0r << 4) - x1i - (x1r << 2) + x2i + (x2r << 1),
+            (x0i << 4) + x0r - (x1i << 2) + x1r + (x2i << 1) - x2r,
+        );
+
+        fft_s[6] = z0r;
+        fft_s[7] = z1r;
+        fft_s[8] = z2r;
+        fft_s[9] = z0i;
+        fft_s[10] = z1i;
+        fft_s[11] = z2i;
+
+        // Block1
+
+        let x0 = fft_s[0];
+        let x1 = fft_s[1];
+        let x2 = fft_s[2];
+
+        let tmp = (x0 + x1 + x2) << 4;
+        let z0 = tmp + (x1 << 4);
+        let z1 = tmp + (x2 << 4);
+        let z2 = tmp + (x0 << 4);
+        fft_s[0] = z1;
+        fft_s[1] = z2;
+        fft_s[2] = z0;
+
+        // Block3
+        let x0 = fft_s[3];
+        let x1 = fft_s[4];
+        let x2 = fft_s[5];
+
+        let z0 = -x0 - (x1 << 1) + (x2 << 3);
+        let z1 = -(x0 << 3) - x1 - (x2 << 1);
+        let z2 = (x0 << 1) - (x1 << 3) - x2;
+
+        fft_s[3] = z0;
+        fft_s[4] = z1;
+        fft_s[5] = z2;
+
+        for i in 0..3 {
+            let y0 = fft_s[0 + i];
+            let y1 = fft_s[3 + i];
+            let y2 = fft_s[6 + i];
+            let y3 = fft_s[9 + i];
+
+            let z0 = (y0 + y1);
+            let z1 = (y0 - y1);
+            let z2 = y2;
+            let z3 = -y3;
+
+            let x0 = (z0 + z2);
+            let x2 = (z0 - z2);
+            let x1 = (z1 + z3);
+            let x3 = (z1 - z3);
+
+            state[0 + i] = x0 as u64;
+            state[3 + i] = x1 as u64;
+            state[6 + i] = x2 as u64;
+            state[9 + i] = x3 as u64;
+        }
+        state[0] += diag_entry * 8;
+        return *state;
+    }
+
+    #[inline(always)]
+    fn apply_mds_freq_light(state_: &mut [BaseElement; STATE_WIDTH]) {
+        let mut result = [BaseElement::ZERO; STATE_WIDTH];
+
+        // Using the linearity of the operations we can split the state into a low||high decomposition
+        // and operate on each with no overflow and then combine/reduce the result to a field element.
+        let mut state_l = [0u64; STATE_WIDTH];
+        let mut state_h = [0u64; STATE_WIDTH];
+
+        for r in 0..STATE_WIDTH {
+            let s = state_[r].as_int();
+            state_h[r] = s >> 32;
+            state_l[r] = (s as u32) as u64;
+        }
+
+        let state_h = Self::mds_multiply_freq_light(&mut state_h);
+        let state_l = Self::mds_multiply_freq_light(&mut state_l);
+
+        for r in 0..STATE_WIDTH {
+            let s = state_l[r] as u128 + ((state_h[r] as u128) << 32);
+            result[r] = s.into();
+        }
+        *state_ = result;
+    }
+
+    #[inline(always)]
+    fn apply_mds_freq_light_simd(state_: &mut [BaseElement; STATE_WIDTH]) {
+        let mut result = [BaseElement::ZERO; STATE_WIDTH];
+
+        let mut state_int = [0u64; STATE_WIDTH];
+
+        for r in 0..STATE_WIDTH {
+            let s = state_[r].as_int();
+            state_int[r] = s;
+        }
+        let state = Self::mds_multiply_freq_light_simd(&mut state_int);
+
+        for r in 0..STATE_WIDTH {
+            result[r] = state[r].into();
+        }
+        *state_ = result;
+    }
+
+    #[inline(always)]
+    fn mds_multiply_freq_light_simd(state: &mut [u64; 12]) -> [u128; 12] {
+        use core_simd::*;
+        let mut fft_s = [u64x2::splat(0); 12];
+        let mut state_ = [0u128; 12];
+        //let mut fft_s = [0i64; 12];
+        let diag_entry = state[0] as u128;
+        let vconst0 = u64x2::from_array([0u64, 0u64]);
+        let vconst2 = u64x2::from_array([2u64, 2u64]);
+        let vconst4 = u64x2::from_array([4u64, 4u64]);
+        let vconst8 = u64x2::from_array([8u64, 8u64]);
+        let vconst16 = u64x2::from_array([16u64, 16u64]);
+
+        //let s0 = u32x4::from(state[0]);
+        //let g = fft_s[0] - s0;
+        for i in 0..3 {
+            let s0 = u64x2::from_array([state[i + 0] >> 32 as u64, (state[i + 0] as u32) as u64]);
+            let s3 = u64x2::from_array([state[i + 3] >> 32 as u64, (state[i + 3] as u32) as u64]);
+            let s6 = u64x2::from_array([state[i + 6] >> 32 as u64, (state[i + 6] as u32) as u64]);
+            let s9 = u64x2::from_array([state[i + 9] >> 32 as u64, (state[i + 9] as u32) as u64]);
+            let z0 = s0 + s6;
+            let z2 = s0 - s6;
+            let z1 = s3 + s9;
+            let z3 = s9 - s3; // sign flipp
+
+            fft_s[i + 0] = z0 + z1;
+            fft_s[i + 3] = z0 - z1;
+            fft_s[i + 6] = z2;
+            fft_s[i + 9] = z3;
+        }
+
+        let x0r = fft_s[6];
+        let x0i = fft_s[9];
+        let x1r = fft_s[7];
+        let x1i = fft_s[10];
+        let x2r = fft_s[8];
+        let x2i = fft_s[11];
+
+        let (z0r, z0i) = (
+            x0i + vconst2 * x0r + vconst16 * x1i + x1r - vconst4 * x2i + x2r,
+            vconst2 * x0i - x0r + x1i - vconst16 * x1r + x2i + vconst4 * x2r,
+        );
+        let (z1r, z1i) = (
+            x1i - x0i + vconst2 * x1r - vconst4 * x0r + vconst16 * x2i + x2r,
+            x0r - vconst4 * x0i + vconst2 * x1i - x1r + x2i - vconst16 * x2r,
+        );
+        let (z2r, z2i) = (
+            vconst16 * x0r - x0i - x1i - vconst4 * x1r + x2i + vconst2 * x2r,
+            vconst16 * x0i + x0r - vconst4 * x1i + x1r + vconst2 * x2i - x2r,
+        );
+        /*
+            let (z0r, z0i) = (
+                x0i + (x0r << 1) + (x1i << 4) + x1r - (x2i << 2) + x2r,
+                (x0i << 1) - x0r + x1i - (x1r << 4) + x2i + (x2r << 2),
+            );
+            let (z1r, z1i) = (
+                -x0i - (x0r << 2) + x1i + (x1r << 1) + (x2i << 4) + x2r,
+                (x0i << 2) + x0r + (x1i << 1) - x1r + x2i - (x2r << 4),
+            );
+            let (z2r, z2i) = (
+                -x0i + (x0r << 4) - x1i - (x1r << 2) + x2i + (x2r << 1),
+                (x0i << 4) + x0r - (x1i << 2) + x1r + (x2i << 1) - x2r,
+            );
+        */
+        fft_s[6] = z0r;
+        fft_s[7] = z1r;
+        fft_s[8] = z2r;
+        fft_s[9] = z0i;
+        fft_s[10] = z1i;
+        fft_s[11] = z2i;
+
+        // Block1
+
+        let x0 = fft_s[0];
+        let x1 = fft_s[1];
+        let x2 = fft_s[2];
+
+        let tmp = (x0 + x1 + x2) * vconst16;
+        let z0 = tmp + (x1 * vconst16);
+        let z1 = tmp + (x2 * vconst16);
+        let z2 = tmp + (x0 * vconst16);
+        fft_s[0] = z1;
+        fft_s[1] = z2;
+        fft_s[2] = z0;
+
+        // Block3
+        let x0 = fft_s[3];
+        let x1 = fft_s[4];
+        let x2 = fft_s[5];
+
+        let z0 = (x2 * vconst8) - x0 - (x1 * vconst2);
+        let z1 = vconst0 - (x0 * vconst8) - x1 - (x2 * vconst2);
+        let z2 = (x0 * vconst2) - (x1 * vconst8) - x2;
+
+        fft_s[3] = z0;
+        fft_s[4] = z1;
+        fft_s[5] = z2;
+
+        for i in 0..3 {
+            let y0 = fft_s[0 + i];
+            let y1 = fft_s[3 + i];
+            let y2 = fft_s[6 + i];
+            let y3 = fft_s[9 + i];
+
+            let z0 = (y0 + y1);
+            let z1 = (y0 - y1);
+            let z2 = y2;
+            let z3 = vconst0 - y3;
+
+            let x0 = (z0 + z2);
+            let x2 = (z0 - z2);
+            let x1 = (z1 + z3);
+            let x3 = (z1 - z3);
+
+            //let a0: u128 = u32x4::from(x0);
+            //let a1: u128 =  u32x4::into(x1);x1;
+            //let a2: u128 =  u32x4::into(x2);x2;
+            //let a3: u128 =  u32x4::into(x3);x3;
+            //simd;
+            let tmp = u64x2::to_array(x0);
+            let res = ((tmp[0] as u128) << 32) + (tmp[1] as u128);
+            state_[0 + i] = res;
+
+            let tmp = u64x2::to_array(x1);
+            let res = ((tmp[0] as u128) << 32) + (tmp[1] as u128);
+            state_[3 + i] = res;
+
+            let tmp = u64x2::to_array(x2);
+            let res = ((tmp[0] as u128) << 32) + (tmp[1] as u128);
+            state_[6 + i] = res;
+
+            let tmp = u64x2::to_array(x3);
+            let res = ((tmp[0] as u128) << 32) + (tmp[1] as u128);
+            state_[9 + i] = res;
+        }
+        state_[0] += (diag_entry  * 8);
+        return state_;
+    }
 }
 
 // MDS

@@ -15,7 +15,7 @@
 //! * **PRNG** - which is used to generate pseudo-random elements in a finite field. The
 //!   [RandomCoin] implementation uses a cryptographic hash function to generate pseudo-random
 //!   elements form a seed.
-
+#![feature(portable_simd)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 #[cfg(not(feature = "std"))]

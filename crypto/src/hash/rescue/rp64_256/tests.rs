@@ -154,3 +154,19 @@ fn hash_elements_padding() {
     let r2 = Rp64_256::hash_elements(&e2);
     assert_ne!(r1, r2);
 }
+
+
+#[test]
+fn check_correctness_mds_freq_1(){
+
+    use rand_utils::rand_array;
+
+    for _ in 0..1000{
+        
+        let mut s1: [BaseElement;STATE_WIDTH] = rand_array();
+        let mut s2: [BaseElement;STATE_WIDTH] = s1.clone();
+        assert_eq!(Rp64_256::apply_mds_freq_light(&mut s1),Rp64_256::apply_mds_freq_light_simd(&mut s2));
+        //eprintln!("Classical method: {:?} ", s1);
+        //eprintln!("FFT-based method: {:?} ", s2);
+    }
+}

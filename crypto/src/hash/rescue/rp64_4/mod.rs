@@ -609,6 +609,8 @@ impl Rp64_256 {
     fn apply_mds_freq(state_: &mut [BaseElement; STATE_WIDTH]) {
         let mut result = [BaseElement::ZERO; STATE_WIDTH];
 
+        // Using the linearity of the operations we can split the state into a low||high decomposition
+        // and operate on each with no overflow and then combine/reduce the result to a field element.
         let mut state_l =[0u64; STATE_WIDTH];
         let mut state_h = [0u64; STATE_WIDTH];
 
