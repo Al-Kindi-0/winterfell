@@ -60,6 +60,12 @@ impl BaseElement {
     pub const fn new(value: u64) -> Self {
         Self(value % M)
     }
+
+    ///Get's the inner value that might not be canonical
+    
+    pub const fn inner(self: &Self) -> u64{
+        return self.0;
+    }
 }
 
 impl FieldElement for BaseElement {

@@ -248,7 +248,7 @@ fn rescue256_permutation(c: &mut Criterion) {
         BaseElement::new(4526812 as u64),
     ];
     let mut a1: Vec<[BaseElement;12]> = vec![];
-    for _ in 0..1{
+    for _ in 0..1000{
         let s: [BaseElement;12] = rand_array();
         a1.push(s);
     }
@@ -305,6 +305,43 @@ fn rescue256_1_permutation(c: &mut Criterion) {
         BaseElement::new(4516812 as u64),
         BaseElement::new(4526812 as u64),
     ];
+    let mut a1: Vec<[BaseElement;12]> = vec![];
+    for _ in 0..1000{
+        let s: [BaseElement;12] = rand_array();
+        a1.push(s);
+    }
+    c.bench_function("hash_rp64_1 (F) (FB) (F) (FB) (F) (FB) (F) Permutation: Naive MDS (Original) mul", |bench| {
+
+        bench.iter(|| {
+            a1.iter_mut()
+                .for_each(|a| {Rp_64_1::apply_permutation(black_box( a));})
+        })
+    });
+    c.bench_function("hash_rp64_1 (F) (FB) (F) (FB) (F) (FB) (F) Permutation: FFT MDS (Original) mul", |bench| {
+        bench.iter(|| {
+            a1.iter_mut()
+                .for_each(|a| {Rp_64_1::apply_permutation_freq_original(black_box( a));})
+        })
+    });
+    c.bench_function("hash_rp64_1 (F) (FB) (F) (FB) (F) (FB) (F) Permutation: FFT MDS (New) mul", |bench| {
+        bench.iter(|| {
+            a1.iter_mut()
+                .for_each(|a| {Rp_64_1::apply_permutation_freq(black_box( a));})
+        })
+    });
+    c.bench_function("hash_rp64_1 (F) (FB) (F) (FB) (F) (FB) (F) Permutation: FFT MDS (New) inlined", |bench| {
+        bench.iter(|| {
+            a1.iter_mut()
+                .for_each(|a| {Rp_64_1::apply_permutation_freq_light(black_box( a));})
+        })
+    });
+    c.bench_function("hash_rp64_1 (F) (FB) (F) (FB) (F) (FB) (F) Permutation: FFT MDS (New) inlined + SIMD", |bench| {
+        bench.iter(|| {
+            a1.iter_mut()
+                .for_each(|a| {Rp_64_1::apply_permutation_freq_light_simd(black_box( a));})
+        })
+    });
+    /*
     c.bench_function("hash_rp64_1 (F) (FB) (F) (FB) (F) (FB) (F) Permutation: Naive MDS mul", |bench| {
         bench.iter(|| {Rp_64_1::apply_permutation(black_box(&mut v))
         })
@@ -312,6 +349,7 @@ fn rescue256_1_permutation(c: &mut Criterion) {
     c.bench_function("hash_rp64_1 (F) (FB) (F) (FB) (F) (FB) (F) Permutation: FFT MDS mul", |bench| {
         bench.iter(|| Rp_64_1::apply_permutation_freq(black_box(&mut v)))
     });
+    */
 }
 
 fn rescue256_2_permutation(c: &mut Criterion) {

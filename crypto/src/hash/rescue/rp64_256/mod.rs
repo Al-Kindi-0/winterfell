@@ -723,7 +723,7 @@ impl Rp64_256 {
         let mut state_h = [0u64; STATE_WIDTH];
 
         for r in 0..STATE_WIDTH {
-            let s = state_[r].as_int();
+            let s = state_[r].inner();
             state_h[r] = s >> 32;
             state_l[r] = (s as u32) as u64;
         }
@@ -766,7 +766,7 @@ impl Rp64_256 {
         let mut state_h = [0u64; STATE_WIDTH];
 
         for r in 0..STATE_WIDTH {
-            let s = state_[r].as_int();
+            let s = state_[r].inner();
             state_h[r] = s >> 32;
             state_l[r] = (s as u32) as u64;
         }
@@ -895,7 +895,7 @@ impl Rp64_256 {
         let mut state_h = [0u64; STATE_WIDTH];
 
         for r in 0..STATE_WIDTH {
-            let s = state_[r].as_int();
+            let s = state_[r].inner();
             state_h[r] = s >> 32;
             state_l[r] = (s as u32) as u64;
         }
@@ -917,7 +917,7 @@ impl Rp64_256 {
         let mut state_int = [0u64; STATE_WIDTH];
 
         for r in 0..STATE_WIDTH {
-            let s = state_[r].as_int();
+            let s = state_[r].inner();
             state_int[r] = s;
         }
         let state = Self::mds_multiply_freq_light_simd(&mut state_int);
