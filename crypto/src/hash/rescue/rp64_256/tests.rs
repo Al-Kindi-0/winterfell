@@ -155,7 +155,7 @@ fn hash_elements_padding() {
     assert_ne!(r1, r2);
 }
 
-
+/*
 #[test]
 fn check_correctness_mds_freq_1(){
 
@@ -170,3 +170,4 @@ fn check_correctness_mds_freq_1(){
         //eprintln!("FFT-based method: {:?} ", s2);
     }
 }
+*/

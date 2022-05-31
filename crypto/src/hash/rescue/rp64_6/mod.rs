@@ -3,17 +3,13 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use super::{Digest, ElementHasher, Hasher};
+use super::{Digest, ElementHasher, Hasher, exp_acc};
 use core::convert::TryInto;
 use core::ops::Range;
-use math::{batch_inversion, fields::f64::BaseElement, FieldElement, StarkField};
-use rayon::iter::IntoParallelRefMutIterator;
-use utils::{batch_iter_mut, iter_mut};
+use math::{fields::f64::BaseElement, FieldElement, StarkField};
+
 mod digest;
 pub use digest::ElementDigest;
-
-#[cfg(test)]
-mod test;
 
 // CONSTANTS
 // ================================================================================================
@@ -41,15 +37,13 @@ const DIGEST_SIZE: usize = DIGEST_RANGE.end - DIGEST_RANGE.start;
 
 /// The number of rounds is set to 7 to target 128-bit security level with 40% security margin;
 /// computed using algorithm 7 from <https://eprint.iacr.org/2020/1143.pdf>
-const NUM_ROUNDS: usize = 7 + 8;
-
-pub(crate) const BATCH_SIZE: usize = 1000;
+const NUM_ROUNDS: usize = 7;
 
 // HASHER IMPLEMENTATION
 // ================================================================================================
 
-/// Implementation of [Hasher] trait for Rescue Prime hash function with 256-bit output and permutation
-/// ((F) (I) (F) (I) (F) (I) (F) (I) (F) (I) (F) (I) (F) (I) (F))
+/// Implementation of [Hasher] trait for Rescue Prime hash function with 256-bit output and permutation (F) (FB) (F) (FB) (F) (FB) (F).
+///
 /// The hash function is implemented according to the Rescue Prime
 /// [specifications](https://eprint.iacr.org/2020/1143.pdf) with the following exception:
 /// * We set the number of rounds to 7, which implies a 40% security margin instead of the 50%
@@ -273,159 +267,33 @@ impl Rp64_256 {
     /// Round constants added to the hasher state in the second half of the Rescue Prime round.
     pub const ARK2: [[BaseElement; STATE_WIDTH]; NUM_ROUNDS] = ARK2;
 
-    //pub const BATCH_SIZE: usize = 1 << 5;
-
-
-
-
-
-
-    /// RESCUE PERMUTATION: FFT + Delayed
-    /// --------------------------------------------------------------------------------------------
-    pub fn apply_permutation_freq_delayed(state: &mut [BaseElement; STATE_WIDTH]) {
-        // alternating inverse and half-rounds
-        let mut d = BaseElement::ONE;
-
-        Self::apply_rp_half_round_delayed(state, &mut d, 0);
-        Self::apply_inverse_round_delayed(state, &mut d, 1);
-        Self::apply_rp_half_round_delayed(state, &mut d, 2);
-        Self::apply_inverse_round_delayed(state, &mut d, 3);
-        Self::apply_rp_half_round_delayed(state, &mut d, 4);
-        Self::apply_inverse_round_delayed(state, &mut d, 5);
-        Self::apply_rp_half_round_delayed(state, &mut d, 6);
-        Self::apply_inverse_round_delayed(state, &mut d, 7);
-        Self::apply_rp_half_round_delayed(state, &mut d, 8);
-        Self::apply_inverse_round_delayed(state, &mut d, 9);
-        Self::apply_rp_half_round_delayed(state, &mut d, 10);
-        Self::apply_inverse_round_delayed(state, &mut d, 11);
-        Self::apply_rp_half_round_delayed(state, &mut d, 12);
-        Self::apply_inverse_round_delayed(state, &mut d, 13);
-        Self::apply_rp_half_round_delayed(state, &mut d, 14);
-
-        Self::apply_final_inversion(state, &mut d); // Turn "state/d" to "state" by computing d^(-1) and multiplying the state by it.
-    }
-
-    #[inline(always)]
-    fn apply_final_inversion(state: &mut [BaseElement; STATE_WIDTH], d: &mut BaseElement) {
-        let d_inv = d.inv();
-        state.iter_mut().for_each(|s| {
-            *s = *s * d_inv;
-        });
-    }
-
-    #[inline(always)]
-    fn uni_sbox(d: &mut BaseElement) {
-        let x2 = d.square();
-        let x4 = x2.square();
-        let x3 = *d * x2;
-        *d = x3 * x4;
-    }
-
-    #[inline(always)]
-    fn apply_inv_sbox_delayed(state: &mut [BaseElement; STATE_WIDTH], d: &mut BaseElement) {
-        let [a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12] = *state;
-        let a_12 = a1 * a2;
-        let a34 = a3 * a4;
-        let a56 = a5 * a6;
-        let a78 = a7 * a8;
-        let a9_10 = a9 * a10;
-        let a11_12 = a11 * a12;
-        let mut a1234 = a_12 * a34;
-        let a5678 = a56 * a78;
-        let a9_10_11_12 = a9_10 * a11_12;
-        let mut a56789_10_11_12 = a5678 * a9_10_11_12;
-        let a_total = a1234 * a56789_10_11_12;
-        a1234 *= *d;
-        a56789_10_11_12 *= *d;
-
-        *state = [
-            a2 * a34 * a56789_10_11_12,
-            a1 * a34 * a56789_10_11_12,
-            a4 * a_12 * a56789_10_11_12,
-            a3 * a_12 * a56789_10_11_12,
-            a6 * a78 * a9_10_11_12 * a1234,
-            a5 * a78 * a9_10_11_12 * a1234,
-            a8 * a56 * a9_10_11_12 * a1234,
-            a7 * a56 * a9_10_11_12 * a1234,
-            a10 * a11_12 * a5678 * a1234,
-            a9 * a11_12 * a5678 * a1234,
-            a12 * a9_10 * a5678 * a1234,
-            a11 * a9_10 * a5678 * a1234,
-        ];
-
-        *d = a_total;
-    }
-    #[inline(always)]
-    fn apply_rp_half_round_delayed(
-        state: &mut [BaseElement; STATE_WIDTH],
-        d: &mut BaseElement,
-        round: usize,
-    ) {
-        // apply first half of Rescue round
-        Self::apply_sbox(state);
-        Self::uni_sbox(d);
-        Self::apply_mds_freq(state);
-        Self::add_constants_delayed(state, &d, &ARK1[round]);
-    }
-
-    #[inline(always)]
-    fn apply_inverse_round_delayed(
-        state: &mut [BaseElement; STATE_WIDTH],
-        d: &mut BaseElement,
-        round: usize,
-    ) {
-        Self::apply_inv_sbox_delayed(state, d);
-        Self::apply_mds_freq(state);
-        Self::add_constants_delayed(state, &d, &ARK1[round]);
-
-        // TODO: Check also batch inversion with batch sizes 4 or 6 and also without batch inversion
-        // TODO: Think also about whether we can delay inversion even further
-    }
-
-    #[inline(always)]
-    fn add_constants_delayed(
-        state: &mut [BaseElement; STATE_WIDTH],
-        denominator: &BaseElement,
-        ark: &[BaseElement; STATE_WIDTH],
-    ) {
-        state
-            .iter_mut()
-            .zip(ark)
-            .for_each(|(s, &k)| *s += k * *denominator);
-    }
-
-
-
-
-
-
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    /// 
-    /// 
-    /// ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
     // RESCUE PERMUTATION
     // --------------------------------------------------------------------------------------------
 
     /// Applies Rescue-XLIX permutation to the provided state.
     pub fn apply_permutation(state: &mut [BaseElement; STATE_WIDTH]) {
-        // alternating inverse and half-rounds
+        // Rescue prime: 2 full rounds, 5 half rounds as (F) (F) (FB) (F) (FB) (F) (F)
         Self::apply_rp_half_round(state, 0);
-        Self::apply_inverse_round(state, 1);
         Self::apply_rp_half_round(state, 2);
-        Self::apply_inverse_round(state, 3);
+        Self::apply_rp_full_round(state, 1);
         Self::apply_rp_half_round(state, 4);
-        Self::apply_inverse_round(state, 5);
+        Self::apply_rp_full_round(state, 3);
+        Self::apply_rp_half_round(state, 5);
         Self::apply_rp_half_round(state, 6);
-        Self::apply_inverse_round(state, 7);
-        Self::apply_rp_half_round(state, 8);
-        Self::apply_inverse_round(state, 9);
-        Self::apply_rp_half_round(state, 10);
-        Self::apply_inverse_round(state, 11);
-        Self::apply_rp_half_round(state, 12);
-        Self::apply_inverse_round(state, 13);
-        Self::apply_rp_half_round(state, 14);
+    }
+
+    /// Rescue-XLIX round function.
+    #[inline(always)]
+    fn apply_rp_full_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        // apply first half of Rescue round
+        Self::apply_sbox(state);
+        Self::apply_mds(state);
+        Self::add_constants(state, &ARK1[round]);
+
+        // apply second half of Rescue round
+        Self::apply_inv_sbox(state);
+        Self::apply_mds(state);
+        Self::add_constants(state, &ARK2[round]);
     }
 
     #[inline(always)]
@@ -436,208 +304,10 @@ impl Rp64_256 {
         Self::add_constants(state, &ARK1[round]);
     }
 
-    #[inline(always)]
-    fn apply_inverse_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
-        //eprintln!("Round: {} *** Correct state {:?}",round, state);
-        Self::apply_inv_sbox_new(state);
-        //eprintln!("Round: {} *** Correct state inverted {:?}",round, state);
-        Self::apply_mds(state);
-        Self::add_constants(state, &ARK1[round]);
-    }
-
-
-    // RESCUE PERMUTATION: FFT
-    // --------------------------------------------------------------------------------------------
-
-    /// Applies Rescue-XLIX permutation to the provided state.
-    pub fn apply_permutation_freq(state: &mut [BaseElement; STATE_WIDTH]) {
-        // alternating inverse and half-rounds
-        Self::apply_rp_half_round_freq(state, 0);
-        Self::apply_inverse_round_freq(state, 1);
-        Self::apply_rp_half_round_freq(state, 2);
-        Self::apply_inverse_round_freq(state, 3);
-        Self::apply_rp_half_round_freq(state, 4);
-        Self::apply_inverse_round_freq(state, 5);
-        Self::apply_rp_half_round_freq(state, 6);
-        Self::apply_inverse_round_freq(state, 7);
-        Self::apply_rp_half_round_freq(state, 8);
-        Self::apply_inverse_round_freq(state, 9);
-        Self::apply_rp_half_round_freq(state, 10);
-        Self::apply_inverse_round_freq(state, 11);
-        Self::apply_rp_half_round_freq(state, 12);
-        Self::apply_inverse_round_freq(state, 13);
-        Self::apply_rp_half_round_freq(state, 14);
-    }
-
-    #[inline(always)]
-    fn apply_rp_half_round_freq(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
-        // apply first half of Rescue round
-        Self::apply_sbox(state);
-        Self::apply_mds_freq(state);
-        Self::add_constants(state, &ARK1[round]);
-    }
-
-    #[inline(always)]
-    fn apply_inverse_round_freq(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
-        //eprintln!("Round: {} *** Correct state {:?}",round, state);
-        Self::apply_inv_sbox_new(state);
-        //eprintln!("Round: {} *** Correct state inverted {:?}",round, state);
-        Self::apply_mds_freq(state);
-        Self::add_constants(state, &ARK1[round]);
-    }
-
-    // RESCUE PERMUTATION (batch inversion)
-    // --------------------------------------------------------------------------------------------
-    /// Applies a group of modified Rescue-XLIX permutation using batched inversion to the provided group of states.
-    pub fn apply_permutation_batch(state: &mut [[BaseElement; STATE_WIDTH]; BATCH_SIZE]) {
-        // alternating inverse and half-rounds
-        Self::apply_rp_half_round_batch(state, 0);
-        Self::apply_inverse_round_batch(state, 1);
-        Self::apply_rp_half_round_batch(state, 2);
-        Self::apply_inverse_round_batch(state, 3);
-        Self::apply_rp_half_round_batch(state, 4);
-        Self::apply_inverse_round_batch(state, 5);
-        Self::apply_rp_half_round_batch(state, 6);
-        Self::apply_inverse_round_batch(state, 7);
-        Self::apply_rp_half_round_batch(state, 8);
-        Self::apply_inverse_round_batch(state, 9);
-        Self::apply_rp_half_round_batch(state, 10);
-        Self::apply_inverse_round_batch(state, 11);
-        Self::apply_rp_half_round_batch(state, 12);
-        Self::apply_inverse_round_batch(state, 13);
-        Self::apply_rp_half_round_batch(state, 14);
-    }
-
-    #[inline(always)]
-    fn apply_rp_half_round_batch(
-        state: &mut [[BaseElement; STATE_WIDTH]; BATCH_SIZE],
-        round: usize,
-    ) {
-        // apply first half of Rescue round
-
-        use rayon::prelude::*;
-        state.iter_mut().for_each(|state| {
-            Self::apply_sbox(state);
-            Self::apply_mds(state);
-            Self::add_constants(state, &ARK1[round]);
-        });
-    }
-
-    #[inline(always)]
-    fn apply_inverse_round_batch(
-        state: &mut [[BaseElement; STATE_WIDTH]; BATCH_SIZE],
-        round: usize,
-    ) {
-        use rayon::prelude::*;
-        //eprintln!("Round: {} *** Original state {:?}", round, state);
-        let a = utils::flatten_slice_elements_mut(state);
-        //eprintln!("flattened state {:?}", a);
-        math::batch_inversion_mut(a);
-
-        //eprintln!("Round: {} *** Original state inverted {:?}", round, state);
-        //eprintln!("Round: {} *** flattened state inverted {:?}", round, a);
-        //let a: [[BaseElement];1]group_slice_elements(a);
-        //let state = group_slice_elements(a);
-        //let a: [BaseElement; STATE_WIDTH * BATCH_SIZE] = state.iter_mut().flat_map(|s| s).collect();
-        (state).iter_mut().for_each(|state| {
-            //Self::apply_inv_sbox_new(state);
-            Self::apply_mds(state);
-            Self::add_constants(state, &ARK1[round]);
-        });
-    }
-
-    // RESCUE PERMUTATION (Batch inversion + MDS frequency)
-    // --------------------------------------------------------------------------------------------
-    /// Applies a group of modified Rescue-XLIX permutation using batched inversion to the provided group of states.
-    pub fn apply_permutation_batch_freq(state: &mut [[BaseElement; STATE_WIDTH]; BATCH_SIZE]) {
-        // alternating inverse and half-rounds
-        Self::apply_rp_half_round_batch_freq(state, 0);
-        Self::apply_inverse_round_batch_freq(state, 1);
-        Self::apply_rp_half_round_batch_freq(state, 2);
-        Self::apply_inverse_round_batch_freq(state, 3);
-        Self::apply_rp_half_round_batch_freq(state, 4);
-        Self::apply_inverse_round_batch_freq(state, 5);
-        Self::apply_rp_half_round_batch_freq(state, 6);
-        Self::apply_inverse_round_batch_freq(state, 7);
-        Self::apply_rp_half_round_batch_freq(state, 8);
-        Self::apply_inverse_round_batch_freq(state, 9);
-        Self::apply_rp_half_round_batch_freq(state, 10);
-        Self::apply_inverse_round_batch_freq(state, 11);
-        Self::apply_rp_half_round_batch_freq(state, 12);
-        Self::apply_inverse_round_batch_freq(state, 13);
-        Self::apply_rp_half_round_batch_freq(state, 14);
-    }
-
-    #[inline(always)]
-    fn apply_rp_half_round_batch_freq(
-        state: &mut [[BaseElement; STATE_WIDTH]; BATCH_SIZE],
-        round: usize,
-    ) {
-        // apply first half of Rescue round
-
-        use rayon::prelude::*;
-        state.iter_mut().for_each(|state| {
-            Self::apply_sbox(state);
-            Self::apply_mds_freq(state);
-            Self::add_constants(state, &ARK1[round]);
-        });
-    }
-
-    #[inline(always)]
-    fn apply_inverse_round_batch_freq(
-        state: &mut [[BaseElement; STATE_WIDTH]; BATCH_SIZE],
-        round: usize,
-    ) {
-        use rayon::prelude::*;
-        //eprintln!("Round: {} *** Original state {:?}", round, state);
-        let a = utils::flatten_slice_elements_mut(state);
-        //eprintln!("flattened state {:?}", a);
-        math::batch_inversion_mut(a);
-
-        //eprintln!("Round: {} *** Original state inverted {:?}", round, state);
-        //eprintln!("Round: {} *** flattened state inverted {:?}", round, a);
-        //let a: [[BaseElement];1]group_slice_elements(a);
-        //let state = group_slice_elements(a);
-        //let a: [BaseElement; STATE_WIDTH * BATCH_SIZE] = state.iter_mut().flat_map(|s| s).collect();
-        (state).iter_mut().for_each(|state| {
-            //Self::apply_inv_sbox_new(state);
-            Self::apply_mds_freq(state);
-            Self::add_constants(state, &ARK1[round]);
-        });
-    }
-
-    /*
-    #[inline(always)]
-    fn apply_inverse_round_batch(
-        state: &mut [[BaseElement; STATE_WIDTH]; BATCH_SIZE],
-        round: usize,
-    ) {
-        use rayon::prelude::*;
-
-        //eprintln!("Round: {} *** Original state {:?}", round, state);
-        let a = utils::flatten_slice_elements(state);
-        //eprintln!("flattened state {:?}", a);
-        let mut a = math::batch_inversion(a);
-
-        //eprintln!("Round: {} *** Original state inverted {:?}", round, state);
-        //eprintln!("Round: {} *** flattened state inverted {:?}", round, a);
-        //let a: [[BaseElement];1]group_slice_elements(a);
-        //let state = group_slice_elements(a);
-        //let a: [BaseElement; STATE_WIDTH * BATCH_SIZE] = state.iter_mut().flat_map(|s| s).collect();
-        (a).par_chunks_mut(STATE_WIDTH).enumerate().for_each(|(i,st)| {
-            //Self::apply_inv_sbox_new(state);
-
-            Self::apply_mds(&mut state[i]);
-            Self::add_constants(&mut state[i], &ARK1[round]);
-            state[i].copy_from_slice(&st[0..STATE_WIDTH]);
-        });
-    }
-    */
     // HELPER FUNCTIONS
     // --------------------------------------------------------------------------------------------
 
     const MDS_MATRIX_EXPS: [u64; 12] = [0, 0, 1, 0, 3, 5, 1, 8, 12, 3, 16, 10];
-    //const MDS_MATRIX_COL: [u64; 12] = [1, 1024, 65536, 8, 4096, 256, 2, 32, 8, 1, 2, 1];
 
     #[inline(always)]
     fn apply_mds(state_: &mut [BaseElement; STATE_WIDTH]) {
@@ -709,7 +379,6 @@ impl Rp64_256 {
         x3 * x4
     }
 
-    /// Computes the (.)^(-1) S-box using batch inversion of size BATCH_WIDTH
     #[inline(always)]
     fn apply_inv_sbox_new(state: &mut [BaseElement; STATE_WIDTH]) {
         let input = *state;
@@ -732,6 +401,169 @@ impl Rp64_256 {
             }
         }
     }
+    
+    #[inline(always)]
+    fn apply_inv_sbox(state: &mut [BaseElement; STATE_WIDTH]) {
+        // compute base^10540996611094048183 using 72 multiplications per array element
+        // 10540996611094048183 = b1001001001001001001001001001000110110110110110110110110110110111
+
+        // compute base^10
+        let mut t1 = *state;
+        t1.iter_mut().for_each(|t| *t = t.square());
+
+        // compute base^100
+        let mut t2 = t1;
+        t2.iter_mut().for_each(|t| *t = t.square());
+
+        // compute base^100100
+        let t3 = exp_acc::<BaseElement, STATE_WIDTH, 3>(t2, t2);
+
+        // compute base^100100100100
+        let t4 = exp_acc::<BaseElement, STATE_WIDTH, 6>(t3, t3);
+
+        // compute base^100100100100100100100100
+        let t5 = exp_acc::<BaseElement, STATE_WIDTH, 12>(t4, t4);
+
+        // compute base^100100100100100100100100100100
+        let t6 = exp_acc::<BaseElement, STATE_WIDTH, 6>(t5, t3);
+
+        // compute base^1001001001001001001001001001000100100100100100100100100100100
+        let t7 = exp_acc::<BaseElement, STATE_WIDTH, 31>(t6, t6);
+
+        // compute base^1001001001001001001001001001000110110110110110110110110110110111
+        for (i, s) in state.iter_mut().enumerate() {
+            let a = (t7[i].square() * t6[i]).square().square();
+            let b = t1[i] * t2[i] * *s;
+            *s = a * b;
+        }
+    }
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    /// New MDS with FFT-based multiplication
+    /// 
+    /// //////////////////////////////////////////////////////////////////////////////////////////////
+    /// 
+    /// 
+    
+    /// Applies Rescue-XLIX permutation to the provided state.
+    pub fn apply_permutation_freq(state: &mut [BaseElement; STATE_WIDTH]) {
+        // Rescue prime: 2 full rounds, 5 half rounds as (F) (F) (FB) (F) (FB) (F) (F)
+        Self::apply_rp_half_round_freq(state, 0);
+        Self::apply_rp_half_round_freq(state, 2);
+        Self::apply_rp_full_round_freq(state, 1);
+        Self::apply_rp_half_round_freq(state, 4);
+        Self::apply_rp_full_round_freq(state, 3);
+        Self::apply_rp_half_round_freq(state, 5);
+        Self::apply_rp_half_round_freq(state, 6);
+    }
+
+    /// Rescue-XLIX round function.
+    #[inline(always)]
+    fn apply_rp_full_round_freq(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        // apply first half of Rescue round
+        Self::apply_sbox(state);
+        Self::apply_mds_freq(state);
+        Self::add_constants(state, &ARK1[round]);
+
+        // apply second half of Rescue round
+        Self::apply_inv_sbox(state);
+        Self::apply_mds_freq(state);
+        Self::add_constants(state, &ARK2[round]);
+    }
+
+    #[inline(always)]
+    fn apply_rp_half_round_freq(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        // apply first half of Rescue round
+        Self::apply_sbox(state);
+        Self::apply_mds_freq(state);
+        Self::add_constants(state, &ARK1[round]);
+    }
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    /// Original MDS with FFT-based multiplication
+    /// 
+    /// //////////////////////////////////////////////////////////////////////////////////////////////
+    /// 
+    /// 
+    
+    /// Applies Rescue-XLIX permutation to the provided state.
+    pub fn apply_permutation_freq_original(state: &mut [BaseElement; STATE_WIDTH]) {
+        // Rescue prime: 2 full rounds, 5 half rounds as (F) (F) (FB) (F) (FB) (F) (F)
+        Self::apply_rp_half_round_freq_original(state, 0);
+        Self::apply_rp_half_round_freq_original(state, 2);
+        Self::apply_rp_full_round_freq_original(state, 1);
+        Self::apply_rp_half_round_freq_original(state, 4);
+        Self::apply_rp_full_round_freq_original(state, 3);
+        Self::apply_rp_half_round_freq_original(state, 5);
+        Self::apply_rp_half_round_freq_original(state, 6);
+    }
+
+    /// Rescue-XLIX round function.
+    #[inline(always)]
+    fn apply_rp_full_round_freq_original(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        // apply first half of Rescue round
+        Self::apply_sbox(state);
+        Self::apply_mds_freq_original(state);
+        Self::add_constants(state, &ARK1[round]);
+
+        // apply second half of Rescue round
+        Self::apply_inv_sbox(state);
+        Self::apply_mds_freq_original(state);
+        Self::add_constants(state, &ARK2[round]);
+    }
+
+    #[inline(always)]
+    fn apply_rp_half_round_freq_original(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        // apply first half of Rescue round
+        Self::apply_sbox(state);
+        Self::apply_mds_freq_original(state);
+        Self::add_constants(state, &ARK1[round]);
+    }
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    /// New MDS with FFT-based multiplication inlined
+    /// 
+    /// //////////////////////////////////////////////////////////////////////////////////////////////
+    /// 
+    /// 
+    
+    /// Applies Rescue-XLIX permutation to the provided state.
+    pub fn apply_permutation_freq_light(state: &mut [BaseElement; STATE_WIDTH]) {
+        // Rescue prime: 2 full rounds, 5 half rounds as (F) (F) (FB) (F) (FB) (F) (F)
+        Self::apply_rp_half_round_freq_light(state, 0);
+        Self::apply_rp_half_round_freq_light(state, 2);
+        Self::apply_rp_full_round_freq_light(state, 1);
+        Self::apply_rp_half_round_freq_light(state, 4);
+        Self::apply_rp_full_round_freq_light(state, 3);
+        Self::apply_rp_half_round_freq_light(state, 5);
+        Self::apply_rp_half_round_freq_light(state, 6);
+    }
+
+    /// Rescue-XLIX round function.
+    #[inline(always)]
+    fn apply_rp_full_round_freq_light(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        // apply first half of Rescue round
+        Self::apply_sbox(state);
+        Self::apply_mds_freq_light(state);
+        Self::add_constants(state, &ARK1[round]);
+
+        // apply second half of Rescue round
+        Self::apply_inv_sbox(state);
+        Self::apply_mds_freq_light(state);
+        Self::add_constants(state, &ARK2[round]);
+    }
+
+    #[inline(always)]
+    fn apply_rp_half_round_freq_light(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        // apply first half of Rescue round
+        Self::apply_sbox(state);
+        Self::apply_mds_freq_light(state);
+        Self::add_constants(state, &ARK1[round]);
+    }
+
+
+
+
+
 
     /* TODO: Elaborate more.
     We use split 3 x 4 FFT transform in order to transform our vectors into the frequency domain.
@@ -768,17 +600,17 @@ impl Rp64_256 {
 
         return [x0, x1, x2, x3];
     }
-    /*
-        #[inline(always)]
-        fn fft4x3(x: [u64; 12]) -> ([i64; 3], [(i64, i64); 3], [i64; 3]) {
-            let [x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11] = x;
-            let (y0, y1, y2) = Self::fft4_real([x0, x3, x6, x9]);
-            let (y4, y5, y6) = Self::fft4_real([x1, x4, x7, x10]);
-            let (y8, y9, y10) = Self::fft4_real([x2, x5, x8, x11]);
+/*
+    #[inline(always)]
+    fn fft4x3(x: [u64; 12]) -> ([i64; 3], [(i64, i64); 3], [i64; 3]) {
+        let [x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11] = x;
+        let (y0, y1, y2) = Self::fft4_real([x0, x3, x6, x9]);
+        let (y4, y5, y6) = Self::fft4_real([x1, x4, x7, x10]);
+        let (y8, y9, y10) = Self::fft4_real([x2, x5, x8, x11]);
 
-            return ([y0, y4, y8], [y1, y5, y9], [y2, y6, y10]);
-        }
-    */
+        return ([y0, y4, y8], [y1, y5, y9], [y2, y6, y10]);
+    }
+*/
     #[inline(always)]
     fn block1(x: [i64; 3], y: [i64; 3]) -> [i64; 3] {
         let [x0, x1, x2] = x;
@@ -827,18 +659,6 @@ impl Rp64_256 {
 
         return [z0, z1, z2];
     }
-
-    /*
-    // The 3*FFT4 representation of the MDS matrix
-    const MDS_FREQ_BLOCK_ONE: [i64; 3] = [12, 5154, 65801];
-    const MDS_FREQ_BLOCK_TWO: [(i64, i64); 3] = [(-1, -7), (992, -4094), (65528, -255)];
-    const MDS_FREQ_BLOCK_THREE: [i64; 3] = [-6, -3042, 65287];
-    */
-    // The 3FFT4 representation of the New MDS matrix
-    const MDS_FREQ_BLOCK_ONE: [i64; 3] = [64, 128, 64];
-    const MDS_FREQ_BLOCK_TWO: [(i64, i64); 3] = [(4, -2), (-8, 2), (32, 2)];
-    const MDS_FREQ_BLOCK_THREE: [i64; 3] = [-4, -32, 8];
-
     #[inline(always)]
     fn block3(x: [i64; 3], y: [i64; 3]) -> [i64; 3] {
         let [x0, x1, x2] = x;
@@ -850,6 +670,58 @@ impl Rp64_256 {
         return [z0, z1, z2];
     }
 
+    // The 3*FFT4 representation of the MDS matrix
+    const MDS_FREQ_BLOCK_ONE_ORIGINAL: [i64; 3] = [12, 5154, 65801];
+    const MDS_FREQ_BLOCK_TWO_ORIGINAL: [(i64, i64); 3] = [(-1, -7), (992, -4094), (65528, -255)];
+    const MDS_FREQ_BLOCK_THREE_ORIGINAL: [i64; 3] = [-6, -3042, 65287];
+
+    const MDS_FREQ_BLOCK_ONE: [i64; 3] = [64, 128, 64];
+    const MDS_FREQ_BLOCK_TWO: [(i64, i64); 3] = [(4, -2), (-8, 2), (32, 2)];
+    const MDS_FREQ_BLOCK_THREE: [i64; 3] = [-4, -32, 8];
+
+    #[inline(always)]
+    fn mds_multiply_freq_original(state: [u64; 12]) -> [u64; 12] {
+        let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = state;
+
+        let (u0, u1, u2) = Self::fft4_real([s0, s3, s6, s9]);
+        let (u4, u5, u6) = Self::fft4_real([s1, s4, s7, s10]);
+        let (u8, u9, u10) = Self::fft4_real([s2, s5, s8, s11]);
+
+        let [v0, v4, v8] = Self::block1([u0, u4, u8], Self::MDS_FREQ_BLOCK_ONE_ORIGINAL);
+        let [v1, v5, v9] = Self::block2([u1, u5, u9], Self::MDS_FREQ_BLOCK_TWO_ORIGINAL);
+        let [v2, v6, v10] = Self::block3([u2, u6, u10], Self::MDS_FREQ_BLOCK_THREE_ORIGINAL);
+
+        let [s0, s3, s6, s9] = Self::ifft4_real((v0, v1, v2));
+        let [s1, s4, s7, s10] = Self::ifft4_real((v4, v5, v6));
+        let [s2, s5, s8, s11] = Self::ifft4_real((v8, v9, v10));
+
+        return [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11];
+    }
+
+    #[inline(always)]
+    fn apply_mds_freq_original(state_: &mut [BaseElement; STATE_WIDTH]) {
+        let mut result = [BaseElement::ZERO; STATE_WIDTH];
+
+        // Using the linearity of the operations we can split the state into a low||high decomposition
+        // and operate on each with no overflow and then combine/reduce the result to a field element.
+        let mut state_l = [0u64; STATE_WIDTH];
+        let mut state_h = [0u64; STATE_WIDTH];
+
+        for r in 0..STATE_WIDTH {
+            let s = state_[r].inner();
+            state_h[r] = s >> 32;
+            state_l[r] = (s as u32) as u64;
+        }
+
+        let state_h = Self::mds_multiply_freq_original(state_h);
+        let state_l = Self::mds_multiply_freq_original(state_l);
+
+        for r in 0..STATE_WIDTH {
+            let s = state_l[r] as u128 + ((state_h[r] as u128) << 32);
+            result[r] = s.into();
+        }
+        *state_ = result;
+    }
     #[inline(always)]
     fn mds_multiply_freq(state: [u64; 12]) -> [u64; 12] {
         let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = state;
@@ -891,9 +763,346 @@ impl Rp64_256 {
             let s = state_l[r] as u128 + ((state_h[r] as u128) << 32);
             result[r] = s.into();
         }
+        //result[0] += state_[0] * BaseElement::from(8u64);
         *state_ = result;
     }
+
+    #[inline(always)]
+    fn mds_multiply_freq_light(state: &mut [u64; 12]) -> [u64; 12] {
+        let mut fft_s = [0i64; 12];
+        let diag_entry = state[0];
+        for i in 0..3 {
+            let s0 = state[i + 0] as i64;
+            let s3 = state[i + 3] as i64;
+            let s6 = state[i + 6] as i64;
+            let s9 = state[i + 9] as i64;
+            let z0 = s0 + s6;
+            let z2 = s0 - s6;
+            let z1 = s3 + s9;
+            let z3 = s9 - s3;
+
+            fft_s[i + 0] = z0 + z1;
+            fft_s[i + 3] = z0 - z1;
+            fft_s[i + 6] = z2;
+            fft_s[i + 9] = z3;
+        }
+
+        let x0r = fft_s[6];
+        let x0i = fft_s[9];
+        let x1r = fft_s[7];
+        let x1i = fft_s[10];
+        let x2r = fft_s[8];
+        let x2i = fft_s[11];
+
+        //let (z0r, z0i) = (x0i + 2*x0r + 16*x1i + x1r - 4*x2i + x2r, 2*x0i - x0r + x1i - 16*x1r + x2i + 4*x2r);
+        //let (z1r, z1i) = (-x0i - 4*x0r + x1i + 2*x1r + 16*x2i + x2r, -4*x0i + x0r + 2*x1i - x1r + x2i - 16*x2r);
+        //let (z2r, z2i) = (-x0i + 16*x0r - x1i - 4*x1r + x2i + 2*x2r, 16*x0i + x0r - 4*x1i + x1r + 2*x2i - x2r);
+
+        let (z0r, z0i) = (
+            x0i + (x0r << 1) + (x1i << 4) + x1r - (x2i << 2) + x2r,
+            (x0i << 1) - x0r + x1i - (x1r << 4) + x2i + (x2r << 2),
+        );
+        let (z1r, z1i) = (
+            -x0i - (x0r << 2) + x1i + (x1r << 1) + (x2i << 4) + x2r,
+            (x0i << 2) + x0r + (x1i << 1) - x1r + x2i - (x2r << 4),
+        );
+        let (z2r, z2i) = (
+            -x0i + (x0r << 4) - x1i - (x1r << 2) + x2i + (x2r << 1),
+            (x0i << 4) + x0r - (x1i << 2) + x1r + (x2i << 1) - x2r,
+        );
+
+        fft_s[6] = z0r;
+        fft_s[7] = z1r;
+        fft_s[8] = z2r;
+        fft_s[9] = z0i;
+        fft_s[10] = z1i;
+        fft_s[11] = z2i;
+
+        // Block1
+
+        let x0 = fft_s[0];
+        let x1 = fft_s[1];
+        let x2 = fft_s[2];
+
+        let tmp = (x0 + x1 + x2) << 4;
+        let z0 = tmp + (x1 << 4);
+        let z1 = tmp + (x2 << 4);
+        let z2 = tmp + (x0 << 4);
+        fft_s[0] = z1;
+        fft_s[1] = z2;
+        fft_s[2] = z0;
+
+        // Block3
+        let x0 = fft_s[3];
+        let x1 = fft_s[4];
+        let x2 = fft_s[5];
+
+        let z0 = -x0 - (x1 << 1) + (x2 << 3);
+        let z1 = -(x0 << 3) - x1 - (x2 << 1);
+        let z2 = (x0 << 1) - (x1 << 3) - x2;
+
+        fft_s[3] = z0;
+        fft_s[4] = z1;
+        fft_s[5] = z2;
+
+        for i in 0..3 {
+            let y0 = fft_s[0 + i];
+            let y1 = fft_s[3 + i];
+            let y2 = fft_s[6 + i];
+            let y3 = fft_s[9 + i];
+
+            let z0 = (y0 + y1);
+            let z1 = (y0 - y1);
+            let z2 = y2;
+            let z3 = -y3;
+
+            let x0 = (z0 + z2);
+            let x2 = (z0 - z2);
+            let x1 = (z1 + z3);
+            let x3 = (z1 - z3);
+
+            state[0 + i] = x0 as u64;
+            state[3 + i] = x1 as u64;
+            state[6 + i] = x2 as u64;
+            state[9 + i] = x3 as u64;
+        }
+        //state[0] += diag_entry * 8;
+        return *state;
+    }
+
+    #[inline(always)]
+    fn apply_mds_freq_light(state_: &mut [BaseElement; STATE_WIDTH]) {
+        let mut result = [BaseElement::ZERO; STATE_WIDTH];
+
+        // Using the linearity of the operations we can split the state into a low||high decomposition
+        // and operate on each with no overflow and then combine/reduce the result to a field element.
+        let mut state_l = [0u64; STATE_WIDTH];
+        let mut state_h = [0u64; STATE_WIDTH];
+
+        for r in 0..STATE_WIDTH {
+            let s = state_[r].inner();
+            state_h[r] = s >> 32;
+            state_l[r] = (s as u32) as u64;
+        }
+
+        let state_h = Self::mds_multiply_freq_light(&mut state_h);
+        let state_l = Self::mds_multiply_freq_light(&mut state_l);
+
+        for r in 0..STATE_WIDTH {
+            let s = state_l[r] as u128 + ((state_h[r] as u128) << 32);
+            result[r] = s.into();
+        }
+        *state_ = result;
+    }
+
+        /*
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    /// New MDS with FFT-based multiplication inlined + SIMD
+    /// 
+    /// //////////////////////////////////////////////////////////////////////////////////////////////
+    /// 
+    /// 
+    
+    /// Applies Rescue-XLIX permutation to the provided state.
+    pub fn apply_permutation_freq_light_simd(state: &mut [BaseElement; STATE_WIDTH]) {
+        // Rescue prime: 2 full rounds, 5 half rounds as (F) (F) (FB) (F) (FB) (F) (F)
+        Self::apply_rp_half_round_freq_light_simd(state, 0);
+        Self::apply_rp_half_round_freq_light_simd(state, 2);
+        Self::apply_rp_full_round_freq_light_simd(state, 1);
+        Self::apply_rp_half_round_freq_light_simd(state, 4);
+        Self::apply_rp_full_round_freq_light_simd(state, 3);
+        Self::apply_rp_half_round_freq_light_simd(state, 5);
+        Self::apply_rp_half_round_freq_light_simd(state, 6);
+    }
+
+
+
+    /// Rescue-XLIX round function.
+    #[inline(always)]
+    fn apply_rp_full_round_freq_light_simd(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        // apply first half of Rescue round
+        Self::apply_sbox(state);
+        Self::apply_mds_freq_light_simd(state);
+        Self::add_constants(state, &ARK1[round]);
+
+        // apply second half of Rescue round
+        Self::apply_inv_sbox(state);
+        Self::apply_mds_freq_light_simd(state);
+        Self::add_constants(state, &ARK2[round]);
+    }
+
+    #[inline(always)]
+    fn apply_rp_half_round_freq_light_simd(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        // apply first half of Rescue round
+        Self::apply_sbox(state);
+        Self::apply_mds_freq_light_simd(state);
+        Self::add_constants(state, &ARK1[round]);
+    }
+    */
+
+
+    /*
+
+    #[inline(always)]
+    fn apply_mds_freq_light_simd(state_: &mut [BaseElement; STATE_WIDTH]) {
+        let mut result = [BaseElement::ZERO; STATE_WIDTH];
+
+        let mut state_int = [0u64; STATE_WIDTH];
+
+        for r in 0..STATE_WIDTH {
+            let s = state_[r].inner();
+            state_int[r] = s;
+        }
+        let state = Self::mds_multiply_freq_light_simd(&mut state_int);
+
+        for r in 0..STATE_WIDTH {
+            result[r] = state[r].into();
+        }
+        *state_ = result;
+    }
+
+    #[inline(always)]
+    fn mds_multiply_freq_light_simd(state: &mut [u64; 12]) -> [u128; 12] {
+        use core_simd::*;
+        let mut fft_s = [u64x2::splat(0); 12];
+        let mut state_ = [0u128; 12];
+        //let mut fft_s = [0i64; 12];
+        let diag_entry = state[0] as u128;
+        let vconst0 = u64x2::from_array([0u64, 0u64]);
+        let vconst2 = u64x2::from_array([2u64, 2u64]);
+        let vconst4 = u64x2::from_array([4u64, 4u64]);
+        let vconst8 = u64x2::from_array([8u64, 8u64]);
+        let vconst16 = u64x2::from_array([16u64, 16u64]);
+
+        //let s0 = u32x4::from(state[0]);
+        //let g = fft_s[0] - s0;
+        for i in 0..3 {
+            let s0 = u64x2::from_array([state[i + 0] >> 32 as u64, (state[i + 0] as u32) as u64]);
+            let s3 = u64x2::from_array([state[i + 3] >> 32 as u64, (state[i + 3] as u32) as u64]);
+            let s6 = u64x2::from_array([state[i + 6] >> 32 as u64, (state[i + 6] as u32) as u64]);
+            let s9 = u64x2::from_array([state[i + 9] >> 32 as u64, (state[i + 9] as u32) as u64]);
+            let z0 = s0 + s6;
+            let z2 = s0 - s6;
+            let z1 = s3 + s9;
+            let z3 = s9 - s3; // sign flipp
+
+            fft_s[i + 0] = z0 + z1;
+            fft_s[i + 3] = z0 - z1;
+            fft_s[i + 6] = z2;
+            fft_s[i + 9] = z3;
+        }
+
+        let x0r = fft_s[6];
+        let x0i = fft_s[9];
+        let x1r = fft_s[7];
+        let x1i = fft_s[10];
+        let x2r = fft_s[8];
+        let x2i = fft_s[11];
+
+        let (z0r, z0i) = (
+            x0i + vconst2 * x0r + vconst16 * x1i + x1r - vconst4 * x2i + x2r,
+            vconst2 * x0i - x0r + x1i - vconst16 * x1r + x2i + vconst4 * x2r,
+        );
+        let (z1r, z1i) = (
+            x1i - x0i + vconst2 * x1r - vconst4 * x0r + vconst16 * x2i + x2r,
+            x0r - vconst4 * x0i + vconst2 * x1i - x1r + x2i - vconst16 * x2r,
+        );
+        let (z2r, z2i) = (
+            vconst16 * x0r - x0i - x1i - vconst4 * x1r + x2i + vconst2 * x2r,
+            vconst16 * x0i + x0r - vconst4 * x1i + x1r + vconst2 * x2i - x2r,
+        );
+        /*
+            let (z0r, z0i) = (
+                x0i + (x0r << 1) + (x1i << 4) + x1r - (x2i << 2) + x2r,
+                (x0i << 1) - x0r + x1i - (x1r << 4) + x2i + (x2r << 2),
+            );
+            let (z1r, z1i) = (
+                -x0i - (x0r << 2) + x1i + (x1r << 1) + (x2i << 4) + x2r,
+                (x0i << 2) + x0r + (x1i << 1) - x1r + x2i - (x2r << 4),
+            );
+            let (z2r, z2i) = (
+                -x0i + (x0r << 4) - x1i - (x1r << 2) + x2i + (x2r << 1),
+                (x0i << 4) + x0r - (x1i << 2) + x1r + (x2i << 1) - x2r,
+            );
+        */
+        fft_s[6] = z0r;
+        fft_s[7] = z1r;
+        fft_s[8] = z2r;
+        fft_s[9] = z0i;
+        fft_s[10] = z1i;
+        fft_s[11] = z2i;
+
+        // Block1
+
+        let x0 = fft_s[0];
+        let x1 = fft_s[1];
+        let x2 = fft_s[2];
+
+        let tmp = (x0 + x1 + x2) * vconst16;
+        let z0 = tmp + (x1 * vconst16);
+        let z1 = tmp + (x2 * vconst16);
+        let z2 = tmp + (x0 * vconst16);
+        fft_s[0] = z1;
+        fft_s[1] = z2;
+        fft_s[2] = z0;
+
+        // Block3
+        let x0 = fft_s[3];
+        let x1 = fft_s[4];
+        let x2 = fft_s[5];
+
+        let z0 = (x2 * vconst8) - x0 - (x1 * vconst2);
+        let z1 = vconst0 - (x0 * vconst8) - x1 - (x2 * vconst2);
+        let z2 = (x0 * vconst2) - (x1 * vconst8) - x2;
+
+        fft_s[3] = z0;
+        fft_s[4] = z1;
+        fft_s[5] = z2;
+
+        for i in 0..3 {
+            let y0 = fft_s[0 + i];
+            let y1 = fft_s[3 + i];
+            let y2 = fft_s[6 + i];
+            let y3 = fft_s[9 + i];
+
+            let z0 = (y0 + y1);
+            let z1 = (y0 - y1);
+            let z2 = y2;
+            let z3 = vconst0 - y3;
+
+            let x0 = (z0 + z2);
+            let x2 = (z0 - z2);
+            let x1 = (z1 + z3);
+            let x3 = (z1 - z3);
+
+            //let a0: u128 = u32x4::from(x0);
+            //let a1: u128 =  u32x4::into(x1);x1;
+            //let a2: u128 =  u32x4::into(x2);x2;
+            //let a3: u128 =  u32x4::into(x3);x3;
+            //simd;
+            let tmp = u64x2::to_array(x0);
+            let res = ((tmp[0] as u128) << 32) + (tmp[1] as u128);
+            state_[0 + i] = res;
+
+            let tmp = u64x2::to_array(x1);
+            let res = ((tmp[0] as u128) << 32) + (tmp[1] as u128);
+            state_[3 + i] = res;
+
+            let tmp = u64x2::to_array(x2);
+            let res = ((tmp[0] as u128) << 32) + (tmp[1] as u128);
+            state_[6 + i] = res;
+
+            let tmp = u64x2::to_array(x3);
+            let res = ((tmp[0] as u128) << 32) + (tmp[1] as u128);
+            state_[9 + i] = res;
+        }
+        //state_[0] += (diag_entry  * 8);
+        return state_;
+    }
+    */
 }
+
+
 
 // MDS
 // ================================================================================================
@@ -1351,118 +1560,6 @@ const ARK1: [[BaseElement; STATE_WIDTH]; NUM_ROUNDS] = [
         BaseElement::new(8787650312632423701),
         BaseElement::new(7431110942091427450),
     ],
-    [
-        BaseElement::new(13917550007135091859),
-        BaseElement::new(16002276252647722320),
-        BaseElement::new(4729924423368391595),
-        BaseElement::new(10059693067827680263),
-        BaseElement::new(9804807372516189948),
-        BaseElement::new(15666751576116384237),
-        BaseElement::new(10150587679474953119),
-        BaseElement::new(13627942357577414247),
-        BaseElement::new(2323786301545403792),
-        BaseElement::new(615170742765998613),
-        BaseElement::new(8870655212817778103),
-        BaseElement::new(10534167191270683080),
-    ],
-    [
-        BaseElement::new(14572151513649018290),
-        BaseElement::new(9445470642301863087),
-        BaseElement::new(6565801926598404534),
-        BaseElement::new(12667566692985038975),
-        BaseElement::new(7193782419267459720),
-        BaseElement::new(11874811971940314298),
-        BaseElement::new(17906868010477466257),
-        BaseElement::new(1237247437760523561),
-        BaseElement::new(6829882458376718831),
-        BaseElement::new(2140011966759485221),
-        BaseElement::new(1624379354686052121),
-        BaseElement::new(50954653459374206),
-    ],
-    [
-        BaseElement::new(16288075653722020941),
-        BaseElement::new(13294924199301620952),
-        BaseElement::new(13370596140726871456),
-        BaseElement::new(611533288599636281),
-        BaseElement::new(12865221627554828747),
-        BaseElement::new(12269498015480242943),
-        BaseElement::new(8230863118714645896),
-        BaseElement::new(13466591048726906480),
-        BaseElement::new(10176988631229240256),
-        BaseElement::new(14951460136371189405),
-        BaseElement::new(5882405912332577353),
-        BaseElement::new(18125144098115032453),
-    ],
-    [
-        BaseElement::new(6076976409066920174),
-        BaseElement::new(7466617867456719866),
-        BaseElement::new(5509452692963105675),
-        BaseElement::new(14692460717212261752),
-        BaseElement::new(12980373618703329746),
-        BaseElement::new(1361187191725412610),
-        BaseElement::new(6093955025012408881),
-        BaseElement::new(5110883082899748359),
-        BaseElement::new(8578179704817414083),
-        BaseElement::new(9311749071195681469),
-        BaseElement::new(16965242536774914613),
-        BaseElement::new(5747454353875601040),
-    ],
-    [
-        BaseElement::new(13684212076160345083),
-        BaseElement::new(19445754899749561),
-        BaseElement::new(16618768069125744845),
-        BaseElement::new(278225951958825090),
-        BaseElement::new(4997246680116830377),
-        BaseElement::new(782614868534172852),
-        BaseElement::new(16423767594935000044),
-        BaseElement::new(9990984633405879434),
-        BaseElement::new(16757120847103156641),
-        BaseElement::new(2103861168279461168),
-        BaseElement::new(16018697163142305052),
-        BaseElement::new(6479823382130993799),
-    ],
-    [
-        BaseElement::new(13957683526597936825),
-        BaseElement::new(9702819874074407511),
-        BaseElement::new(18357323897135139931),
-        BaseElement::new(3029452444431245019),
-        BaseElement::new(1809322684009991117),
-        BaseElement::new(12459356450895788575),
-        BaseElement::new(11985094908667810946),
-        BaseElement::new(12868806590346066108),
-        BaseElement::new(7872185587893926881),
-        BaseElement::new(10694372443883124306),
-        BaseElement::new(8644995046789277522),
-        BaseElement::new(1422920069067375692),
-    ],
-    [
-        BaseElement::new(17619517835351328008),
-        BaseElement::new(6173683530634627901),
-        BaseElement::new(15061027706054897896),
-        BaseElement::new(4503753322633415655),
-        BaseElement::new(11538516425871008333),
-        BaseElement::new(12777459872202073891),
-        BaseElement::new(17842814708228807409),
-        BaseElement::new(13441695826912633916),
-        BaseElement::new(5950710620243434509),
-        BaseElement::new(17040450522225825296),
-        BaseElement::new(8787650312632423701),
-        BaseElement::new(7431110942091427450),
-    ],
-    [
-        BaseElement::new(13957683526597936825),
-        BaseElement::new(9702819874074407511),
-        BaseElement::new(18357323897135139931),
-        BaseElement::new(3029452444431245019),
-        BaseElement::new(1809322684009991117),
-        BaseElement::new(12459356450895788575),
-        BaseElement::new(11985094908667810946),
-        BaseElement::new(12868806590346066108),
-        BaseElement::new(7872185587893926881),
-        BaseElement::new(10694372443883124306),
-        BaseElement::new(8644995046789277522),
-        BaseElement::new(1422920069067375692),
-    ],
 ];
 
 const ARK2: [[BaseElement; STATE_WIDTH]; NUM_ROUNDS] = [
@@ -1563,117 +1660,5 @@ const ARK2: [[BaseElement; STATE_WIDTH]; NUM_ROUNDS] = [
         BaseElement::new(12717309295554119359),
         BaseElement::new(4130723396860574906),
         BaseElement::new(7706153020203677238),
-    ],
-    [
-        BaseElement::new(7989257206380839449),
-        BaseElement::new(8639509123020237648),
-        BaseElement::new(6488561830509603695),
-        BaseElement::new(5519169995467998761),
-        BaseElement::new(2972173318556248829),
-        BaseElement::new(14899875358187389787),
-        BaseElement::new(14160104549881494022),
-        BaseElement::new(5969738169680657501),
-        BaseElement::new(5116050734813646528),
-        BaseElement::new(12120002089437618419),
-        BaseElement::new(17404470791907152876),
-        BaseElement::new(2718166276419445724),
-    ],
-    [
-        BaseElement::new(2485377440770793394),
-        BaseElement::new(14358936485713564605),
-        BaseElement::new(3327012975585973824),
-        BaseElement::new(6001912612374303716),
-        BaseElement::new(17419159457659073951),
-        BaseElement::new(11810720562576658327),
-        BaseElement::new(14802512641816370470),
-        BaseElement::new(751963320628219432),
-        BaseElement::new(9410455736958787393),
-        BaseElement::new(16405548341306967018),
-        BaseElement::new(6867376949398252373),
-        BaseElement::new(13982182448213113532),
-    ],
-    [
-        BaseElement::new(10436926105997283389),
-        BaseElement::new(13237521312283579132),
-        BaseElement::new(668335841375552722),
-        BaseElement::new(2385521647573044240),
-        BaseElement::new(3874694023045931809),
-        BaseElement::new(12952434030222726182),
-        BaseElement::new(1972984540857058687),
-        BaseElement::new(14000313505684510403),
-        BaseElement::new(976377933822676506),
-        BaseElement::new(8407002393718726702),
-        BaseElement::new(338785660775650958),
-        BaseElement::new(4208211193539481671),
-    ],
-    [
-        BaseElement::new(2284392243703840734),
-        BaseElement::new(4500504737691218932),
-        BaseElement::new(3976085877224857941),
-        BaseElement::new(2603294837319327956),
-        BaseElement::new(5760259105023371034),
-        BaseElement::new(2911579958858769248),
-        BaseElement::new(18415938932239013434),
-        BaseElement::new(7063156700464743997),
-        BaseElement::new(16626114991069403630),
-        BaseElement::new(163485390956217960),
-        BaseElement::new(11596043559919659130),
-        BaseElement::new(2976841507452846995),
-    ],
-    [
-        BaseElement::new(15090073748392700862),
-        BaseElement::new(3496786927732034743),
-        BaseElement::new(8646735362535504000),
-        BaseElement::new(2460088694130347125),
-        BaseElement::new(3944675034557577794),
-        BaseElement::new(14781700518249159275),
-        BaseElement::new(2857749437648203959),
-        BaseElement::new(8505429584078195973),
-        BaseElement::new(18008150643764164736),
-        BaseElement::new(720176627102578275),
-        BaseElement::new(7038653538629322181),
-        BaseElement::new(8849746187975356582),
-    ],
-    [
-        BaseElement::new(17427790390280348710),
-        BaseElement::new(1159544160012040055),
-        BaseElement::new(17946663256456930598),
-        BaseElement::new(6338793524502945410),
-        BaseElement::new(17715539080731926288),
-        BaseElement::new(4208940652334891422),
-        BaseElement::new(12386490721239135719),
-        BaseElement::new(10010817080957769535),
-        BaseElement::new(5566101162185411405),
-        BaseElement::new(12520146553271266365),
-        BaseElement::new(4972547404153988943),
-        BaseElement::new(5597076522138709717),
-    ],
-    [
-        BaseElement::new(18338863478027005376),
-        BaseElement::new(115128380230345639),
-        BaseElement::new(4427489889653730058),
-        BaseElement::new(10890727269603281956),
-        BaseElement::new(7094492770210294530),
-        BaseElement::new(7345573238864544283),
-        BaseElement::new(6834103517673002336),
-        BaseElement::new(14002814950696095900),
-        BaseElement::new(15939230865809555943),
-        BaseElement::new(12717309295554119359),
-        BaseElement::new(4130723396860574906),
-        BaseElement::new(7706153020203677238),
-    ],
-    [
-        BaseElement::new(10436926105997283389),
-        BaseElement::new(13237521312283579132),
-        BaseElement::new(668335841375552722),
-        BaseElement::new(2385521647573044240),
-        BaseElement::new(3874694023045931809),
-        BaseElement::new(12952434030222726182),
-        BaseElement::new(1972984540857058687),
-        BaseElement::new(14000313505684510403),
-        BaseElement::new(976377933822676506),
-        BaseElement::new(8407002393718726702),
-        BaseElement::new(338785660775650958),
-        BaseElement::new(4208211193539481671),
     ],
 ];

@@ -2,7 +2,7 @@
 //
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
-use core_simd::*;
+//use core_simd::*;
 
 use super::{exp_acc, Digest, ElementHasher, Hasher};
 use core::convert::TryInto;
@@ -543,37 +543,7 @@ impl Rp64_256 {
         Self::apply_mds_freq_light(state);
         Self::add_constants(state, &ARK2[round]);
     }
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    /// Using the light-weight-in-frequency-domain matrix with inlined operations and SIMD
-    ///
-    /// //////////////////////////////////////////////////////////////////////////////////////////////
-    ///
-    ///
-    
-    /// Applies Rescue-XLIX permutation to the provided state.
-    pub fn apply_permutation_freq_light_simd(state: &mut [BaseElement; STATE_WIDTH]) {
-        Self::apply_rp_full_round_freq_light_simd(state, 0);
-        Self::apply_rp_full_round_freq_light_simd(state, 1);
-        Self::apply_rp_full_round_freq_light_simd(state, 2);
-        Self::apply_rp_full_round_freq_light_simd(state, 3);
-        Self::apply_rp_full_round_freq_light_simd(state, 4);
-        Self::apply_rp_full_round_freq_light_simd(state, 5);
-        Self::apply_rp_full_round_freq_light_simd(state, 6);
-    }
-
-    /// Rescue-XLIX round function.
-    #[inline(always)]
-    fn apply_rp_full_round_freq_light_simd(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
-        // apply first half of Rescue round
-        Self::apply_sbox(state);
-        Self::apply_mds_freq_light_simd(state);
-        Self::add_constants(state, &ARK1[round]);
-
-        // apply second half of Rescue round
-        Self::apply_inv_sbox(state);
-        Self::apply_mds_freq_light_simd(state);
-        Self::add_constants(state, &ARK2[round]);
-    }
+   
     //////////////////////////////////////////////////////////////////////////////////////////////
     /// Helper functions for FFT-based multiplication
     /// 
@@ -910,6 +880,39 @@ impl Rp64_256 {
         *state_ = result;
     }
 
+    /*
+     //////////////////////////////////////////////////////////////////////////////////////////////////
+    /// Using the light-weight-in-frequency-domain matrix with inlined operations and SIMD
+    ///
+    /// //////////////////////////////////////////////////////////////////////////////////////////////
+    ///
+    ///
+    
+    /// Applies Rescue-XLIX permutation to the provided state.
+    pub fn apply_permutation_freq_light_simd(state: &mut [BaseElement; STATE_WIDTH]) {
+        Self::apply_rp_full_round_freq_light_simd(state, 0);
+        Self::apply_rp_full_round_freq_light_simd(state, 1);
+        Self::apply_rp_full_round_freq_light_simd(state, 2);
+        Self::apply_rp_full_round_freq_light_simd(state, 3);
+        Self::apply_rp_full_round_freq_light_simd(state, 4);
+        Self::apply_rp_full_round_freq_light_simd(state, 5);
+        Self::apply_rp_full_round_freq_light_simd(state, 6);
+    }
+
+    /// Rescue-XLIX round function.
+    #[inline(always)]
+    fn apply_rp_full_round_freq_light_simd(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        // apply first half of Rescue round
+        Self::apply_sbox(state);
+        Self::apply_mds_freq_light_simd(state);
+        Self::add_constants(state, &ARK1[round]);
+
+        // apply second half of Rescue round
+        Self::apply_inv_sbox(state);
+        Self::apply_mds_freq_light_simd(state);
+        Self::add_constants(state, &ARK2[round]);
+    }
+
     #[inline(always)]
     fn apply_mds_freq_light_simd(state_: &mut [BaseElement; STATE_WIDTH]) {
         let mut result = [BaseElement::ZERO; STATE_WIDTH];
@@ -1066,6 +1069,7 @@ impl Rp64_256 {
         state_[0] += (diag_entry  * 8);
         return state_;
     }
+    */
 }
 
 // MDS

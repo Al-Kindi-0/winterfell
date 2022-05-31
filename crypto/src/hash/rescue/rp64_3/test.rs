@@ -76,7 +76,7 @@ fn check_correctness_mds_freq() {
         //eprintln!("FFT-based method: {:?} ", s2);
     }
 }
-
+/*
 #[test]
 fn check_simd() {
     use core_simd::*;
@@ -86,6 +86,7 @@ fn check_simd() {
     println!("{:?}", a + b);
     assert_eq!(a + b, f32x4::from_array([11.0, 12.0, 13.0, 14.0]));
 }
+*/
 
 #[test]
 fn check_delayed() {

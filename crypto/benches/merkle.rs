@@ -8,7 +8,8 @@ use math::fields::f128::BaseElement;
 use rand_utils::rand_value;
 use utils::uninit_vector;
 use winter_crypto::{
-    build_merkle_nodes, concurrent,
+    build_merkle_nodes,
+    concurrent,
     hashers::Blake3_256,
     hashers::{Rp64_256, Rp_64_1, Rp_64_2, Rp_64_3, Rp_64_4, Rp_64_5},
     Hasher,
