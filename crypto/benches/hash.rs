@@ -400,22 +400,22 @@ fn rescue256_3_permutation(c: &mut Criterion) {
         BaseElement::new(4516812 as u64),
         BaseElement::new(4526812 as u64),
     ]; BATCH_SIZE];
-    c.bench_function("hash_rp64_3 Permutation serial", |bench| {
+    c.bench_function("hash_rp64_3 Permutation", |bench| {
         bench.iter(|| {
             v.iter_mut()
                 .for_each(|state| Rp_64_3::apply_permutation(black_box(state)))
         })
     });
-    c.bench_function("hash_rp64_3 Permutation Batch inversion", |bench| {
-        bench.iter(|| Rp_64_3::apply_permutation_batch(black_box(&mut v)))
+    c.bench_function("hash_rp64_3 Permutation: FFT", |bench| {
+        bench.iter(|| Rp_64_3::apply_permutation_freq(black_box(&mut v)))
     });
-    c.bench_function("hash_rp64_3 Permutation Batch inversion (+ FFT-based multiplication)", |bench| {
+    c.bench_function("hash_rp64_3 Permutation: FFT + Batch inversion", |bench| {
         bench.iter(|| Rp_64_3::apply_permutation_batch_freq(black_box(&mut v)))
     });
-    c.bench_function("hash_rp64_3 Permutation delayed", |bench| {
+    c.bench_function("hash_rp64_3 Permutation: FFT + Delayed", |bench| {
         bench.iter(|| {
             v.iter_mut()
-                .for_each(|state| Rp_64_3::apply_permutation_delayed(black_box(state)))
+                .for_each(|state| Rp_64_3::apply_permutation_freq_delayed(black_box(state)))
         })
     });
 }

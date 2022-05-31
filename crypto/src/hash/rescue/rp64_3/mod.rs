@@ -275,11 +275,14 @@ impl Rp64_256 {
 
     //pub const BATCH_SIZE: usize = 1 << 5;
 
-    // RESCUE PERMUTATION using delayed inversion (With batch inversion only at the state level)
-    // --------------------------------------------------------------------------------------------
 
-    /// Applies Rescue-XLIX permutation to the provided state.
-    pub fn apply_permutation_delayed(state: &mut [BaseElement; STATE_WIDTH]) {
+
+
+
+
+    /// RESCUE PERMUTATION: FFT + Delayed
+    /// --------------------------------------------------------------------------------------------
+    pub fn apply_permutation_freq_delayed(state: &mut [BaseElement; STATE_WIDTH]) {
         // alternating inverse and half-rounds
         let mut d = BaseElement::ONE;
 
@@ -314,7 +317,6 @@ impl Rp64_256 {
         let x4 = x2.square();
         let x3 = *d * x2;
         *d = x3 * x4;
-        
     }
 
     fn apply_inv_sbox_delayed(state: &mut [BaseElement; STATE_WIDTH], d: &mut BaseElement) {
@@ -361,7 +363,6 @@ impl Rp64_256 {
         Self::uni_sbox(d);
         Self::apply_mds_freq(state);
         Self::add_constants_delayed(state, &d, &ARK1[round]);
-        
     }
 
     #[inline(always)]
@@ -375,16 +376,35 @@ impl Rp64_256 {
         //eprintln!("Round: {} *** Correct state inverted {:?}",round, state);
         Self::apply_mds_freq(state);
         Self::add_constants_delayed(state, &d, &ARK1[round]);
-        
+
         // TODO: Check also batch inversion with batch sizes 4 or 6 and also without batch inversion
         // TODO: Think also about whether we can delay inversion even further
     }
 
     #[inline(always)]
-    fn add_constants_delayed(state: &mut [BaseElement; STATE_WIDTH], denominator: &BaseElement, ark: &[BaseElement; STATE_WIDTH]) {
-        state.iter_mut().zip(ark).for_each(|(s, &k)| *s += k * *denominator);
+    fn add_constants_delayed(
+        state: &mut [BaseElement; STATE_WIDTH],
+        denominator: &BaseElement,
+        ark: &[BaseElement; STATE_WIDTH],
+    ) {
+        state
+            .iter_mut()
+            .zip(ark)
+            .for_each(|(s, &k)| *s += k * *denominator);
     }
-    // RESCUE PERMUTATION (With batch inversion only at the state level)
+
+
+
+
+
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// 
+    /// 
+    /// ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+    // RESCUE PERMUTATION
     // --------------------------------------------------------------------------------------------
 
     /// Applies Rescue-XLIX permutation to the provided state.
@@ -421,6 +441,47 @@ impl Rp64_256 {
         Self::apply_inv_sbox_new(state);
         //eprintln!("Round: {} *** Correct state inverted {:?}",round, state);
         Self::apply_mds(state);
+        Self::add_constants(state, &ARK1[round]);
+    }
+
+
+    // RESCUE PERMUTATION: FFT
+    // --------------------------------------------------------------------------------------------
+
+    /// Applies Rescue-XLIX permutation to the provided state.
+    pub fn apply_permutation_freq(state: &mut [BaseElement; STATE_WIDTH]) {
+        // alternating inverse and half-rounds
+        Self::apply_rp_half_round_freq(state, 0);
+        Self::apply_inverse_round_freq(state, 1);
+        Self::apply_rp_half_round_freq(state, 2);
+        Self::apply_inverse_round_freq(state, 3);
+        Self::apply_rp_half_round_freq(state, 4);
+        Self::apply_inverse_round_freq(state, 5);
+        Self::apply_rp_half_round_freq(state, 6);
+        Self::apply_inverse_round_freq(state, 7);
+        Self::apply_rp_half_round_freq(state, 8);
+        Self::apply_inverse_round_freq(state, 9);
+        Self::apply_rp_half_round_freq(state, 10);
+        Self::apply_inverse_round_freq(state, 11);
+        Self::apply_rp_half_round_freq(state, 12);
+        Self::apply_inverse_round_freq(state, 13);
+        Self::apply_rp_half_round_freq(state, 14);
+    }
+
+    #[inline(always)]
+    fn apply_rp_half_round_freq(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        // apply first half of Rescue round
+        Self::apply_sbox(state);
+        Self::apply_mds_freq(state);
+        Self::add_constants(state, &ARK1[round]);
+    }
+
+    #[inline(always)]
+    fn apply_inverse_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        //eprintln!("Round: {} *** Correct state {:?}",round, state);
+        Self::apply_inv_sbox_new(state);
+        //eprintln!("Round: {} *** Correct state inverted {:?}",round, state);
+        Self::apply_mds_freq(state);
         Self::add_constants(state, &ARK1[round]);
     }
 
@@ -484,7 +545,7 @@ impl Rp64_256 {
         });
     }
 
-    // RESCUE PERMUTATION (batch inversion + MDS frequency)
+    // RESCUE PERMUTATION (Batch inversion + MDS frequency)
     // --------------------------------------------------------------------------------------------
     /// Applies a group of modified Rescue-XLIX permutation using batched inversion to the provided group of states.
     pub fn apply_permutation_batch_freq(state: &mut [[BaseElement; STATE_WIDTH]; BATCH_SIZE]) {
