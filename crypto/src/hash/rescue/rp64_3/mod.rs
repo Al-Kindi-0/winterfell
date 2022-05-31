@@ -43,7 +43,7 @@ const DIGEST_SIZE: usize = DIGEST_RANGE.end - DIGEST_RANGE.start;
 /// computed using algorithm 7 from <https://eprint.iacr.org/2020/1143.pdf>
 const NUM_ROUNDS: usize = 7 + 8;
 
-pub(crate) const BATCH_SIZE: usize = 1 << 5;
+pub(crate) const BATCH_SIZE: usize = 1000;
 
 // HASHER IMPLEMENTATION
 // ================================================================================================
@@ -275,7 +275,116 @@ impl Rp64_256 {
 
     //pub const BATCH_SIZE: usize = 1 << 5;
 
-    // RESCUE PERMUTATION (Without batch inversion)
+    // RESCUE PERMUTATION using delayed inversion (With batch inversion only at the state level)
+    // --------------------------------------------------------------------------------------------
+
+    /// Applies Rescue-XLIX permutation to the provided state.
+    pub fn apply_permutation_delayed(state: &mut [BaseElement; STATE_WIDTH]) {
+        // alternating inverse and half-rounds
+        let mut d = BaseElement::ONE;
+
+        Self::apply_rp_half_round_delayed(state, &mut d, 0);
+        Self::apply_inverse_round_delayed(state, &mut d, 1);
+        Self::apply_rp_half_round_delayed(state, &mut d, 2);
+        Self::apply_inverse_round_delayed(state, &mut d, 3);
+        Self::apply_rp_half_round_delayed(state, &mut d, 4);
+        Self::apply_inverse_round_delayed(state, &mut d, 5);
+        Self::apply_rp_half_round_delayed(state, &mut d, 6);
+        Self::apply_inverse_round_delayed(state, &mut d, 7);
+        Self::apply_rp_half_round_delayed(state, &mut d, 8);
+        Self::apply_inverse_round_delayed(state, &mut d, 9);
+        Self::apply_rp_half_round_delayed(state, &mut d, 10);
+        Self::apply_inverse_round_delayed(state, &mut d, 11);
+        Self::apply_rp_half_round_delayed(state, &mut d, 12);
+        Self::apply_inverse_round_delayed(state, &mut d, 13);
+        Self::apply_rp_half_round_delayed(state, &mut d, 14);
+
+        Self::apply_final_inversion(state, &mut d); // turn state/d to state by computing d^(-1) and multiplying the state by it.
+    }
+
+    fn apply_final_inversion(state: &mut [BaseElement; STATE_WIDTH], d: &mut BaseElement) {
+        let d_inv = d.inv();
+        state.iter_mut().for_each(|s| {
+            *s = *s * d_inv;
+        });
+    }
+
+    fn uni_sbox(d: &mut BaseElement) {
+        let x2 = d.square();
+        let x4 = x2.square();
+        let x3 = *d * x2;
+        *d = x3 * x4;
+        
+    }
+
+    fn apply_inv_sbox_delayed(state: &mut [BaseElement; STATE_WIDTH], d: &mut BaseElement) {
+        let [a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12] = *state;
+        let a_12 = a1 * a2;
+        let a34 = a3 * a4;
+        let a56 = a5 * a6;
+        let a78 = a7 * a8;
+        let a9_10 = a9 * a10;
+        let a11_12 = a11 * a12;
+        let mut a1234 = a_12 * a34;
+        let a5678 = a56 * a78;
+        let a9_10_11_12 = a9_10 * a11_12;
+        let mut a56789_10_11_12 = a5678 * a9_10_11_12;
+        let a_total = a1234 * a56789_10_11_12;
+        a1234 *= *d;
+        a56789_10_11_12 *= *d;
+
+        *state = [
+            a2 * a34 * a56789_10_11_12,
+            a1 * a34 * a56789_10_11_12,
+            a4 * a_12 * a56789_10_11_12,
+            a3 * a_12 * a56789_10_11_12,
+            a6 * a78 * a9_10_11_12 * a1234,
+            a5 * a78 * a9_10_11_12 * a1234,
+            a8 * a56 * a9_10_11_12 * a1234,
+            a7 * a56 * a9_10_11_12 * a1234,
+            a10 * a11_12 * a5678 * a1234,
+            a9 * a11_12 * a5678 * a1234,
+            a12 * a9_10 * a5678 * a1234,
+            a11 * a9_10 * a5678 * a1234,
+        ];
+
+        *d = a_total;
+    }
+    #[inline(always)]
+    fn apply_rp_half_round_delayed(
+        state: &mut [BaseElement; STATE_WIDTH],
+        d: &mut BaseElement,
+        round: usize,
+    ) {
+        // apply first half of Rescue round
+        Self::apply_sbox(state);
+        Self::uni_sbox(d);
+        Self::apply_mds_freq(state);
+        Self::add_constants_delayed(state, &d, &ARK1[round]);
+        
+    }
+
+    #[inline(always)]
+    fn apply_inverse_round_delayed(
+        state: &mut [BaseElement; STATE_WIDTH],
+        d: &mut BaseElement,
+        round: usize,
+    ) {
+        //eprintln!("Round: {} *** Correct state {:?}",round, state);
+        Self::apply_inv_sbox_delayed(state, d);
+        //eprintln!("Round: {} *** Correct state inverted {:?}",round, state);
+        Self::apply_mds_freq(state);
+        Self::add_constants_delayed(state, &d, &ARK1[round]);
+        
+        // TODO: Check also batch inversion with batch sizes 4 or 6 and also without batch inversion
+        // TODO: Think also about whether we can delay inversion even further
+    }
+
+    #[inline(always)]
+    fn add_constants_delayed(state: &mut [BaseElement; STATE_WIDTH], denominator: &BaseElement, ark: &[BaseElement; STATE_WIDTH]) {
+        state.iter_mut().zip(ark).for_each(|(s, &k)| *s += k * *denominator);
+    }
+    // RESCUE PERMUTATION (With batch inversion only at the state level)
     // --------------------------------------------------------------------------------------------
 
     /// Applies Rescue-XLIX permutation to the provided state.
@@ -375,7 +484,6 @@ impl Rp64_256 {
         });
     }
 
-
     // RESCUE PERMUTATION (batch inversion + MDS frequency)
     // --------------------------------------------------------------------------------------------
     /// Applies a group of modified Rescue-XLIX permutation using batched inversion to the provided group of states.
@@ -468,7 +576,6 @@ impl Rp64_256 {
 
     const MDS_MATRIX_EXPS: [u64; 12] = [0, 0, 1, 0, 3, 5, 1, 8, 12, 3, 16, 10];
     //const MDS_MATRIX_COL: [u64; 12] = [1, 1024, 65536, 8, 4096, 256, 2, 32, 8, 1, 2, 1];
-
 
     #[inline(always)]
     fn apply_mds(state_: &mut [BaseElement; STATE_WIDTH]) {
@@ -564,7 +671,6 @@ impl Rp64_256 {
         }
     }
 
-
     /* TODO: Elaborate more.
     We use split 3 x 4 FFT transform in order to transform our vectors into the frequency domain.
     We use the real FFT to avoid redundant computations. See https://www.mdpi.com/2076-3417/12/9/4700  */
@@ -600,17 +706,17 @@ impl Rp64_256 {
 
         return [x0, x1, x2, x3];
     }
-/*
-    #[inline(always)]
-    fn fft4x3(x: [u64; 12]) -> ([i64; 3], [(i64, i64); 3], [i64; 3]) {
-        let [x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11] = x;
-        let (y0, y1, y2) = Self::fft4_real([x0, x3, x6, x9]);
-        let (y4, y5, y6) = Self::fft4_real([x1, x4, x7, x10]);
-        let (y8, y9, y10) = Self::fft4_real([x2, x5, x8, x11]);
+    /*
+        #[inline(always)]
+        fn fft4x3(x: [u64; 12]) -> ([i64; 3], [(i64, i64); 3], [i64; 3]) {
+            let [x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11] = x;
+            let (y0, y1, y2) = Self::fft4_real([x0, x3, x6, x9]);
+            let (y4, y5, y6) = Self::fft4_real([x1, x4, x7, x10]);
+            let (y8, y9, y10) = Self::fft4_real([x2, x5, x8, x11]);
 
-        return ([y0, y4, y8], [y1, y5, y9], [y2, y6, y10]);
-    }
-*/
+            return ([y0, y4, y8], [y1, y5, y9], [y2, y6, y10]);
+        }
+    */
     #[inline(always)]
     fn block1(x: [i64; 3], y: [i64; 3]) -> [i64; 3] {
         let [x0, x1, x2] = x;
@@ -701,7 +807,7 @@ impl Rp64_256 {
 
         // Using the linearity of the operations we can split the state into a low||high decomposition
         // and operate on each with no overflow and then combine/reduce the result to a field element.
-        let mut state_l =[0u64; STATE_WIDTH];
+        let mut state_l = [0u64; STATE_WIDTH];
         let mut state_h = [0u64; STATE_WIDTH];
 
         for r in 0..STATE_WIDTH {
@@ -719,7 +825,6 @@ impl Rp64_256 {
         }
         *state_ = result;
     }
-
 }
 
 // MDS

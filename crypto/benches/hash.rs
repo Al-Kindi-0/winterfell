@@ -383,7 +383,7 @@ fn rescue256_2_permutation(c: &mut Criterion) {
 fn rescue256_3_permutation(c: &mut Criterion) {
     use math::{fields::f64::BaseElement};
     use rayon::prelude::*;
-    pub const BATCH_SIZE: usize = 1 << 5;
+    pub const BATCH_SIZE: usize = 1000;
 
 
     let mut v = [[
@@ -411,6 +411,12 @@ fn rescue256_3_permutation(c: &mut Criterion) {
     });
     c.bench_function("hash_rp64_3 Permutation Batch inversion (+ FFT-based multiplication)", |bench| {
         bench.iter(|| Rp_64_3::apply_permutation_batch_freq(black_box(&mut v)))
+    });
+    c.bench_function("hash_rp64_3 Permutation delayed", |bench| {
+        bench.iter(|| {
+            v.iter_mut()
+                .for_each(|state| Rp_64_3::apply_permutation_delayed(black_box(state)))
+        })
     });
 }
 
@@ -474,9 +480,9 @@ fn rescue256_5_permutation(c: &mut Criterion) {
 //criterion_group!(hash_group, blake3, sha3, rescue248, rescue256);
 criterion_group!(
     hash_group,
-    rescue256_permutation,
-    rescue256_1_permutation,
-    rescue256_2_permutation,
+    //rescue256_permutation,
+    //rescue256_1_permutation,
+    //rescue256_2_permutation,
     rescue256_3_permutation,
     rescue256_4_permutation,
     rescue256_5_permutation,
