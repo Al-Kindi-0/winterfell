@@ -121,6 +121,6 @@ fn check_delayed() {
     ];
     Rp64_256::apply_permutation_freq_delayed(&mut state);
     eprintln!("{:?}", state);
-    Rp64_256::apply_permutation(&mut state_1);
+    Rp64_256::apply_permutation_freq(&mut state_1);
     eprintln!("{:?}", state_1);
 }
