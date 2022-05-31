@@ -12,7 +12,7 @@ use winter_crypto::{
 };
 */
 use winter_crypto::{
-    hashers::{Rp64_256, Rp_64_1, Rp_64_2, Rp_64_3, Rp_64_4, Rp_64_5},
+    hashers::{Rp64_256, Rp_64_1, Rp_64_2, Rp_64_3, Rp_64_4, Rp_64_5, Rp_64_6},
     Hasher,
     
     
@@ -230,9 +230,9 @@ fn rescue256_5(c: &mut Criterion) {
 fn rescue256_permutation(c: &mut Criterion) {
     use math::{fields::f64::BaseElement};
     use rayon::prelude::*;
-    pub const BATCH_SIZE: usize = 1 << 5;
+    //pub const BATCH_SIZE: usize = 1 << 5;
 
-
+    /*
     let mut v = [
         BaseElement::new(4568812 as u64),
         BaseElement::new(4542812 as u64),
@@ -247,11 +247,33 @@ fn rescue256_permutation(c: &mut Criterion) {
         BaseElement::new(4516812 as u64),
         BaseElement::new(4526812 as u64),
     ];
+    
     let mut a1: Vec<[BaseElement;12]> = vec![];
     for _ in 0..1000{
         let s: [BaseElement;12] = rand_array();
         a1.push(s);
     }
+    */
+    let mut v = [[
+        BaseElement::new(4568812 as u64),
+        BaseElement::new(4542812 as u64),
+        BaseElement::new(4568412 as u64),
+        BaseElement::new(4756812 as u64),
+        BaseElement::new(4567812 as u64),
+        BaseElement::new(4568312 as u64),
+        BaseElement::new(4568132 as u64),
+        BaseElement::new(4563812 as u64),
+        BaseElement::new(4506812 as u64),
+        BaseElement::new(4568012 as u64),
+        BaseElement::new(4516812 as u64),
+        BaseElement::new(4526812 as u64),
+    ]; 1000];
+
+    for i in 0..1000{
+        let s: [BaseElement;12] = rand_array();
+        v[i] = s;
+    }
+    /*
     c.bench_function("hash_rp64 (FB) (FB) (FB) (FB) (FB) (FB) (FB) Permutation: Naive MDS (Original) mul", |bench| {
 
         bench.iter(|| {
@@ -265,12 +287,14 @@ fn rescue256_permutation(c: &mut Criterion) {
                 .for_each(|a| {Rp64_256::apply_permutation_freq_original(black_box( a));})
         })
     });
+    */
     c.bench_function("hash_rp64 (FB) (FB) (FB) (FB) (FB) (FB) (FB) Permutation: FFT MDS (New) mul", |bench| {
         bench.iter(|| {
-            a1.iter_mut()
+            v.iter_mut()
                 .for_each(|a| {Rp64_256::apply_permutation_freq(black_box( a));})
         })
     });
+    /*
     c.bench_function("hash_rp64 (FB) (FB) (FB) (FB) (FB) (FB) (FB) Permutation: FFT MDS (New) inlined", |bench| {
         bench.iter(|| {
             a1.iter_mut()
@@ -283,14 +307,15 @@ fn rescue256_permutation(c: &mut Criterion) {
                 .for_each(|a| {Rp64_256::apply_permutation_freq_light_simd(black_box( a));})
         })
     });
+    */
 }
 
 fn rescue256_1_permutation(c: &mut Criterion) {
     use math::{fields::f64::BaseElement};
     use rayon::prelude::*;
-    pub const BATCH_SIZE: usize = 1 << 5;
+    //pub const BATCH_SIZE: usize = 1 << 5;
 
-
+    /*
     let mut v = [
         BaseElement::new(4568812 as u64),
         BaseElement::new(4542812 as u64),
@@ -305,11 +330,33 @@ fn rescue256_1_permutation(c: &mut Criterion) {
         BaseElement::new(4516812 as u64),
         BaseElement::new(4526812 as u64),
     ];
+    
     let mut a1: Vec<[BaseElement;12]> = vec![];
     for _ in 0..1000{
         let s: [BaseElement;12] = rand_array();
         a1.push(s);
     }
+    */
+    let mut v = [[
+        BaseElement::new(4568812 as u64),
+        BaseElement::new(4542812 as u64),
+        BaseElement::new(4568412 as u64),
+        BaseElement::new(4756812 as u64),
+        BaseElement::new(4567812 as u64),
+        BaseElement::new(4568312 as u64),
+        BaseElement::new(4568132 as u64),
+        BaseElement::new(4563812 as u64),
+        BaseElement::new(4506812 as u64),
+        BaseElement::new(4568012 as u64),
+        BaseElement::new(4516812 as u64),
+        BaseElement::new(4526812 as u64),
+    ]; 1000];
+
+    for i in 0..1000{
+        let s: [BaseElement;12] = rand_array();
+        v[i] = s;
+    }
+    /*
     c.bench_function("hash_rp64_1 (F) (FB) (F) (FB) (F) (FB) (F) Permutation: Naive MDS (Original) mul", |bench| {
 
         bench.iter(|| {
@@ -323,12 +370,14 @@ fn rescue256_1_permutation(c: &mut Criterion) {
                 .for_each(|a| {Rp_64_1::apply_permutation_freq_original(black_box( a));})
         })
     });
+    */
     c.bench_function("hash_rp64_1 (F) (FB) (F) (FB) (F) (FB) (F) Permutation: FFT MDS (New) mul", |bench| {
         bench.iter(|| {
-            a1.iter_mut()
+            v.iter_mut()
                 .for_each(|a| {Rp_64_1::apply_permutation_freq(black_box( a));})
         })
     });
+    /*
     c.bench_function("hash_rp64_1 (F) (FB) (F) (FB) (F) (FB) (F) Permutation: FFT MDS (New) inlined", |bench| {
         bench.iter(|| {
             a1.iter_mut()
@@ -341,7 +390,98 @@ fn rescue256_1_permutation(c: &mut Criterion) {
                 .for_each(|a| {Rp_64_1::apply_permutation_freq_light_simd(black_box( a));})
         })
     });
+    
+    c.bench_function("hash_rp64_1 (F) (FB) (F) (FB) (F) (FB) (F) Permutation: Naive MDS mul", |bench| {
+        bench.iter(|| {Rp_64_1::apply_permutation(black_box(&mut v))
+        })
+    });
+    c.bench_function("hash_rp64_1 (F) (FB) (F) (FB) (F) (FB) (F) Permutation: FFT MDS mul", |bench| {
+        bench.iter(|| Rp_64_1::apply_permutation_freq(black_box(&mut v)))
+    });
+    */
+}
+
+fn rescue256_6_permutation(c: &mut Criterion) {
+    use math::{fields::f64::BaseElement};
+    use rayon::prelude::*;
+    //pub const BATCH_SIZE: usize = 1 << 5;
+
     /*
+    let mut v = [
+        BaseElement::new(4568812 as u64),
+        BaseElement::new(4542812 as u64),
+        BaseElement::new(4568412 as u64),
+        BaseElement::new(4756812 as u64),
+        BaseElement::new(4567812 as u64),
+        BaseElement::new(4568312 as u64),
+        BaseElement::new(4568132 as u64),
+        BaseElement::new(4563812 as u64),
+        BaseElement::new(4506812 as u64),
+        BaseElement::new(4568012 as u64),
+        BaseElement::new(4516812 as u64),
+        BaseElement::new(4526812 as u64),
+    ];
+    
+    let mut a1: Vec<[BaseElement;12]> = vec![];
+    for _ in 0..1000{
+        let s: [BaseElement;12] = rand_array();
+        a1.push(s);
+    }
+    */
+    let mut v = [[
+        BaseElement::new(4568812 as u64),
+        BaseElement::new(4542812 as u64),
+        BaseElement::new(4568412 as u64),
+        BaseElement::new(4756812 as u64),
+        BaseElement::new(4567812 as u64),
+        BaseElement::new(4568312 as u64),
+        BaseElement::new(4568132 as u64),
+        BaseElement::new(4563812 as u64),
+        BaseElement::new(4506812 as u64),
+        BaseElement::new(4568012 as u64),
+        BaseElement::new(4516812 as u64),
+        BaseElement::new(4526812 as u64),
+    ]; 1000];
+
+    for i in 0..1000{
+        let s: [BaseElement;12] = rand_array();
+        v[i] = s;
+    }
+    /*
+    c.bench_function("hash_rp64_6 (F) (F) (FB) (F) (FB) (F) (F) Permutation: Naive MDS (Original) mul", |bench| {
+
+        bench.iter(|| {
+            a1.iter_mut()
+                .for_each(|a| {Rp_64_6::apply_permutation(black_box( a));})
+        })
+    });
+    c.bench_function("hash_rp64_6 (F) (F) (FB) (F) (FB) (F) (F) Permutation: FFT MDS (Original) mul", |bench| {
+        bench.iter(|| {
+            a1.iter_mut()
+                .for_each(|a| {Rp_64_6::apply_permutation_freq_original(black_box( a));})
+        })
+    });
+    */
+    c.bench_function("hash_rp64_6 (F) (F) (FB) (F) (FB) (F) (F) Permutation: FFT MDS (New) mul", |bench| {
+        bench.iter(|| {
+            v.iter_mut()
+                .for_each(|a| {Rp_64_6::apply_permutation_freq(black_box( a));})
+        })
+    });
+    /*
+    c.bench_function("hash_rp64_6 (F) (F) (FB) (F) (FB) (F) (F) Permutation: FFT MDS (New) inlined", |bench| {
+        bench.iter(|| {
+            a1.iter_mut()
+                .for_each(|a| {Rp_64_6::apply_permutation_freq_light(black_box( a));})
+        })
+    });
+    c.bench_function("hash_rp64_6 (F) (F) (FB) (F) (FB) (F) (F) Permutation: FFT MDS (New) inlined + SIMD", |bench| {
+        bench.iter(|| {
+            a1.iter_mut()
+                .for_each(|a| {Rp_64_6::apply_permutation_freq_light_simd(black_box( a));})
+        })
+    });
+    
     c.bench_function("hash_rp64_1 (F) (FB) (F) (FB) (F) (FB) (F) Permutation: Naive MDS mul", |bench| {
         bench.iter(|| {Rp_64_1::apply_permutation(black_box(&mut v))
         })
@@ -385,6 +525,59 @@ fn rescue256_3_permutation(c: &mut Criterion) {
     use rayon::prelude::*;
     pub const BATCH_SIZE: usize = 1000;
 
+    
+    let mut v = [[
+        BaseElement::new(4568812 as u64),
+        BaseElement::new(4542812 as u64),
+        BaseElement::new(4568412 as u64),
+        BaseElement::new(4756812 as u64),
+        BaseElement::new(4567812 as u64),
+        BaseElement::new(4568312 as u64),
+        BaseElement::new(4568132 as u64),
+        BaseElement::new(4563812 as u64),
+        BaseElement::new(4506812 as u64),
+        BaseElement::new(4568012 as u64),
+        BaseElement::new(4516812 as u64),
+        BaseElement::new(4526812 as u64),
+    ]; BATCH_SIZE];
+
+    for i in 0..BATCH_SIZE{
+        let s: [BaseElement;12] = rand_array();
+        v[i] = s;
+    }
+
+    c.bench_function("hash_rp64_3 (15 rounds) Permutation: FFT MDS (New) + Delayed", |bench| {
+        bench.iter(|| {
+            v.iter_mut()
+                .for_each(|state| Rp_64_3::apply_permutation_freq_delayed(black_box(state)))
+        })
+    });    
+    /*
+    c.bench_function("hash_rp64_3 Permutation: No optimizations (w. old MDS)", |bench| {
+        bench.iter(|| {
+            v.iter_mut()
+                .for_each(|state| Rp_64_3::apply_permutation(black_box(state)))
+        })
+    });
+    c.bench_function("hash_rp64_3 Permutation: FFT MDS (New)", |bench| {
+        bench.iter(|| {
+            v.iter_mut()
+                .for_each(|state| Rp_64_3::apply_permutation_freq(black_box(state)))
+        })
+    });
+    c.bench_function("hash_rp64_3 Permutation: FFT MDS (New) + Batch inversion", |bench| {
+        bench.iter(|| Rp_64_3::apply_permutation_batch_freq(black_box(&mut v)))
+    });
+    */
+    
+}
+
+
+fn rescue256_4_permutation(c: &mut Criterion) {
+    use math::{fields::f64::BaseElement};
+    use rayon::prelude::*;
+    pub const BATCH_SIZE: usize = 1000;
+
 
     let mut v = [[
         BaseElement::new(4568812 as u64),
@@ -400,46 +593,26 @@ fn rescue256_3_permutation(c: &mut Criterion) {
         BaseElement::new(4516812 as u64),
         BaseElement::new(4526812 as u64),
     ]; BATCH_SIZE];
-    c.bench_function("hash_rp64_3 Permutation", |bench| {
+
+    for i in 0..BATCH_SIZE{
+        let s: [BaseElement;12] = rand_array();
+        v[i] = s;
+    }
+    /*
+    c.bench_function("hash_rp64_4 (F) (F) (F) (FB') (F) (F) (F) Permutation: Naive MDS mul", |bench| {
         bench.iter(|| {
             v.iter_mut()
-                .for_each(|state| Rp_64_3::apply_permutation(black_box(state)))
+                .for_each(|state| Rp_64_4::apply_permutation(black_box(state)))
         })
-    });
-    c.bench_function("hash_rp64_3 Permutation: FFT", |bench| {
-        bench.iter(|| Rp_64_3::apply_permutation_freq(black_box(&mut v)))
-    });
-    c.bench_function("hash_rp64_3 Permutation: FFT + Batch inversion", |bench| {
-        bench.iter(|| Rp_64_3::apply_permutation_batch_freq(black_box(&mut v)))
-    });
-    c.bench_function("hash_rp64_3 Permutation: FFT + Delayed", |bench| {
+    }); 
+    */ 
+    c.bench_function("hash_rp64_4 (F) (F) (F) (FB') (F) (F) (F) Permutation: FFT MDS (new) mul", |bench| {
         bench.iter(|| {
             v.iter_mut()
-                .for_each(|state| Rp_64_3::apply_permutation_freq_delayed(black_box(state)))
+                .for_each(|state| Rp_64_4::apply_permutation_freq(black_box(state)))
         })
-    });
-}
-
-
-fn rescue256_4_permutation(c: &mut Criterion) {
-    use math::{fields::f64::BaseElement};
-    use rayon::prelude::*;
-
-
-    let mut v = [
-        BaseElement::new(4568812 as u64),
-        BaseElement::new(4542812 as u64),
-        BaseElement::new(4568412 as u64),
-        BaseElement::new(4756812 as u64),
-        BaseElement::new(4567812 as u64),
-        BaseElement::new(4568312 as u64),
-        BaseElement::new(4568132 as u64),
-        BaseElement::new(4563812 as u64),
-        BaseElement::new(4506812 as u64),
-        BaseElement::new(4568012 as u64),
-        BaseElement::new(4516812 as u64),
-        BaseElement::new(4526812 as u64),
-    ];
+    }); 
+    /*
     c.bench_function("hash_rp64_4 (F) (F) (F) (FB') (F) (F) (F) Permutation: Naive MDS mul", |bench| {
         bench.iter(|| {Rp_64_4::apply_permutation(black_box(&mut v))
         })
@@ -447,6 +620,7 @@ fn rescue256_4_permutation(c: &mut Criterion) {
     c.bench_function("hash_rp64_4 (F) (F) (F) (FB') (F) (F) (F) Permutation: FFT MDS mul", |bench| {
         bench.iter(|| Rp_64_4::apply_permutation_freq(black_box(&mut v)))
     });
+    */
 }
 fn rescue256_5_permutation(c: &mut Criterion) {
     use math::{fields::f64::BaseElement};
@@ -480,17 +654,17 @@ fn rescue256_5_permutation(c: &mut Criterion) {
 //criterion_group!(hash_group, blake3, sha3, rescue248, rescue256);
 criterion_group!(
     hash_group,
-    //rescue256_permutation,
-    //rescue256_1_permutation,
-    //rescue256_2_permutation,
+    rescue256_permutation,
+    rescue256_1_permutation,
+    rescue256_6_permutation,
     rescue256_3_permutation,
     rescue256_4_permutation,
-    rescue256_5_permutation,
-    rescue256,
-    rescue256_1,
-    rescue256_2,
-    rescue256_3,
-    rescue256_4,
-    rescue256_5
+    //rescue256_5_permutation,
+    //rescue256,
+    //rescue256_1,
+    //rescue256_2,
+    //rescue256_3,
+    //rescue256_4,
+    //rescue256_5
 );
 criterion_main!(hash_group);

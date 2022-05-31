@@ -477,7 +477,7 @@ impl Rp64_256 {
     }
 
     #[inline(always)]
-    fn apply_inverse_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+    fn apply_inverse_round_freq(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
         //eprintln!("Round: {} *** Correct state {:?}",round, state);
         Self::apply_inv_sbox_new(state);
         //eprintln!("Round: {} *** Correct state inverted {:?}",round, state);
@@ -827,10 +827,16 @@ impl Rp64_256 {
         return [z0, z1, z2];
     }
 
+    /*
     // The 3*FFT4 representation of the MDS matrix
     const MDS_FREQ_BLOCK_ONE: [i64; 3] = [12, 5154, 65801];
     const MDS_FREQ_BLOCK_TWO: [(i64, i64); 3] = [(-1, -7), (992, -4094), (65528, -255)];
     const MDS_FREQ_BLOCK_THREE: [i64; 3] = [-6, -3042, 65287];
+    */
+    // The 3FFT4 representation of the New MDS matrix
+    const MDS_FREQ_BLOCK_ONE: [i64; 3] = [64, 128, 64];
+    const MDS_FREQ_BLOCK_TWO: [(i64, i64); 3] = [(4, -2), (-8, 2), (32, 2)];
+    const MDS_FREQ_BLOCK_THREE: [i64; 3] = [-4, -32, 8];
 
     #[inline(always)]
     fn block3(x: [i64; 3], y: [i64; 3]) -> [i64; 3] {

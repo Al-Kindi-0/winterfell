@@ -15,18 +15,18 @@ rust-version = "1.60"
 [lib]
 bench = false
 
-[[bench]]
-name = "inversion"
-harness = false
+#[[bench]]
+#name = "inversion"
+#harness = false
 
 [[bench]]
 name = "hash"
 harness = false
 
-[[bench]]
-name = "merkle"
-harness = false
-required-features = ["concurrent"]
+#[[bench]]
+#name = "merkle"
+#harness = false
+#required-features = ["concurrent"]
 
 [features]
 default = ["std"]

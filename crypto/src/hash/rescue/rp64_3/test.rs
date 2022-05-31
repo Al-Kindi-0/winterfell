@@ -99,7 +99,7 @@ fn check_delayed() {
         BaseElement::new(6),
         BaseElement::new(7),
         BaseElement::new(8),
-        BaseElement::new(9),
+        BaseElement::new(0),
         BaseElement::new(10),
         BaseElement::new(11),
     ];
@@ -114,11 +114,11 @@ fn check_delayed() {
         BaseElement::new(6),
         BaseElement::new(7),
         BaseElement::new(8),
-        BaseElement::new(9),
+        BaseElement::new(0),
         BaseElement::new(10),
         BaseElement::new(11),
     ];
-    Rp64_256::apply_permutation_delayed(&mut state);
+    Rp64_256::apply_permutation_freq_delayed(&mut state);
     eprintln!("{:?}", state);
     Rp64_256::apply_permutation(&mut state_1);
     eprintln!("{:?}", state_1);
