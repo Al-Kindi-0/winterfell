@@ -43,7 +43,7 @@ const DIGEST_SIZE: usize = DIGEST_RANGE.end - DIGEST_RANGE.start;
 /// computed using algorithm 7 from <https://eprint.iacr.org/2020/1143.pdf>
 const NUM_ROUNDS: usize = 7 + 8;
 
-pub(crate) const BATCH_SIZE: usize = 1000;
+pub(crate) const BATCH_SIZE: usize = 32;
 
 // HASHER IMPLEMENTATION
 // ================================================================================================

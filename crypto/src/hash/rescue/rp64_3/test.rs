@@ -3,6 +3,9 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
+use math::FieldElement;
+use rand_utils::rand_array;
+
 use super::{BaseElement, Rp64_256, BATCH_SIZE, STATE_WIDTH};
 
 #[test]
@@ -90,6 +93,7 @@ fn check_simd() {
 
 #[test]
 fn check_delayed() {
+    /*
     let mut state: [BaseElement; STATE_WIDTH] = [
         BaseElement::new(10),
         BaseElement::new(1),
@@ -105,7 +109,7 @@ fn check_delayed() {
         BaseElement::new(11),
     ];
 
-    let mut state_1: [BaseElement; STATE_WIDTH] = [
+    let mut state_: [BaseElement; STATE_WIDTH] = [
         BaseElement::new(10),
         BaseElement::new(1),
         BaseElement::new(2),
@@ -119,8 +123,14 @@ fn check_delayed() {
         BaseElement::new(10),
         BaseElement::new(11),
     ];
-    Rp64_256::apply_permutation_freq_delayed(&mut state);
-    eprintln!("{:?}", state);
-    Rp64_256::apply_permutation_freq(&mut state_1);
-    eprintln!("{:?}", state_1);
+    */
+    for _ in 0..1000 {
+        let mut state = rand_array();
+        let mut state_ = state.clone();
+        Rp64_256::apply_permutation_freq_delayed(&mut state);
+        //eprintln!("{:?}", state);
+        Rp64_256::apply_permutation_freq(&mut state_);
+        //eprintln!("{:?}", state_);
+        assert_eq!(state, state_);
+    }
 }

@@ -523,7 +523,7 @@ fn rescue256_2_permutation(c: &mut Criterion) {
 fn rescue256_3_permutation(c: &mut Criterion) {
     use math::{fields::f64::BaseElement};
     use rayon::prelude::*;
-    pub const BATCH_SIZE: usize = 1000;
+    pub const BATCH_SIZE: usize = 32;
 
     
     let mut v = [[
@@ -559,6 +559,7 @@ fn rescue256_3_permutation(c: &mut Criterion) {
                 .for_each(|state| Rp_64_3::apply_permutation(black_box(state)))
         })
     });
+    */
     c.bench_function("hash_rp64_3 Permutation: FFT MDS (New)", |bench| {
         bench.iter(|| {
             v.iter_mut()
@@ -568,7 +569,7 @@ fn rescue256_3_permutation(c: &mut Criterion) {
     c.bench_function("hash_rp64_3 Permutation: FFT MDS (New) + Batch inversion", |bench| {
         bench.iter(|| Rp_64_3::apply_permutation_batch_freq(black_box(&mut v)))
     });
-    */
+    
     
 }
 
