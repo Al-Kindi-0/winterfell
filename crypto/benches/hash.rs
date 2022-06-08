@@ -12,7 +12,7 @@ use winter_crypto::{
 };
 */
 use winter_crypto::{
-    hashers::{Rp64_256, Rp_64_1, Rp_64_2, Rp_64_3, Rp_64_4, Rp_64_5, Rp_64_6},
+    hashers::{Rp64_256, Rp_64_1, Rp_64_2, Rp_64_3, Rp_64_4, Rp_64_5, Rp_64_6,Rp_64m_3},
     Hasher,
     
     
@@ -520,6 +520,59 @@ fn rescue256_2_permutation(c: &mut Criterion) {
     });
 }
 
+fn rescue256_3_permutation_montgomery(c: &mut Criterion) {
+    use math::{fields::f64m::BaseElement};
+    use rayon::prelude::*;
+    pub const BATCH_SIZE: usize = 32;
+
+    
+    let mut v = [[
+        BaseElement::new(4568812 as u64),
+        BaseElement::new(4542812 as u64),
+        BaseElement::new(4568412 as u64),
+        BaseElement::new(4756812 as u64),
+        BaseElement::new(4567812 as u64),
+        BaseElement::new(4568312 as u64),
+        BaseElement::new(4568132 as u64),
+        BaseElement::new(4563812 as u64),
+        BaseElement::new(4506812 as u64),
+        BaseElement::new(4568012 as u64),
+        BaseElement::new(4516812 as u64),
+        BaseElement::new(4526812 as u64),
+    ]; BATCH_SIZE];
+
+    for i in 0..BATCH_SIZE{
+        let s: [BaseElement;12] = rand_array();
+        v[i] = s;
+    }
+
+    c.bench_function("hash_rp64_3 (15 rounds) Permutation: FFT MDS (New) + Delayed", |bench| {
+        bench.iter(|| {
+            v.iter_mut()
+                .for_each(|state| Rp_64m_3::apply_permutation_freq_delayed(black_box(state)))
+        })
+    });    
+    
+    c.bench_function("hash_rp64_3 Permutation: No optimizations (w. old MDS)", |bench| {
+        bench.iter(|| {
+            v.iter_mut()
+                .for_each(|state| Rp_64m_3::apply_permutation(black_box(state)))
+        })
+    });
+    
+    c.bench_function("hash_rp64_3 (15 rounds) Permutation: FFT MDS (New)", |bench| {
+        bench.iter(|| {
+            v.iter_mut()
+                .for_each(|state| Rp_64m_3::apply_permutation_freq(black_box(state)))
+        })
+    });
+    c.bench_function("hash_rp64_3 (15 rounds) Permutation: FFT MDS (New) + Batch inversion", |bench| {
+        bench.iter(|| Rp_64m_3::apply_permutation_batch_freq(black_box(&mut v)))
+    });
+    
+    
+}
+
 fn rescue256_3_permutation(c: &mut Criterion) {
     use math::{fields::f64::BaseElement};
     use rayon::prelude::*;
@@ -552,14 +605,14 @@ fn rescue256_3_permutation(c: &mut Criterion) {
                 .for_each(|state| Rp_64_3::apply_permutation_freq_delayed(black_box(state)))
         })
     });    
-    /*
+    
     c.bench_function("hash_rp64_3 Permutation: No optimizations (w. old MDS)", |bench| {
         bench.iter(|| {
             v.iter_mut()
                 .for_each(|state| Rp_64_3::apply_permutation(black_box(state)))
         })
     });
-    */
+    
     c.bench_function("hash_rp64_3 (15 rounds) Permutation: FFT MDS (New)", |bench| {
         bench.iter(|| {
             v.iter_mut()
@@ -659,6 +712,7 @@ criterion_group!(
     rescue256_1_permutation,
     rescue256_6_permutation,
     rescue256_3_permutation,
+    rescue256_3_permutation_montgomery,
     rescue256_4_permutation,
     //rescue256_5_permutation,
     //rescue256,

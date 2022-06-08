@@ -109,6 +109,7 @@ pub mod fields {
     pub use super::field::f64;
     pub use super::field::CubeExtension;
     pub use super::field::QuadExtension;
+    pub use super::field::f64m;
 }
 
 mod utils;
