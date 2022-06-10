@@ -46,7 +46,7 @@ const G: u64 = 1753635133440165772;
 
 /// Represents base field element in the field.
 ///
-/// Internal values are stored in Montgomery representation and can be in the range [0; 2M). The
+/// Internal values are stored in Montgomery representation and can be in the range [0; M). The
 /// backing type is `u64`.
 #[derive(Copy, Clone, Debug, Default)]
 pub struct BaseElement(u64);
@@ -65,6 +65,7 @@ impl BaseElement {
 
     /// Montgomery reduction
     pub const fn mont_red(x: u128) -> u64 {
+        // See reference above for a description of the following implementation.
         let xl = x as u64;
         let xh = (x >> 64) as u64;
         let (a, e) = xl.overflowing_add(xl << 32);
@@ -87,7 +88,7 @@ impl BaseElement {
     /// Subtraction in BaseField
     #[inline(always)]
     const fn sub(self, rhs: Self) -> Self {
-        // See mont_red() for details on the subtraction.
+        // See reference above for more details.
         let (x1, c1) = self.0.overflowing_sub(rhs.0);
         let adj = 0u32.wrapping_sub(c1 as u32);
         BaseElement(x1.wrapping_sub(adj as u64))
@@ -441,12 +442,11 @@ impl ExtensibleField<3> for BaseElement {
 // ================================================================================================
 
 impl From<u128> for BaseElement {
-    /// Converts a 128-bit value into a field element. If the value is greater than or equal to
-    /// the field modulus, modular reduction is silently performed.
+    /// Converts a 128-bit value into a field element.
     fn from(x: u128) -> Self {
-        //const R3: u128 = 1 (= 2^192 mod M );// this we get that mont_reduce((mont_reduce(x) as u128) * R3) becomes
-        BaseElement(mont_reduce(mont_reduce(x) as u128))
-        //BaseElement(Self::mont_red(Self::mont_red(x) as u128))
+        //const R3: u128 = 1 (= 2^192 mod M );// thus we get that mont_reduce((mont_reduce(x) as u128) * R3) becomes
+        BaseElement(mont_reduce(mont_reduce(x) as u128))  // With branching
+        //BaseElement(Self::mont_red(Self::mont_red(x) as u128)) // Constant time
     }
 }
 

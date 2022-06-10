@@ -546,27 +546,27 @@ fn rescue256_3_permutation_montgomery(c: &mut Criterion) {
         v[i] = s;
     }
 
-    c.bench_function("hash_rp64_3 (15 rounds) Permutation: FFT MDS (New) + Delayed", |bench| {
+    c.bench_function("hash_rp64_3 (15 rounds) Permutation: FFT MDS (New) + Delayed (Montgomery)", |bench| {
         bench.iter(|| {
             v.iter_mut()
                 .for_each(|state| Rp_64m_3::apply_permutation_freq_delayed(black_box(state)))
         })
     });    
     
-    c.bench_function("hash_rp64_3 Permutation: No optimizations (w. old MDS)", |bench| {
+    c.bench_function("hash_rp64_3 (15 rounds) Permutation: No optimizations (w. old MDS) (Montgomery)", |bench| {
         bench.iter(|| {
             v.iter_mut()
                 .for_each(|state| Rp_64m_3::apply_permutation(black_box(state)))
         })
     });
     
-    c.bench_function("hash_rp64_3 (15 rounds) Permutation: FFT MDS (New)", |bench| {
+    c.bench_function("hash_rp64_3 (15 rounds) Permutation: FFT MDS (New) (Montgomery)", |bench| {
         bench.iter(|| {
             v.iter_mut()
                 .for_each(|state| Rp_64m_3::apply_permutation_freq(black_box(state)))
         })
     });
-    c.bench_function("hash_rp64_3 (15 rounds) Permutation: FFT MDS (New) + Batch inversion", |bench| {
+    c.bench_function("hash_rp64_3 (15 rounds) Permutation: FFT MDS (New) + Batch inversion (Montgomery)", |bench| {
         bench.iter(|| Rp_64m_3::apply_permutation_batch_freq(black_box(&mut v)))
     });
     
@@ -606,7 +606,7 @@ fn rescue256_3_permutation(c: &mut Criterion) {
         })
     });    
     
-    c.bench_function("hash_rp64_3 Permutation: No optimizations (w. old MDS)", |bench| {
+    c.bench_function("hash_rp64_3 (15 rounds) Permutation: No optimizations (w. old MDS)", |bench| {
         bench.iter(|| {
             v.iter_mut()
                 .for_each(|state| Rp_64_3::apply_permutation(black_box(state)))
@@ -708,12 +708,12 @@ fn rescue256_5_permutation(c: &mut Criterion) {
 //criterion_group!(hash_group, blake3, sha3, rescue248, rescue256);
 criterion_group!(
     hash_group,
-    rescue256_permutation,
-    rescue256_1_permutation,
-    rescue256_6_permutation,
+    //rescue256_permutation,
+    //rescue256_1_permutation,
+    //rescue256_6_permutation,
     rescue256_3_permutation,
     rescue256_3_permutation_montgomery,
-    rescue256_4_permutation,
+    //rescue256_4_permutation,
     //rescue256_5_permutation,
     //rescue256,
     //rescue256_1,
