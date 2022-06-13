@@ -445,8 +445,8 @@ impl From<u128> for BaseElement {
     /// Converts a 128-bit value into a field element.
     fn from(x: u128) -> Self {
         //const R3: u128 = 1 (= 2^192 mod M );// thus we get that mont_reduce((mont_reduce(x) as u128) * R3) becomes
-        BaseElement(mont_reduce(mont_reduce(x) as u128))  // With branching
-        //BaseElement(Self::mont_red(Self::mont_red(x) as u128)) // Constant time
+        //BaseElement(mont_reduce(mont_reduce(x) as u128))  // With branching
+        BaseElement(Self::mont_red(Self::mont_red(x) as u128)) // Constant time
     }
 }
 

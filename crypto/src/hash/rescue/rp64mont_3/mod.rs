@@ -879,7 +879,7 @@ impl Rp64_256 {
         let mut state_h = [0u64; STATE_WIDTH];
 
         for r in 0..STATE_WIDTH {
-            let s = state_[r].inner();
+            let s = state_[r].as_int();
             state_h[r] = s >> 32;
             state_l[r] = (s as u32) as u64;
         }

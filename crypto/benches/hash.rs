@@ -630,7 +630,7 @@ fn rescue256_3_permutation(c: &mut Criterion) {
 fn rescue256_4_permutation(c: &mut Criterion) {
     use math::{fields::f64::BaseElement};
     use rayon::prelude::*;
-    pub const BATCH_SIZE: usize = 1000;
+    pub const BATCH_SIZE: usize = 32;
 
 
     let mut v = [[
@@ -713,7 +713,7 @@ criterion_group!(
     //rescue256_6_permutation,
     rescue256_3_permutation,
     rescue256_3_permutation_montgomery,
-    //rescue256_4_permutation,
+    rescue256_4_permutation,
     //rescue256_5_permutation,
     //rescue256,
     //rescue256_1,
