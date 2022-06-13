@@ -16,7 +16,7 @@ rust-version = "1.60"
 bench = false
 
 [[bench]]
-name = "inv"
+name = "fft"
 harness = false
 
 

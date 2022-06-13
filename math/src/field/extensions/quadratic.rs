@@ -325,7 +325,7 @@ impl<B: ExtensibleField<2>> Deserializable for QuadExtension<B> {
 #[cfg(test)]
 mod tests {
     use super::{DeserializationError, FieldElement, QuadExtension, Vec};
-    use crate::field::f128::BaseElement;
+    use crate::field::f64::BaseElement;
     use rand_utils::rand_value;
 
     // BASIC ALGEBRA

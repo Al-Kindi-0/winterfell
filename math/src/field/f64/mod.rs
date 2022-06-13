@@ -36,11 +36,14 @@ mod tests;
 // Field modulus = 2^64 - 2^32 + 1
 const M: u64 = 0xFFFFFFFF00000001;
 
+/// 2^128 mod M; this is used for conversion of elements into Montgomery representation.
+const R2: u64 = 0xFFFFFFFE00000001;
+
 // (p+1)/2
 pub const MOD_2: u64 = (0xFFFFFFFF00000001 + 1u64) >> 1;
 
 // Epsilon = 2^32 - 1;
-const E: u64 = 0xFFFFFFFF;
+//const E: u64 = 0xFFFFFFFF;
 
 // 2^32 root of unity
 const G: u64 = 1753635133440165772;
@@ -56,43 +59,82 @@ const ELEMENT_BYTES: usize = core::mem::size_of::<u64>();
 /// Internal values are stored in the range [0, 2^64). The backing type is `u64`.
 #[derive(Copy, Clone, Debug, Default)]
 pub struct BaseElement(u64);
-
 impl BaseElement {
-    /// Creates a new field element from the provided `value`. If the value is greater than or
-    /// equal to the field modulus, modular reduction is silently performed.
-    pub const fn new(value: u64) -> Self {
-        Self(value % M)
+    /// Creates a new field element from the provided `value`; the value is converted into
+    /// Montgomery representation.
+    pub const fn new(value: u64) -> BaseElement {
+        BaseElement(BaseElement::mont_red((value as u128) * (R2 as u128)))
     }
-    pub const fn half(self) -> Self {
-        // If self is even, then return self/2.
-        // If self is odd, then return (self-1)/2 + (M+1)/2 = (x+M)/2.
-        Self((self.0 >> 1).wrapping_add((self.0 & 1).wrapping_neg() & MOD_2))
+    /// Gets the inner value that might not be canonical
+
+    pub const fn inner(self: &Self) -> u64 {
+        return self.0;
     }
 
-    /// Return the inverse of "self" modulo the prime modulus.
-    /// Based on Algorithm1 in https://eprint.iacr.org/2020/972.pdf
-    pub fn inv_gcd(&mut self) -> BaseElement {
-        let mut a = self.0;
-        let mut u = BaseElement::from(1u64);
-        let mut b = BaseElement::MODULUS;
-        let mut v = BaseElement::from(0u64);
+    /// Montgomery reduction
+    #[inline(always)]
+    pub const fn mont_red(x: u128) -> u64 {
+        // See reference above for a description of the following implementation.
+        let xl = x as u64;
+        let xh = (x >> 64) as u64;
+        let (a, e) = xl.overflowing_add(xl << 32);
 
-        while a != 0 {
-            if a & 0x1 == 0x0 {
-                a >>= 1;
-                u = u.half();
-            } else {
-                if a < b {
-                    mem::swap(&mut a, &mut b);
-                    mem::swap(&mut u, &mut v);
-                }
-                a -= b;
-                a >>= 1;
-                u -= v;
-                u = u.half();
-            }
+        let b = a.wrapping_sub(a >> 32).wrapping_sub(e as u64);
+
+        let (r, c) = xh.overflowing_sub(b);
+        r.wrapping_sub(0u32.wrapping_sub(c as u32) as u64)
+    }
+
+    /// Addition in BaseField
+    #[inline(always)]
+    const fn add(self, rhs: Self) -> Self {
+        // We compute a + b = a - (p - b).
+        let (x1, c1) = self.0.overflowing_sub(M - rhs.0);
+        let adj = 0u32.wrapping_sub(c1 as u32);
+        BaseElement(x1.wrapping_sub(adj as u64))
+    }
+
+    /// Subtraction in BaseField
+    #[inline(always)]
+    const fn sub(self, rhs: Self) -> Self {
+        // See reference above for more details.
+        let (x1, c1) = self.0.overflowing_sub(rhs.0);
+        let adj = 0u32.wrapping_sub(c1 as u32);
+        BaseElement(x1.wrapping_sub(adj as u64))
+    }
+
+    /// Multiplication in BaseField
+    #[inline(always)]
+    const fn mul(self, rhs: Self) -> Self {
+        // If x < p and y < p, then x*y <= (p-1)^2, and is thus in
+        // range of mont_red().
+        BaseElement(BaseElement::mont_red((self.0 as u128) * (rhs.0 as u128)))
+    }
+
+    /// Squaring in BaseField
+    #[inline(always)]
+    pub const fn square(self) -> Self {
+        self.mul(self)
+    }
+
+    /// Multiple squarings in BaseField: return x^(2^n)
+    pub fn msquare(self, n: u32) -> Self {
+        let mut x = self;
+        for _ in 0..n {
+            x = x.square();
         }
-        return v;
+        x
+    }
+
+    /// Test of equality between two BaseField elements; return value is
+    /// 0xFFFFFFFFFFFFFFFF if the two values are equal, or 0 otherwise.
+    #[inline(always)]
+    pub const fn equals(self, rhs: Self) -> u64 {
+        // Since internal representation is canonical, we can simply
+        // do a xor between the two operands, and then use the same
+        // expression as iszero().
+        let t = self.0 ^ rhs.0;
+        !((((t | t.wrapping_neg()) as i64) >> 63) as u64)
     }
 }
 
@@ -100,13 +142,12 @@ impl FieldElement for BaseElement {
     type PositiveInteger = u64;
     type BaseField = Self;
 
-    const ZERO: Self = Self::new(0);
-    const ONE: Self = Self::new(1);
+    const ZERO: Self = BaseElement::new(0);
+    const ONE: Self = BaseElement::new(1);
 
     const ELEMENT_BYTES: usize = ELEMENT_BYTES;
     const IS_CANONICAL: bool = false;
 
-    #[inline]
     fn exp(self, power: Self::PositiveInteger) -> Self {
         let mut b = self;
 
@@ -127,40 +168,24 @@ impl FieldElement for BaseElement {
         r
     }
 
-    #[inline]
-    #[allow(clippy::many_single_char_names)]
     fn inv(self) -> Self {
-        // compute base^(M - 2) using 72 multiplications
-        // M - 2 = 0b1111111111111111111111111111111011111111111111111111111111111111
-
-        // compute base^11
-        let t2 = self.square() * self;
-
-        // compute base^111
-        let t3 = t2.square() * self;
-
-        // compute base^111111 (6 ones)
-        let t6 = exp_acc::<3>(t3, t3);
-
-        // compute base^111111111111 (12 ones)
-        let t12 = exp_acc::<6>(t6, t6);
-
-        // compute base^111111111111111111111111 (24 ones)
-        let t24 = exp_acc::<12>(t12, t12);
-
-        // compute base^1111111111111111111111111111111 (31 ones)
-        let t30 = exp_acc::<6>(t24, t6);
-        let t31 = t30.square() * self;
-
-        // compute base^111111111111111111111111111111101111111111111111111111111111111
-        let t63 = exp_acc::<32>(t31, t31);
-
-        // compute base^1111111111111111111111111111111011111111111111111111111111111111
-        t63.square() * self
+        // This uses Fermat's little theorem: 1/x = x^(p-2) mod p.
+        // We have p-2 = 0xFFFFFFFEFFFFFFFF. In the instructions below,
+        // we call 'xj' the value x^(2^j-1).
+        let x = self;
+        let x2 = x * x.square();
+        let x4 = x2 * x2.msquare(2);
+        let x5 = x * x4.square();
+        let x10 = x5 * x5.msquare(5);
+        let x15 = x5 * x10.msquare(5);
+        let x16 = x * x15.square();
+        let x31 = x15 * x16.msquare(15);
+        let x32 = x * x31.square();
+        return x32 * x31.msquare(33);
     }
 
     fn conjugate(&self) -> Self {
-        Self(self.0)
+        BaseElement(self.0)
     }
 
     fn elements_as_bytes(elements: &[Self]) -> &[u8] {
@@ -205,7 +230,6 @@ impl FieldElement for BaseElement {
         unsafe { Vec::from_raw_parts(p as *mut Self, len, cap) }
     }
 
-    #[inline]
     fn as_base_elements(elements: &[Self]) -> &[Self::BaseField] {
         elements
     }
@@ -234,18 +258,12 @@ impl StarkField for BaseElement {
     const TWO_ADIC_ROOT_OF_UNITY: Self = Self::new(G);
 
     fn get_modulus_le_bytes() -> Vec<u8> {
-        M.to_le_bytes().to_vec()
+        Self::MODULUS.to_le_bytes().to_vec()
     }
 
     #[inline]
     fn as_int(&self) -> Self::PositiveInteger {
-        // since the internal value of the element can be in [0, 2^64) range, we do an extra check
-        // here to convert it to the canonical form
-        if self.0 >= M {
-            self.0 - M
-        } else {
-            self.0
-        }
+        BaseElement::mont_red(self.0 as u128)
     }
 }
 
@@ -269,9 +287,7 @@ impl Display for BaseElement {
 impl PartialEq for BaseElement {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        // since either of the elements can be in [0, 2^64) range, we first convert them to the
-        // canonical form to ensure that they are in [0, M) range and then compare them.
-        self.as_int() == other.as_int()
+        Self::equals(*self, *other) == 0xFFFFFFFFFFFFFFFF
     }
 }
 
@@ -283,16 +299,12 @@ impl Eq for BaseElement {}
 impl Add for BaseElement {
     type Output = Self;
 
-    #[inline]
-    #[allow(clippy::suspicious_arithmetic_impl)]
     fn add(self, rhs: Self) -> Self {
-        let (result, over) = self.0.overflowing_add(rhs.as_int());
-        Self(result.wrapping_sub(M * (over as u64)))
+        Self::add(self, rhs)
     }
 }
 
 impl AddAssign for BaseElement {
-    #[inline]
     fn add_assign(&mut self, rhs: Self) {
         *self = *self + rhs
     }
@@ -301,16 +313,12 @@ impl AddAssign for BaseElement {
 impl Sub for BaseElement {
     type Output = Self;
 
-    #[inline]
-    #[allow(clippy::suspicious_arithmetic_impl)]
     fn sub(self, rhs: Self) -> Self {
-        let (result, under) = self.0.overflowing_sub(rhs.as_int());
-        Self(result.wrapping_add(M * (under as u64)))
+        Self::sub(self, rhs)
     }
 }
 
 impl SubAssign for BaseElement {
-    #[inline]
     fn sub_assign(&mut self, rhs: Self) {
         *self = *self - rhs;
     }
@@ -319,15 +327,12 @@ impl SubAssign for BaseElement {
 impl Mul for BaseElement {
     type Output = Self;
 
-    #[inline]
     fn mul(self, rhs: Self) -> Self {
-        let z = (self.0 as u128) * (rhs.0 as u128);
-        Self(mod_reduce(z))
+        Self::mul(self, rhs)
     }
 }
 
 impl MulAssign for BaseElement {
-    #[inline]
     fn mul_assign(&mut self, rhs: Self) {
         *self = *self * rhs
     }
@@ -336,15 +341,12 @@ impl MulAssign for BaseElement {
 impl Div for BaseElement {
     type Output = Self;
 
-    #[inline]
-    #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, rhs: Self) -> Self {
-        self * rhs.inv()
+        Self::mul(self, Self::inv(rhs))
     }
 }
 
 impl DivAssign for BaseElement {
-    #[inline]
     fn div_assign(&mut self, rhs: Self) {
         *self = *self / rhs
     }
@@ -353,14 +355,8 @@ impl DivAssign for BaseElement {
 impl Neg for BaseElement {
     type Output = Self;
 
-    #[inline]
     fn neg(self) -> Self {
-        let v = self.as_int();
-        if v == 0 {
-            Self::ZERO
-        } else {
-            Self(M - v)
-        }
+        Self::sub(BaseElement::ZERO, self)
     }
 }
 
@@ -455,10 +451,11 @@ impl ExtensibleField<3> for BaseElement {
 // ================================================================================================
 
 impl From<u128> for BaseElement {
-    /// Converts a 128-bit value into a field element. If the value is greater than or equal to
-    /// the field modulus, modular reduction is silently performed.
-    fn from(value: u128) -> Self {
-        Self(mod_reduce(value))
+    /// Converts a 128-bit value into a field element.
+    fn from(x: u128) -> Self {
+        //const R3: u128 = 1 (= 2^192 mod M );// thus we get that mont_reduce((mont_reduce(x) as u128) * R3) becomes
+        //BaseElement(mont_reduce(mont_reduce(x) as u128))  // With branching
+        BaseElement(Self::mont_red(Self::mont_red(x) as u128)) // Constant time
     }
 }
 
@@ -466,28 +463,28 @@ impl From<u64> for BaseElement {
     /// Converts a 64-bit value into a field element. If the value is greater than or equal to
     /// the field modulus, modular reduction is silently performed.
     fn from(value: u64) -> Self {
-        Self::new(value)
+        BaseElement::new(value)
     }
 }
 
 impl From<u32> for BaseElement {
     /// Converts a 32-bit value into a field element.
     fn from(value: u32) -> Self {
-        Self::new(value as u64)
+        BaseElement::new(value as u64)
     }
 }
 
 impl From<u16> for BaseElement {
     /// Converts a 16-bit value into a field element.
     fn from(value: u16) -> Self {
-        Self::new(value as u64)
+        BaseElement::new(value as u64)
     }
 }
 
 impl From<u8> for BaseElement {
     /// Converts an 8-bit value into a field element.
     fn from(value: u8) -> Self {
-        Self::new(value as u64)
+        BaseElement::new(value as u64)
     }
 }
 
@@ -498,7 +495,7 @@ impl From<[u8; 8]> for BaseElement {
     /// performed.
     fn from(bytes: [u8; 8]) -> Self {
         let value = u64::from_le_bytes(bytes);
-        Self::new(value)
+        BaseElement::new(value)
     }
 }
 
@@ -568,41 +565,15 @@ impl Deserializable for BaseElement {
     }
 }
 
-// HELPER FUNCTIONS
-// ================================================================================================
-
-/// Reduces a 128-bit value by M such that the output is in [0, 2^64) range.
-///
-/// Adapted from: <https://github.com/mir-protocol/plonky2/blob/main/src/field/goldilocks_field.rs>
 #[inline(always)]
-fn mod_reduce(x: u128) -> u64 {
-    // assume x consists of four 32-bit values: a, b, c, d such that a contains 32 least
-    // significant bits and d contains 32 most significant bits. we break x into corresponding
-    // values as shown below
-    let ab = x as u64;
-    let cd = (x >> 64) as u64;
-    let c = (cd as u32) as u64;
-    let d = cd >> 32;
-
-    // compute ab - d; because d may be greater than ab we need to handle potential underflow
-    let (tmp0, under) = ab.overflowing_sub(d);
-    let tmp0 = tmp0.wrapping_sub(E * (under as u64));
-
-    // compute c * 2^32 - c; this is guaranteed not to underflow
-    let tmp1 = (c << 32) - c;
-
-    // add temp values and return the result; because each of the temp may be up to 64 bits,
-    // we need to handle potential overflow
-    let (result, over) = tmp0.overflowing_add(tmp1);
-    result.wrapping_add(E * (over as u64))
-}
-
-/// Squares the base N number of times and multiplies the result by the tail value.
-#[inline(always)]
-fn exp_acc<const N: usize>(base: BaseElement, tail: BaseElement) -> BaseElement {
-    let mut result = base;
-    for _ in 0..N {
-        result = result.square();
-    }
-    result * tail
+pub fn mont_reduce(x: u128) -> u64 {
+    const NPRIME: u64 = 4294967297;
+    let q = (((x as u64) as u128) * (NPRIME as u128)) as u64;
+    let m = (q as u128) * (M as u128);
+    let y = (((x as i128).wrapping_sub(m as i128)) >> 64) as i64;
+    if x < m {
+        return (y + (M as i64)) as u64;
+    } else {
+        return y as u64;
+    };
 }
