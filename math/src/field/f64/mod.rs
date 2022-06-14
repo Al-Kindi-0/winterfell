@@ -3,7 +3,8 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-//! An implementation of a 64-bit STARK-friendly prime field with modulus $2^{64} - 2^{32} + 1$ using Montgomery representation.
+//! An implementation of a 64-bit STARK-friendly prime field with modulus $2^{64} - 2^{32} + 1$
+//! using Montgomery representation.
 //! Our implementation follows https://eprint.iacr.org/2022/274.pdf
 //!
 //! This field supports very fast modular arithmetic and has a number of other attractive
@@ -34,16 +35,13 @@ mod tests;
 // CONSTANTS
 // ================================================================================================
 
-// Field modulus = 2^64 - 2^32 + 1
+/// Field modulus = 2^64 - 2^32 + 1
 const M: u64 = 0xFFFFFFFF00000001;
 
 /// 2^128 mod M; this is used for conversion of elements into Montgomery representation.
 const R2: u64 = 0xFFFFFFFE00000001;
 
-// (p+1)/2
-pub const MOD_2: u64 = (0xFFFFFFFF00000001 + 1u64) >> 1;
-
-// 2^32 root of unity
+/// 2^32 root of unity
 const G: u64 = 1753635133440165772;
 
 /// Number of bytes needed to represent field element
@@ -61,32 +59,7 @@ impl BaseElement {
     /// Creates a new field element from the provided `value`; the value is converted into
     /// Montgomery representation.
     pub const fn new(value: u64) -> BaseElement {
-        BaseElement(mont_red_cst((value as u128) * (R2 as u128)))
-    }
-    /// Gets the inner value that might not be canonical
-
-    pub const fn inner(self: &Self) -> u64 {
-        return self.0;
-    }
-
-    /// Multiple squarings in BaseField: return x^(2^n)
-    pub fn msquare(self, n: u32) -> Self {
-        let mut x = self;
-        for _ in 0..n {
-            x = x.square();
-        }
-        x
-    }
-
-    /// Test of equality between two BaseField elements; return value is
-    /// 0xFFFFFFFFFFFFFFFF if the two values are equal, or 0 otherwise.
-    #[inline(always)]
-    pub const fn equals(self, rhs: Self) -> u64 {
-        // Since internal representation is canonical, we can simply
-        // do a xor between the two operands, and then use the same
-        // expression as iszero().
-        let t = self.0 ^ rhs.0;
-        !((((t | t.wrapping_neg()) as i64) >> 63) as u64)
+        Self(mont_red_cst((value as u128) * (R2 as u128)))
     }
 }
 
@@ -256,7 +229,7 @@ impl Display for BaseElement {
 impl PartialEq for BaseElement {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        Self::equals(*self, *other) == 0xFFFFFFFFFFFFFFFF
+        equals(self.0, other.0) == 0xFFFFFFFFFFFFFFFF
     }
 }
 
@@ -275,7 +248,7 @@ impl Add for BaseElement {
         // We compute a + b = a - (p - b).
         let (x1, c1) = self.0.overflowing_sub(M - rhs.0);
         let adj = 0u32.wrapping_sub(c1 as u32);
-        BaseElement(x1.wrapping_sub(adj as u64))
+        Self(x1.wrapping_sub(adj as u64))
     }
 }
 
@@ -295,7 +268,7 @@ impl Sub for BaseElement {
         // See reference above for more details.
         let (x1, c1) = self.0.overflowing_sub(rhs.0);
         let adj = 0u32.wrapping_sub(c1 as u32);
-        BaseElement(x1.wrapping_sub(adj as u64))
+        Self(x1.wrapping_sub(adj as u64))
     }
 }
 
@@ -311,7 +284,7 @@ impl Mul for BaseElement {
 
     #[inline]
     fn mul(self, rhs: Self) -> Self {
-        BaseElement(mont_red_cst((self.0 as u128) * (rhs.0 as u128)))
+        Self(mont_red_cst((self.0 as u128) * (rhs.0 as u128)))
     }
 }
 
@@ -344,7 +317,7 @@ impl Neg for BaseElement {
 
     #[inline]
     fn neg(self) -> Self {
-        BaseElement::ZERO - self
+        Self::ZERO - self
     }
 }
 
@@ -425,12 +398,9 @@ impl ExtensibleField<3> for BaseElement {
     fn frobenius(x: [Self; 3]) -> [Self; 3] {
         // coefficients were computed using SageMath
         [
-            x[0] + BaseElement::new(10615703402128488253) * x[1]
-                + BaseElement::new(6700183068485440220) * x[2],
-            BaseElement::new(10050274602728160328) * x[1]
-                + BaseElement::new(14531223735771536287) * x[2],
-            BaseElement::new(11746561000929144102) * x[1]
-                + BaseElement::new(8396469466686423992) * x[2],
+            x[0] + Self::new(10615703402128488253) * x[1] + Self::new(6700183068485440220) * x[2],
+            Self::new(10050274602728160328) * x[1] + Self::new(14531223735771536287) * x[2],
+            Self::new(11746561000929144102) * x[1] + Self::new(8396469466686423992) * x[2],
         ]
     }
 }
@@ -442,8 +412,8 @@ impl From<u128> for BaseElement {
     /// Converts a 128-bit value into a field element.
     fn from(x: u128) -> Self {
         //const R3: u128 = 1 (= 2^192 mod M );// thus we get that mont_red_var((mont_red_var(x) as u128) * R3) becomes
-        //BaseElement(mont_red_var(mont_red_var(x) as u128))  // Variable time implementation
-        BaseElement(mont_red_cst(mont_red_cst(x) as u128)) // Constant time implementation
+        //Self(mont_red_var(mont_red_var(x) as u128))  // Variable time implementation
+        Self(mont_red_cst(mont_red_cst(x) as u128)) // Constant time implementation
     }
 }
 
@@ -451,28 +421,28 @@ impl From<u64> for BaseElement {
     /// Converts a 64-bit value into a field element. If the value is greater than or equal to
     /// the field modulus, modular reduction is silently performed.
     fn from(value: u64) -> Self {
-        BaseElement::new(value)
+        Self::new(value)
     }
 }
 
 impl From<u32> for BaseElement {
     /// Converts a 32-bit value into a field element.
     fn from(value: u32) -> Self {
-        BaseElement::new(value as u64)
+        Self::new(value as u64)
     }
 }
 
 impl From<u16> for BaseElement {
     /// Converts a 16-bit value into a field element.
     fn from(value: u16) -> Self {
-        BaseElement::new(value as u64)
+        Self::new(value as u64)
     }
 }
 
 impl From<u8> for BaseElement {
     /// Converts an 8-bit value into a field element.
     fn from(value: u8) -> Self {
-        BaseElement::new(value as u64)
+        Self::new(value as u64)
     }
 }
 
@@ -483,7 +453,7 @@ impl From<[u8; 8]> for BaseElement {
     /// performed.
     fn from(bytes: [u8; 8]) -> Self {
         let value = u64::from_le_bytes(bytes);
-        BaseElement::new(value)
+        Self::new(value)
     }
 }
 
@@ -518,7 +488,7 @@ impl<'a> TryFrom<&'a [u8]> for BaseElement {
                 value
             )));
         }
-        Ok(BaseElement::new(value))
+        Ok(Self::new(value))
     }
 }
 
@@ -549,7 +519,7 @@ impl Deserializable for BaseElement {
                 value
             )));
         }
-        Ok(BaseElement::new(value))
+        Ok(Self::new(value))
     }
 }
 
@@ -562,9 +532,10 @@ fn exp_acc<const N: usize>(base: BaseElement, tail: BaseElement) -> BaseElement 
     }
     result * tail
 }
+
 /// Montgomery reduction (variable time)
 #[inline(always)]
-pub fn mont_red_var(x: u128) -> u64 {
+pub const fn mont_red_var(x: u128) -> u64 {
     const NPRIME: u64 = 4294967297;
     let q = (((x as u64) as u128) * (NPRIME as u128)) as u64;
     let m = (q as u128) * (M as u128);
@@ -575,6 +546,7 @@ pub fn mont_red_var(x: u128) -> u64 {
         return y as u64;
     };
 }
+
 /// Montgomery reduction (constant time)
 #[inline(always)]
 pub const fn mont_red_cst(x: u128) -> u64 {
@@ -587,4 +559,15 @@ pub const fn mont_red_cst(x: u128) -> u64 {
 
     let (r, c) = xh.overflowing_sub(b);
     r.wrapping_sub(0u32.wrapping_sub(c as u32) as u64)
+}
+
+/// Test of equality between two BaseField elements; return value is
+/// 0xFFFFFFFFFFFFFFFF if the two values are equal, or 0 otherwise.
+#[inline(always)]
+pub fn equals(lhs: u64, rhs: u64) -> u64 {
+    // Since internal representation is canonical, we can simply
+    // do a xor between the two operands, and then use the same
+    // expression as iszero().
+    let t = lhs ^ rhs;
+    !((((t | t.wrapping_neg()) as i64) >> 63) as u64)
 }
