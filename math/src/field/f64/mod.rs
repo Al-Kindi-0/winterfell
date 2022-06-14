@@ -3,7 +3,8 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-//! An implementation of a 64-bit STARK-friendly prime field with modulus $2^{64} - 2^{32} + 1$.
+//! An implementation of a 64-bit STARK-friendly prime field with modulus $2^{64} - 2^{32} + 1$ using Montgomery representation.
+//! Our implementation follows https://eprint.iacr.org/2022/274.pdf
 //!
 //! This field supports very fast modular arithmetic and has a number of other attractive
 //! properties, including:
@@ -42,9 +43,6 @@ const R2: u64 = 0xFFFFFFFE00000001;
 // (p+1)/2
 pub const MOD_2: u64 = (0xFFFFFFFF00000001 + 1u64) >> 1;
 
-// Epsilon = 2^32 - 1;
-//const E: u64 = 0xFFFFFFFF;
-
 // 2^32 root of unity
 const G: u64 = 1753635133440165772;
 
@@ -63,58 +61,12 @@ impl BaseElement {
     /// Creates a new field element from the provided `value`; the value is converted into
     /// Montgomery representation.
     pub const fn new(value: u64) -> BaseElement {
-        BaseElement(BaseElement::mont_red((value as u128) * (R2 as u128)))
+        BaseElement(mont_red_cst((value as u128) * (R2 as u128)))
     }
     /// Gets the inner value that might not be canonical
 
     pub const fn inner(self: &Self) -> u64 {
         return self.0;
-    }
-
-    /// Montgomery reduction
-    #[inline(always)]
-    pub const fn mont_red(x: u128) -> u64 {
-        // See reference above for a description of the following implementation.
-        let xl = x as u64;
-        let xh = (x >> 64) as u64;
-        let (a, e) = xl.overflowing_add(xl << 32);
-
-        let b = a.wrapping_sub(a >> 32).wrapping_sub(e as u64);
-
-        let (r, c) = xh.overflowing_sub(b);
-        r.wrapping_sub(0u32.wrapping_sub(c as u32) as u64)
-    }
-
-    /// Addition in BaseField
-    #[inline(always)]
-    const fn add(self, rhs: Self) -> Self {
-        // We compute a + b = a - (p - b).
-        let (x1, c1) = self.0.overflowing_sub(M - rhs.0);
-        let adj = 0u32.wrapping_sub(c1 as u32);
-        BaseElement(x1.wrapping_sub(adj as u64))
-    }
-
-    /// Subtraction in BaseField
-    #[inline(always)]
-    const fn sub(self, rhs: Self) -> Self {
-        // See reference above for more details.
-        let (x1, c1) = self.0.overflowing_sub(rhs.0);
-        let adj = 0u32.wrapping_sub(c1 as u32);
-        BaseElement(x1.wrapping_sub(adj as u64))
-    }
-
-    /// Multiplication in BaseField
-    #[inline(always)]
-    const fn mul(self, rhs: Self) -> Self {
-        // If x < p and y < p, then x*y <= (p-1)^2, and is thus in
-        // range of mont_red().
-        BaseElement(BaseElement::mont_red((self.0 as u128) * (rhs.0 as u128)))
-    }
-
-    /// Squaring in BaseField
-    #[inline(always)]
-    pub const fn square(self) -> Self {
-        self.mul(self)
     }
 
     /// Multiple squarings in BaseField: return x^(2^n)
@@ -142,12 +94,13 @@ impl FieldElement for BaseElement {
     type PositiveInteger = u64;
     type BaseField = Self;
 
-    const ZERO: Self = BaseElement::new(0);
-    const ONE: Self = BaseElement::new(1);
+    const ZERO: Self = Self::new(0);
+    const ONE: Self = Self::new(1);
 
     const ELEMENT_BYTES: usize = ELEMENT_BYTES;
     const IS_CANONICAL: bool = false;
 
+    #[inline(always)]
     fn exp(self, power: Self::PositiveInteger) -> Self {
         let mut b = self;
 
@@ -168,24 +121,40 @@ impl FieldElement for BaseElement {
         r
     }
 
+    #[inline]
+    #[allow(clippy::many_single_char_names)]
     fn inv(self) -> Self {
-        // This uses Fermat's little theorem: 1/x = x^(p-2) mod p.
-        // We have p-2 = 0xFFFFFFFEFFFFFFFF. In the instructions below,
-        // we call 'xj' the value x^(2^j-1).
-        let x = self;
-        let x2 = x * x.square();
-        let x4 = x2 * x2.msquare(2);
-        let x5 = x * x4.square();
-        let x10 = x5 * x5.msquare(5);
-        let x15 = x5 * x10.msquare(5);
-        let x16 = x * x15.square();
-        let x31 = x15 * x16.msquare(15);
-        let x32 = x * x31.square();
-        return x32 * x31.msquare(33);
+        // compute base^(M - 2) using 72 multiplications
+        // M - 2 = 0b1111111111111111111111111111111011111111111111111111111111111111
+
+        // compute base^11
+        let t2 = self.square() * self;
+
+        // compute base^111
+        let t3 = t2.square() * self;
+
+        // compute base^111111 (6 ones)
+        let t6 = exp_acc::<3>(t3, t3);
+
+        // compute base^111111111111 (12 ones)
+        let t12 = exp_acc::<6>(t6, t6);
+
+        // compute base^111111111111111111111111 (24 ones)
+        let t24 = exp_acc::<12>(t12, t12);
+
+        // compute base^1111111111111111111111111111111 (31 ones)
+        let t30 = exp_acc::<6>(t24, t6);
+        let t31 = t30.square() * self;
+
+        // compute base^111111111111111111111111111111101111111111111111111111111111111
+        let t63 = exp_acc::<32>(t31, t31);
+
+        // compute base^1111111111111111111111111111111011111111111111111111111111111111
+        t63.square() * self
     }
 
     fn conjugate(&self) -> Self {
-        BaseElement(self.0)
+        Self(self.0)
     }
 
     fn elements_as_bytes(elements: &[Self]) -> &[u8] {
@@ -258,12 +227,12 @@ impl StarkField for BaseElement {
     const TWO_ADIC_ROOT_OF_UNITY: Self = Self::new(G);
 
     fn get_modulus_le_bytes() -> Vec<u8> {
-        Self::MODULUS.to_le_bytes().to_vec()
+        M.to_le_bytes().to_vec()
     }
 
     #[inline]
     fn as_int(&self) -> Self::PositiveInteger {
-        BaseElement::mont_red(self.0 as u128)
+        mont_red_cst(self.0 as u128)
     }
 }
 
@@ -299,12 +268,19 @@ impl Eq for BaseElement {}
 impl Add for BaseElement {
     type Output = Self;
 
+    /// Addition in BaseField
+    #[inline]
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn add(self, rhs: Self) -> Self {
-        Self::add(self, rhs)
+        // We compute a + b = a - (p - b).
+        let (x1, c1) = self.0.overflowing_sub(M - rhs.0);
+        let adj = 0u32.wrapping_sub(c1 as u32);
+        BaseElement(x1.wrapping_sub(adj as u64))
     }
 }
 
 impl AddAssign for BaseElement {
+    #[inline]
     fn add_assign(&mut self, rhs: Self) {
         *self = *self + rhs
     }
@@ -313,12 +289,18 @@ impl AddAssign for BaseElement {
 impl Sub for BaseElement {
     type Output = Self;
 
+    #[inline]
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn sub(self, rhs: Self) -> Self {
-        Self::sub(self, rhs)
+        // See reference above for more details.
+        let (x1, c1) = self.0.overflowing_sub(rhs.0);
+        let adj = 0u32.wrapping_sub(c1 as u32);
+        BaseElement(x1.wrapping_sub(adj as u64))
     }
 }
 
 impl SubAssign for BaseElement {
+    #[inline]
     fn sub_assign(&mut self, rhs: Self) {
         *self = *self - rhs;
     }
@@ -327,12 +309,14 @@ impl SubAssign for BaseElement {
 impl Mul for BaseElement {
     type Output = Self;
 
+    #[inline]
     fn mul(self, rhs: Self) -> Self {
-        Self::mul(self, rhs)
+        BaseElement(mont_red_cst((self.0 as u128) * (rhs.0 as u128)))
     }
 }
 
 impl MulAssign for BaseElement {
+    #[inline]
     fn mul_assign(&mut self, rhs: Self) {
         *self = *self * rhs
     }
@@ -341,12 +325,15 @@ impl MulAssign for BaseElement {
 impl Div for BaseElement {
     type Output = Self;
 
+    #[inline]
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, rhs: Self) -> Self {
-        Self::mul(self, Self::inv(rhs))
+        self * Self::inv(rhs)
     }
 }
 
 impl DivAssign for BaseElement {
+    #[inline]
     fn div_assign(&mut self, rhs: Self) {
         *self = *self / rhs
     }
@@ -355,8 +342,9 @@ impl DivAssign for BaseElement {
 impl Neg for BaseElement {
     type Output = Self;
 
+    #[inline]
     fn neg(self) -> Self {
-        Self::sub(BaseElement::ZERO, self)
+        BaseElement::ZERO - self
     }
 }
 
@@ -453,9 +441,9 @@ impl ExtensibleField<3> for BaseElement {
 impl From<u128> for BaseElement {
     /// Converts a 128-bit value into a field element.
     fn from(x: u128) -> Self {
-        //const R3: u128 = 1 (= 2^192 mod M );// thus we get that mont_reduce((mont_reduce(x) as u128) * R3) becomes
-        //BaseElement(mont_reduce(mont_reduce(x) as u128))  // With branching
-        BaseElement(Self::mont_red(Self::mont_red(x) as u128)) // Constant time
+        //const R3: u128 = 1 (= 2^192 mod M );// thus we get that mont_red_var((mont_red_var(x) as u128) * R3) becomes
+        //BaseElement(mont_red_var(mont_red_var(x) as u128))  // Variable time implementation
+        BaseElement(mont_red_cst(mont_red_cst(x) as u128)) // Constant time implementation
     }
 }
 
@@ -565,8 +553,18 @@ impl Deserializable for BaseElement {
     }
 }
 
+/// Squares the base N number of times and multiplies the result by the tail value.
 #[inline(always)]
-pub fn mont_reduce(x: u128) -> u64 {
+fn exp_acc<const N: usize>(base: BaseElement, tail: BaseElement) -> BaseElement {
+    let mut result = base;
+    for _ in 0..N {
+        result = result.square();
+    }
+    result * tail
+}
+/// Montgomery reduction (variable time)
+#[inline(always)]
+pub fn mont_red_var(x: u128) -> u64 {
     const NPRIME: u64 = 4294967297;
     let q = (((x as u64) as u128) * (NPRIME as u128)) as u64;
     let m = (q as u128) * (M as u128);
@@ -576,4 +574,17 @@ pub fn mont_reduce(x: u128) -> u64 {
     } else {
         return y as u64;
     };
+}
+/// Montgomery reduction (constant time)
+#[inline(always)]
+pub const fn mont_red_cst(x: u128) -> u64 {
+    // See reference above for a description of the following implementation.
+    let xl = x as u64;
+    let xh = (x >> 64) as u64;
+    let (a, e) = xl.overflowing_add(xl << 32);
+
+    let b = a.wrapping_sub(a >> 32).wrapping_sub(e as u64);
+
+    let (r, c) = xh.overflowing_sub(b);
+    r.wrapping_sub(0u32.wrapping_sub(c as u32) as u64)
 }

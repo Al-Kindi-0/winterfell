@@ -19,6 +19,14 @@ bench = false
 name = "fft"
 harness = false
 
+[[bench]]
+name = "field"
+harness = false
+
+[[bench]]
+name = "polynom"
+harness = false
+
 
 [features]
 concurrent = ["utils/concurrent", "std"]
