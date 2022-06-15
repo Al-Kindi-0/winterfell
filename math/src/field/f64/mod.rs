@@ -5,7 +5,8 @@
 
 //! An implementation of a 64-bit STARK-friendly prime field with modulus $2^{64} - 2^{32} + 1$
 //! using Montgomery representation.
-//! Our implementation follows https://eprint.iacr.org/2022/274.pdf
+//! Our implementation follows https://eprint.iacr.org/2022/274.pdf and is constant-time except
+//! for the mont_red_var() function.
 //!
 //! This field supports very fast modular arithmetic and has a number of other attractive
 //! properties, including:
@@ -60,6 +61,11 @@ impl BaseElement {
     /// Montgomery representation.
     pub const fn new(value: u64) -> BaseElement {
         Self(mont_red_cst((value as u128) * (R2 as u128)))
+    }
+
+    /// Returns the non-canonical u64 inner value. 
+    pub const fn inner(&self) -> u64{
+        self.0
     }
 }
 
@@ -265,7 +271,6 @@ impl Sub for BaseElement {
     #[inline]
     #[allow(clippy::suspicious_arithmetic_impl)]
     fn sub(self, rhs: Self) -> Self {
-        // See reference above for more details.
         let (x1, c1) = self.0.overflowing_sub(rhs.0);
         let adj = 0u32.wrapping_sub(c1 as u32);
         Self(x1.wrapping_sub(adj as u64))
@@ -301,7 +306,7 @@ impl Div for BaseElement {
     #[inline]
     #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, rhs: Self) -> Self {
-        self * Self::inv(rhs)
+        self * rhs.inv()
     }
 }
 
@@ -565,9 +570,6 @@ pub const fn mont_red_cst(x: u128) -> u64 {
 /// 0xFFFFFFFFFFFFFFFF if the two values are equal, or 0 otherwise.
 #[inline(always)]
 pub fn equals(lhs: u64, rhs: u64) -> u64 {
-    // Since internal representation is canonical, we can simply
-    // do a xor between the two operands, and then use the same
-    // expression as iszero().
     let t = lhs ^ rhs;
     !((((t | t.wrapping_neg()) as i64) >> 63) as u64)
 }
