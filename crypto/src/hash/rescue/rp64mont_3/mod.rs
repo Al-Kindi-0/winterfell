@@ -6,7 +6,7 @@
 use super::{Digest, ElementHasher, Hasher};
 use core::convert::TryInto;
 use core::ops::Range;
-use math::{batch_inversion, fields::f64m::BaseElement, FieldElement, StarkField};
+use math::{batch_inversion, fields::f64m::{BaseElement, mont_reduce}, FieldElement, StarkField};
 use rayon::iter::IntoParallelRefMutIterator;
 use utils::{batch_iter_mut, iter_mut};
 mod digest;
@@ -828,17 +828,16 @@ impl Rp64_256 {
         return [z0, z1, z2];
     }
 
-    /*
     // The 3*FFT4 representation of the MDS matrix
     const MDS_FREQ_BLOCK_ONE: [i64; 3] = [12, 5154, 65801];
     const MDS_FREQ_BLOCK_TWO: [(i64, i64); 3] = [(-1, -7), (992, -4094), (65528, -255)];
     const MDS_FREQ_BLOCK_THREE: [i64; 3] = [-6, -3042, 65287];
-    */
+    /*
     // The 3FFT4 representation of the New MDS matrix
     const MDS_FREQ_BLOCK_ONE: [i64; 3] = [64, 128, 64];
     const MDS_FREQ_BLOCK_TWO: [(i64, i64); 3] = [(4, -2), (-8, 2), (32, 2)];
     const MDS_FREQ_BLOCK_THREE: [i64; 3] = [-4, -32, 8];
-
+*/
     #[inline(always)]
     fn block3(x: [i64; 3], y: [i64; 3]) -> [i64; 3] {
         let [x0, x1, x2] = x;
@@ -886,10 +885,25 @@ impl Rp64_256 {
 
         let state_h = Self::mds_multiply_freq(state_h);
         let state_l = Self::mds_multiply_freq(state_l);
-
+        let E: u64 = 0xFFFFFFFF;
         for r in 0..STATE_WIDTH {
             let s = state_l[r] as u128 + ((state_h[r] as u128) << 32);
-            result[r] = s.into();
+            //result[r] = s.into();
+            let xh = (s >> 64) as u64;
+            let xl= s as u64;
+            let a = xh;
+            let bc = xl;
+            let c = (bc as u32) as u64;
+            let b = (bc >> 32) as u64;
+            let (res,carry) = c.overflowing_sub(a);
+            let res = res.wrapping_sub(E * (carry as u64));
+            //println!("first carry is {:?}",carry);
+            let res= (res << 32).wrapping_sub(b).wrapping_sub(c);
+            result[r] = BaseElement(res);
+            //println!("carry is {:?}",carry);
+            //let (res, c) = xl.overflowing_sub(BaseElement::MODULUS - ((xh << 32) - xh));
+            //result[r] = BaseElement(res.wrapping_sub(0u32.wrapping_sub(c as u32) as u64));
+
         }
         *state_ = result;
     }

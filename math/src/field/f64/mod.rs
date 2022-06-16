@@ -52,7 +52,7 @@ const ELEMENT_BYTES: usize = core::mem::size_of::<u64>();
 ///
 /// Internal values are stored in the range [0, 2^64). The backing type is `u64`.
 #[derive(Copy, Clone, Debug, Default)]
-pub struct BaseElement(u64);
+pub struct BaseElement(pub u64);
 
 impl BaseElement {
     /// Creates a new field element from the provided `value`. If the value is greater than or
@@ -516,6 +516,25 @@ impl Deserializable for BaseElement {
 
 // HELPER FUNCTIONS
 // ================================================================================================
+
+/// Reduces a 96-bit value by M such that the output is in [0, 2^64) range.
+#[inline(always)]
+fn mod_reduce_96(x_h: u64, x_l: u64) -> u64 {
+    // assume x consists of four 32-bit values: a, b, c, d such that a contains 32 least
+    // significant bits and d contains 32 most significant bits. we break x into corresponding
+    // values as shown below
+    let ab = x_l;
+    let c = x_h;
+    let d = 0_u64;
+
+    // compute c * 2^32 - c; this is guaranteed not to underflow
+    let tmp1 = (c << 32) - c;
+
+    // add temp values and return the result; because each of the temp may be up to 64 bits,
+    // we need to handle potential overflow
+    let (result, over) = ab.overflowing_add(tmp1);
+    result.wrapping_add(E * (over as u64))
+}
 
 /// Reduces a 128-bit value by M such that the output is in [0, 2^64) range.
 ///

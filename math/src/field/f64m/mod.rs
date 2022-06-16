@@ -49,7 +49,7 @@ const G: u64 = 1753635133440165772;
 /// Internal values are stored in Montgomery representation and can be in the range [0; M). The
 /// backing type is `u64`.
 #[derive(Copy, Clone, Debug, Default)]
-pub struct BaseElement(u64);
+pub struct BaseElement(pub u64);
 
 impl BaseElement {
     /// Creates a new field element from the provided `value`; the value is converted into

@@ -3,7 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use math::FieldElement;
+use math::{FieldElement, StarkField};
 use rand_utils::rand_array;
 
 use super::{BaseElement, Rp64_256, BATCH_SIZE, STATE_WIDTH};
@@ -71,12 +71,11 @@ fn check_correctness_mds_freq() {
     for _ in 0..1000 {
         let mut s1: [BaseElement; STATE_WIDTH] = rand_array();
         let mut s2: [BaseElement; STATE_WIDTH] = s1.clone();
-        assert_eq!(
-            Rp64_256::apply_mds(&mut s1),
-            Rp64_256::apply_mds_freq(&mut s2)
-        );
-        //eprintln!("Classical method: {:?} ", s1);
-        //eprintln!("FFT-based method: {:?} ", s2);
+        Rp64_256::apply_mds(&mut s1);
+        Rp64_256::apply_mds_freq(&mut s2);
+        eprintln!("Classical method: {:?} ", s1);
+        eprintln!("FFT-based method: {:?} ", s2);
+        assert_eq!(s1[1].as_int(), s2[1].as_int());
     }
 }
 /*
