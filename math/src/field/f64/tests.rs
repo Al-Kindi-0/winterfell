@@ -4,7 +4,6 @@
 // LICENSE file in the root directory of this source tree.
 
 use super::{
-    //E,
     BaseElement, DeserializationError, FieldElement, Serializable, StarkField, M,
 };
 use crate::field::{CubeExtension, ExtensionOf, QuadExtension};
@@ -32,11 +31,6 @@ fn add() {
     let t = BaseElement::new(M - 1);
     assert_eq!(BaseElement::ZERO, t + BaseElement::ONE);
     assert_eq!(BaseElement::ONE, t + BaseElement::new(2));
-
-    //// test non-canonical representation
-    //let a = BaseElement::new(M - 1) + BaseElement::new(E);
-    //let expected = ((((M - 1 + E) as u128) * 2) % (M as u128)) as u64;
-    //assert_eq!(expected, (a + a).as_int());
 }
 
 #[test]
@@ -72,7 +66,7 @@ fn mul() {
     assert_eq!(BaseElement::ZERO, r * BaseElement::ZERO);
     assert_eq!(r, r * BaseElement::ONE);
 
-    // test multifield::extensions::cubic::tests::bytes_as_elementsplication within bounds
+    // test multiplication within bounds
     assert_eq!(
         BaseElement::from(15u8),
         BaseElement::from(5u8) * BaseElement::from(3u8)
@@ -131,10 +125,6 @@ fn equals() {
     assert_eq!(a, b);
     assert_eq!(a.as_int(), b.as_int());
     assert_eq!(a.to_bytes(), b.to_bytes());
-
-    // but their internal representation is not
-    //assert_ne!(a.0, b.0);
-    //assert_ne!(a.as_bytes(), b.as_bytes());
 }
 
 // ROOTS OF UNITY
