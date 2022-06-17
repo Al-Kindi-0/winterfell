@@ -882,17 +882,8 @@ impl Rp64_256 {
 
         for r in 0..STATE_WIDTH {
             let s = state_l[r] as u128 + ((state_h[r] as u128) << 32);
-            //result[r] = s.into();
             let x_hi = (s >> 64) as u64;
             let x_lo = s as u64;
-            //let xll = (xl as u32) as u64;
-            //let xlh = (xl >> 32) as u64;
-            //let (res, carry) = xll.overflowing_sub(xh);
-            //let res = res.wrapping_sub(0u32.wrapping_sub(carry as u32) as u64);
-            ////println!("first carry is {:?}",carry);
-            //let res = (res << 32).wrapping_sub(xlh).wrapping_sub(xll);
-            //result[r] = BaseElement(res);
-            //println!("carry is {:?}",carry);
             let (res, carry) = x_lo.overflowing_sub(BaseElement::MODULUS - ((x_hi << 32) - x_hi));
             result[r] = BaseElement(res.wrapping_sub(0u32.wrapping_sub(carry as u32) as u64));
         }
