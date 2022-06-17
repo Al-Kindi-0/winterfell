@@ -78,6 +78,31 @@ fn check_correctness_mds_freq() {
         assert_eq!(s1[1].as_int(), s2[1].as_int());
     }
 }
+#[test]
+fn check_u96_reduction(){
+    pub fn mul_small(x: BaseElement, rhs: u32) -> BaseElement {
+        // Since the 'rhs' value is not in Montgomery representation,
+        // we need to do a manual reduction instead.
+        let x = (x.0 as u128) * (rhs as u128);
+        let xl = x as u64;
+        let xh = (x >> 64) as u64;
+
+        // Since rhs <= 2^31 - 1, we have xh <= 2^31 - 2, and
+        // p - xh >= 2^64 - 2^32 - 2^31 + 3, which is close to 2^64;
+        // thus, even if xl was not lower than p, the subtraction
+        // will bring back the value in the proper range, and the
+        // normal subtraction in GF(p) yields the proper result.
+        let (r, c) = xl.overflowing_sub(BaseElement::MODULUS - ((xh << 32) - xh));
+        BaseElement(r.wrapping_sub(0u32.wrapping_sub(c as u32) as u64))
+    }
+
+    let x = BaseElement::new(456813);
+    let y = mul_small(x, u32::MAX as u32);
+    println!("result is {:?}", y);
+    let rhs = BaseElement::new(u32::MAX as u64);
+    println!("expected is {:?}",rhs * x);
+
+}
 /*
 #[test]
 fn check_simd() {
