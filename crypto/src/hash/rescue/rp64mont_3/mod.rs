@@ -630,6 +630,7 @@ impl Rp64_256 {
 
     const MDS_MATRIX_EXPS: [u64; 12] = [0, 0, 1, 0, 3, 5, 1, 8, 12, 3, 16, 10];
     //const MDS_MATRIX_COL: [u64; 12] = [1, 1024, 65536, 8, 4096, 256, 2, 32, 8, 1, 2, 1];
+    const MDS_2_ROW: [u128;12] = [17, 15, 41, 16, 2, 28, 13, 13, 39, 18, 34, 20];
 
     #[inline(always)]
     fn apply_mds(state_: &mut [BaseElement; STATE_WIDTH]) {
@@ -665,7 +666,8 @@ impl Rp64_256 {
         // This is a hacky way of fully unrolling the loop.
         for i in 0..12 {
             if i < STATE_WIDTH {
-                res += (v[(i + r) % STATE_WIDTH] as u128) << Self::MDS_MATRIX_EXPS[i];
+                //res += (v[(i + r) % STATE_WIDTH] as u128) << Self::MDS_MATRIX_EXPS[i];
+                res += (v[(i + r) % STATE_WIDTH] as u128) * Self::MDS_2_ROW[i];
             }
         }
 
@@ -820,16 +822,16 @@ impl Rp64_256 {
         return [z0, z1, z2];
     }
 
-    // The 3*FFT4 representation of the MDS matrix
-    const MDS_FREQ_BLOCK_ONE: [i64; 3] = [12, 5154, 65801];
-    const MDS_FREQ_BLOCK_TWO: [(i64, i64); 3] = [(-1, -7), (992, -4094), (65528, -255)];
-    const MDS_FREQ_BLOCK_THREE: [i64; 3] = [-6, -3042, 65287];
-    /*
-        // The 3FFT4 representation of the New MDS matrix
-        const MDS_FREQ_BLOCK_ONE: [i64; 3] = [64, 128, 64];
-        const MDS_FREQ_BLOCK_TWO: [(i64, i64); 3] = [(4, -2), (-8, 2), (32, 2)];
-        const MDS_FREQ_BLOCK_THREE: [i64; 3] = [-4, -32, 8];
-    */
+    //// The 3*FFT4 representation of the MDS matrix
+    //const MDS_FREQ_BLOCK_ONE: [i64; 3] = [12, 5154, 65801];
+    //const MDS_FREQ_BLOCK_TWO: [(i64, i64); 3] = [(-1, -7), (992, -4094), (65528, -255)];
+    //const MDS_FREQ_BLOCK_THREE: [i64; 3] = [-6, -3042, 65287];
+
+    // The 3FFT4 representation of the New MDS matrix
+    const MDS_FREQ_BLOCK_ONE: [i64; 3] = [64, 128, 64];
+    const MDS_FREQ_BLOCK_TWO: [(i64, i64); 3] = [(4, -2), (-8, 2), (32, 2)];
+    const MDS_FREQ_BLOCK_THREE: [i64; 3] = [-4, -32, 8];
+
     #[inline(always)]
     fn block3(x: [i64; 3], y: [i64; 3]) -> [i64; 3] {
         let [x0, x1, x2] = x;
@@ -870,7 +872,7 @@ impl Rp64_256 {
         let mut state_h = [0u64; STATE_WIDTH];
 
         for r in 0..STATE_WIDTH {
-            let s = state_[r].as_int();
+            let s = state_[r].inner(); //We take the inner value representing x in Mont form i.e. x*2^64 mod M
             state_h[r] = s >> 32;
             state_l[r] = (s as u32) as u64;
         }
@@ -881,18 +883,18 @@ impl Rp64_256 {
         for r in 0..STATE_WIDTH {
             let s = state_l[r] as u128 + ((state_h[r] as u128) << 32);
             //result[r] = s.into();
-            let xh = (s >> 64) as u64;
-            let xl = s as u64;
-            let xll = (xl as u32) as u64;
-            let xlh = (xl >> 32) as u64;
-            let (res, carry) = xll.overflowing_sub(xh);
-            let res = res.wrapping_sub(0u32.wrapping_sub(carry as u32) as u64);
-            //println!("first carry is {:?}",carry);
-            let res = (res << 32).wrapping_sub(xlh).wrapping_sub(xll);
-            result[r] = BaseElement(res);
+            let x_hi = (s >> 64) as u64;
+            let x_lo = s as u64;
+            //let xll = (xl as u32) as u64;
+            //let xlh = (xl >> 32) as u64;
+            //let (res, carry) = xll.overflowing_sub(xh);
+            //let res = res.wrapping_sub(0u32.wrapping_sub(carry as u32) as u64);
+            ////println!("first carry is {:?}",carry);
+            //let res = (res << 32).wrapping_sub(xlh).wrapping_sub(xll);
+            //result[r] = BaseElement(res);
             //println!("carry is {:?}",carry);
-            //let (res, c) = xl.overflowing_sub(BaseElement::MODULUS - ((xh << 32) - xh));
-            //result[r] = BaseElement(res.wrapping_sub(0u32.wrapping_sub(c as u32) as u64));
+            let (res, carry) = x_lo.overflowing_sub(BaseElement::MODULUS - ((x_hi << 32) - x_hi));
+            result[r] = BaseElement(res.wrapping_sub(0u32.wrapping_sub(carry as u32) as u64));
         }
         *state_ = result;
     }

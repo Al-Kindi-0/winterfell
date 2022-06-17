@@ -674,8 +674,8 @@ impl Rp64_256 {
         // This is a hacky way of fully unrolling the loop.
         for i in 0..12 {
             if i < STATE_WIDTH {
-                res += (v[(i + r) % STATE_WIDTH] as u128) << Self::MDS_MATRIX_EXPS[i];
-                //res += (v[(i + r) % STATE_WIDTH] as u128) * Self::MDS_2_ROW[i];
+                //res += (v[(i + r) % STATE_WIDTH] as u128) << Self::MDS_MATRIX_EXPS[i];
+                res += (v[(i + r) % STATE_WIDTH] as u128) * Self::MDS_2_ROW[i];
             }
         }
 
@@ -831,17 +831,16 @@ impl Rp64_256 {
     }
 
     
-    // The 3*FFT4 representation of the MDS matrix
-    const MDS_FREQ_BLOCK_ONE: [i64; 3] = [12, 5154, 65801];
-    const MDS_FREQ_BLOCK_TWO: [(i64, i64); 3] = [(-1, -7), (992, -4094), (65528, -255)];
-    const MDS_FREQ_BLOCK_THREE: [i64; 3] = [-6, -3042, 65287];
+    //// The 3*FFT4 representation of the MDS matrix
+    //const MDS_FREQ_BLOCK_ONE: [i64; 3] = [12, 5154, 65801];
+    //const MDS_FREQ_BLOCK_TWO: [(i64, i64); 3] = [(-1, -7), (992, -4094), (65528, -255)];
+    //const MDS_FREQ_BLOCK_THREE: [i64; 3] = [-6, -3042, 65287];
     
-   /*
     // The 3FFT4 representation of the New MDS matrix
     const MDS_FREQ_BLOCK_ONE: [i64; 3] = [64, 128, 64];
     const MDS_FREQ_BLOCK_TWO: [(i64, i64); 3] = [(4, -2), (-8, 2), (32, 2)];
     const MDS_FREQ_BLOCK_THREE: [i64; 3] = [-4, -32, 8];
-*/
+    
     #[inline(always)]
     fn block3(x: [i64; 3], y: [i64; 3]) -> [i64; 3] {
         let [x0, x1, x2] = x;
@@ -900,26 +899,13 @@ impl Rp64_256 {
 }
 
 fn mod_reduce_96(s: u128) -> u64 {
-    let E: u64 = 0xFFFFFFFF;
-    // assume x consists of four 32-bit values: a, b, c, d such that a contains 32 least
-    // significant bits and d contains 32 most significant bits. we break x into corresponding
-    // values as shown below
-    let x_l  = s as u64;
-    let x_h = (s >> 64) as u64;
-    let ab = x_l;
-    let c = x_h;
+    let x_lo  = s as u64;
+    let x_hi = (s >> 64) as u64;
 
-    // compute c * 2^32 - c; this is guaranteed not to underflow
-    let tmp1 = (c << 32) - c;
+    let z = (x_hi << 32) - x_hi;
+    let (result, over) = x_lo.overflowing_add(z);
 
-    // add temp values and return the result; because each of the temp may be up to 64 bits,
-    // we need to handle potential overflow
-    let (result, over) = ab.overflowing_add(tmp1);
-    //let result = 
-    result.wrapping_add(E * (over as u64))
-    //;
-    //if result > BaseElement::MODULUS {result - BaseElement::MODULUS}
-    //else {result}
+    result.wrapping_add(0u32.wrapping_sub(over as u32) as u64)
 }
 
 
