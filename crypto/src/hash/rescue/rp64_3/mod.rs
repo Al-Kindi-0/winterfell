@@ -6,7 +6,7 @@
 use super::{Digest, ElementHasher, Hasher};
 use core::convert::TryInto;
 use core::ops::Range;
-use math::{batch_inversion, fields::f64::BaseElement, FieldElement, StarkField};
+use math::{batch_inversion, fields::f64::{BaseElement, reduce_u96}, FieldElement, StarkField};
 use rayon::iter::IntoParallelRefMutIterator;
 use utils::{batch_iter_mut, iter_mut};
 mod digest;
@@ -892,22 +892,11 @@ impl Rp64_256 {
         for r in 0..STATE_WIDTH {
             let s = state_l[r] as u128 + ((state_h[r] as u128) << 32);
             //result[r] = s.into();
-            result[r] = BaseElement(mod_reduce_96(s));
+            result[r] = reduce_u96(s);
         }
         *state_ = result;
     }
 }
-
-fn mod_reduce_96(s: u128) -> u64 {
-    let x_lo  = s as u64;
-    let x_hi = (s >> 64) as u64;
-
-    let z = (x_hi << 32) - x_hi;
-    let (result, over) = x_lo.overflowing_add(z);
-
-    result.wrapping_add(0u32.wrapping_sub(over as u32) as u64)
-}
-
 
 // MDS
 // ================================================================================================

@@ -75,27 +75,37 @@ fn check_correctness_mds_freq() {
         Rp64_256::apply_mds_freq(&mut s2);
         eprintln!("Classical method: {:?} ", s1);
         eprintln!("FFT-based method: {:?} ", s2);
-        assert_eq!(s1[1].as_int(), s2[1].as_int());
+        for i in 0..STATE_WIDTH {
+            assert_eq!(s1[i].as_int(), s2[i].as_int());
+        }
     }
 }
 #[test]
-fn check_u96_reduction(){
+fn check_u96_reduction() {
+    
     pub fn mul_small(x: BaseElement, rhs: u32) -> BaseElement {
         let x = (x.0 as u128) * (rhs as u128);
         let xl = x as u64;
         let xh = (x >> 64) as u64;
 
         let (r, c) = xl.overflowing_sub(BaseElement::MODULUS - ((xh << 32) - xh));
-        BaseElement(r.wrapping_sub(0u32.wrapping_sub(c as u32) as u64))
+        println!("Carry is {:?}", c);
+        let felt1 = BaseElement(r.wrapping_sub(0u32.wrapping_sub(c as u32) as u64));
+
+        let z = (xh << 32) - xh;
+        let (result, over) = xl.overflowing_add(z);
+        let felt2 = BaseElement(result.wrapping_add(0u32.wrapping_sub(over as u32) as u64));
+        felt1
     }
 
     // The argument from the original implementation seems to work for all u32 and not only u31.
-    let x = BaseElement(BaseElement::MODULUS - 3);
+    // Indeed, this is true if the x is already modulo p, which is the case in our implementation.
+    let x = BaseElement(u64::MAX - 1);
     let y = mul_small(x, u32::MAX as u32);
     println!("x is {:?}", x);
     println!("result is {:?}", y);
     let rhs = BaseElement::new(u32::MAX as u64);
-    println!("expected is {:?}",rhs * x);
+    println!("expected is {:?}", rhs * x);
 }
 /*
 #[test]

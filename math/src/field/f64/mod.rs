@@ -517,12 +517,19 @@ impl Deserializable for BaseElement {
 // HELPER FUNCTIONS
 // ================================================================================================
 
-/// Reduces a 96-bit value by M such that the output is in [0, 2^64) range.
+// Reduce an element in the range [0, 2^96). The caller must insure that x is in [0,2^96).
 #[inline(always)]
-fn mod_reduce_96(x_hi: u64, x_lo: u64) -> u64 {
+pub fn reduce_u96(x: u128) -> BaseElement {
+    let x_hi = (x >> 64) as u64;
+    let x_lo = x as u64;
     let z = (x_hi << 32) - x_hi;
     let (result, over) = x_lo.overflowing_add(z);
-    result.wrapping_add(0u32.wrapping_sub(over as u32) as u64)
+
+    BaseElement(result.wrapping_add(0u32.wrapping_sub(over as u32) as u64))
+
+    //let (res, carry) = x_lo.overflowing_sub(BaseElement::MODULUS - ((x_hi << 32) - x_hi));
+
+    //BaseElement(res.wrapping_sub(0u32.wrapping_sub(carry as u32) as u64))
 }
 
 /// Reduces a 128-bit value by M such that the output is in [0, 2^64) range.

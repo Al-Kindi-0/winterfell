@@ -8,7 +8,7 @@ use core::convert::TryInto;
 use core::ops::Range;
 use math::{
     batch_inversion,
-    fields::f64m::{mont_reduce, BaseElement},
+    fields::f64m::{mont_reduce, BaseElement, reduce_u96},
     FieldElement, StarkField,
 };
 use rayon::iter::IntoParallelRefMutIterator;
@@ -882,10 +882,7 @@ impl Rp64_256 {
 
         for r in 0..STATE_WIDTH {
             let s = state_l[r] as u128 + ((state_h[r] as u128) << 32);
-            let x_hi = (s >> 64) as u64;
-            let x_lo = s as u64;
-            let (res, carry) = x_lo.overflowing_sub(BaseElement::MODULUS - ((x_hi << 32) - x_hi));
-            result[r] = BaseElement(res.wrapping_sub(0u32.wrapping_sub(carry as u32) as u64));
+            result[r] = reduce_u96(s);
         }
         *state_ = result;
     }
