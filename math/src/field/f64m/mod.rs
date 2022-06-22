@@ -555,6 +555,7 @@ impl Deserializable for BaseElement {
     }
 }
 
+#[inline(always)]
 pub fn mont_reduce(x: u128) -> u64 {
     const NPRIME: u64 = 4294967297;
     let q = (((x as u64) as u128) * (NPRIME as u128)) as u64;
@@ -567,7 +568,9 @@ pub fn mont_reduce(x: u128) -> u64 {
     };
 }
 
-// Reduce an element in the range [0, 2^96). The caller must insure that x is in [0,2^96).
+// Reduce an element in the range [0, 2^96) that is already in Montgomery form.
+// The caller must insure that x is in [0,2^96) and is in Montgomery form.
+#[inline(always)]
 pub fn reduce_u96(x: u128) -> BaseElement {
     let x_hi = (x >> 64) as u64;
     let x_lo = x as u64;

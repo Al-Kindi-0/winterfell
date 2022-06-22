@@ -7,7 +7,7 @@
 use super::{exp_acc, Digest, ElementHasher, Hasher};
 use core::convert::TryInto;
 use core::ops::Range;
-use math::{fields::f64::BaseElement, FieldElement, StarkField};
+use math::{fields::f64::{BaseElement, reduce_u96}, FieldElement, StarkField};
 
 mod digest;
 pub use digest::ElementDigest;
@@ -703,7 +703,7 @@ impl Rp64_256 {
 
         for r in 0..STATE_WIDTH {
             let s = state_l[r] as u128 + ((state_h[r] as u128) << 32);
-            result[r] = s.into();
+            result[r] = reduce_u96(s);
         }
         *state_ = result;
     }
@@ -746,9 +746,9 @@ impl Rp64_256 {
 
         for r in 0..STATE_WIDTH {
             let s = state_l[r] as u128 + ((state_h[r] as u128) << 32);
-            result[r] = s.into();
+            result[r] = reduce_u96(s);
         }
-        result[0] += state_[0] * BaseElement::from(8u64);
+        //result[0] += state_[0] * BaseElement::from(8u64);
         *state_ = result;
     }
 
@@ -851,7 +851,7 @@ impl Rp64_256 {
             state[6 + i] = x2 as u64;
             state[9 + i] = x3 as u64;
         }
-        state[0] += diag_entry * 8;
+        //state[0] += diag_entry * 8;
         return *state;
     }
 
@@ -875,7 +875,7 @@ impl Rp64_256 {
 
         for r in 0..STATE_WIDTH {
             let s = state_l[r] as u128 + ((state_h[r] as u128) << 32);
-            result[r] = s.into();
+            result[r] = reduce_u96(s); 
         }
         *state_ = result;
     }
