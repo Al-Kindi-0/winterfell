@@ -274,7 +274,7 @@ fn rescue256_montgomery_permutation(c: &mut Criterion) {
         v[i] = s;
     }
     
-    c.bench_function("hash_rp64m (FB) (FB) (FB) (FB) (FB) (FB) (FB) Permutation: Naive MDS (Original) mul", |bench| {
+    c.bench_function("hash_rp64m (FB) (FB) (FB) (FB) (FB) (FB) (FB) Permutation: (Montgomery) Naive MDS (Original) mul", |bench| {
 
         bench.iter(|| {
             v.iter_mut()
@@ -282,14 +282,14 @@ fn rescue256_montgomery_permutation(c: &mut Criterion) {
         })
     });
     
-    c.bench_function("hash_rp64m (FB) (FB) (FB) (FB) (FB) (FB) (FB) Permutation: FFT MDS (Original) mul", |bench| {
+    c.bench_function("hash_rp64m (FB) (FB) (FB) (FB) (FB) (FB) (FB) Permutation: (Montgomery) FFT MDS (Original) mul", |bench| {
         bench.iter(|| {
             v.iter_mut()
                 .for_each(|a| {Rp_64m_256::apply_permutation_freq_original(black_box( a));})
         })
     });
     
-    c.bench_function("hash_rp64m (FB) (FB) (FB) (FB) (FB) (FB) (FB) Permutation: FFT MDS (New) mul", |bench| {
+    c.bench_function("hash_rp64m (FB) (FB) (FB) (FB) (FB) (FB) (FB) Permutation: (Montgomery) FFT MDS (New) mul", |bench| {
         bench.iter(|| {
             v.iter_mut()
                 .for_each(|a| {Rp_64m_256::apply_permutation_freq(black_box( a));})
