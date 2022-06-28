@@ -268,6 +268,12 @@ impl Rp64_256 {
     /// The output of the hash function can be read from state elements 4, 5, 6, and 7.
     pub const DIGEST_RANGE: Range<usize> = DIGEST_RANGE;
 
+    /// MDS matrix used for computing the linear layer in a Rescue Prime round.
+    pub const MDS: [[BaseElement; STATE_WIDTH]; STATE_WIDTH] = MDS;
+
+    /// Inverse of the MDS matrix.
+    pub const INV_MDS: [[BaseElement; STATE_WIDTH]; STATE_WIDTH] = INV_MDS;
+
     /// Round constants added to the hasher state in the first half of the Rescue Prime round.
     pub const ARK1: [[BaseElement; STATE_WIDTH]; NUM_ROUNDS] = ARK1;
 
@@ -304,34 +310,14 @@ impl Rp64_256 {
     // --------------------------------------------------------------------------------------------
 
     #[inline(always)]
-    fn apply_mds(state_: &mut [BaseElement; STATE_WIDTH]) {
+    fn apply_mds(state: &mut [BaseElement; STATE_WIDTH]) {
         let mut result = [BaseElement::ZERO; STATE_WIDTH];
-
-        // Using the linearity of the operations we can split the state into a low||high decomposition
-        // and operate on each with no overflow and then combine/reduce the result to a field element.
-        let mut state_l = [0u64; STATE_WIDTH];
-        let mut state_h = [0u64; STATE_WIDTH];
-
-        for r in 0..STATE_WIDTH {
-            let s = state_[r].inner();
-            state_h[r] = s >> 32;
-            state_l[r] = (s as u32) as u64;
-        }
-
-        let state_h = Self::mds_multiply_freq(state_h);
-        let state_l = Self::mds_multiply_freq(state_l);
-
-        for r in 0..STATE_WIDTH {
-            let s = state_l[r] as u128 + ((state_h[r] as u128) << 32);
-            let s_hi = (s >> 64) as u64;
-            let s_lo = s as u64;
-            let z = (s_hi << 32) - s_hi;
-            let (res, over) = s_lo.overflowing_add(z);
-
-            result[r] =
-                BaseElement::new_unsafe(res.wrapping_add(0u32.wrapping_sub(over as u32) as u64));
-        }
-        *state_ = result;
+        result.iter_mut().zip(MDS).for_each(|(r, mds_row)| {
+            state.iter().zip(mds_row).for_each(|(&s, m)| {
+                *r += m * s;
+            });
+        });
+        *state = result
     }
 
     #[inline(always)]
@@ -341,26 +327,11 @@ impl Rp64_256 {
 
     #[inline(always)]
     fn apply_sbox(state: &mut [BaseElement; STATE_WIDTH]) {
-        state[0] = Self::pow_7(state[0]);
-        state[1] = Self::pow_7(state[1]);
-        state[2] = Self::pow_7(state[2]);
-        state[3] = Self::pow_7(state[3]);
-        state[4] = Self::pow_7(state[4]);
-        state[5] = Self::pow_7(state[5]);
-        state[6] = Self::pow_7(state[6]);
-        state[7] = Self::pow_7(state[7]);
-        state[8] = Self::pow_7(state[8]);
-        state[9] = Self::pow_7(state[9]);
-        state[10] = Self::pow_7(state[10]);
-        state[11] = Self::pow_7(state[11]);
-    }
-
-    #[inline(always)]
-    fn pow_7(x: BaseElement) -> BaseElement {
-        let x2 = x.square();
-        let x4 = x2.square();
-        let x3 = x * x2;
-        x3 * x4
+        state.iter_mut().for_each(|v| {
+            let t2 = v.square();
+            let t4 = t2.square();
+            *v *= t2 * t4;
+        });
     }
 
     #[inline(always)]
@@ -398,137 +369,356 @@ impl Rp64_256 {
             *s = a * b;
         }
     }
-
-    // FFT MDS MULTIPLICATION HELPER FUNCTIONS
-    // --------------------------------------------------------------------------------------------
-
-    // We use split 3 x 4 FFT transform in order to transform our vectors into the frequency domain.
-    #[inline(always)]
-    fn mds_multiply_freq(state: [u64; 12]) -> [u64; 12] {
-        let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = state;
-
-        let (u0, u1, u2) = Self::fft4_real([s0, s3, s6, s9]);
-        let (u4, u5, u6) = Self::fft4_real([s1, s4, s7, s10]);
-        let (u8, u9, u10) = Self::fft4_real([s2, s5, s8, s11]);
-
-        // The 4th block is not computed as it is similar to the 2nd one, up to complex conjugation,
-        // and due to the use of the real FFT and iFFT is redundant.
-        let [v0, v4, v8] = Self::block1([u0, u4, u8], MDS_FREQ_BLOCK_ONE);
-        let [v1, v5, v9] = Self::block2([u1, u5, u9], MDS_FREQ_BLOCK_TWO);
-        let [v2, v6, v10] = Self::block3([u2, u6, u10], MDS_FREQ_BLOCK_THREE);
-
-        let [s0, s3, s6, s9] = Self::ifft4_real((v0, v1, v2));
-        let [s1, s4, s7, s10] = Self::ifft4_real((v4, v5, v6));
-        let [s2, s5, s8, s11] = Self::ifft4_real((v8, v9, v10));
-
-        return [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11];
-    }
-
-    // We use the real FFT to avoid redundant computations. See https://www.mdpi.com/2076-3417/12/9/4700
-    #[inline(always)]
-    fn fft2_real(x: [u64; 2]) -> [i64; 2] {
-        return [(x[0] as i64 + x[1] as i64), (x[0] as i64 - x[1] as i64)];
-    }
-
-    #[inline(always)]
-    fn ifft2_real(y: [i64; 2]) -> [u64; 2] {
-        return [(y[0] + y[1]) as u64 >> 1, (y[0] - y[1]) as u64 >> 1];
-    }
-
-    #[inline(always)]
-    fn fft4_real(x: [u64; 4]) -> (i64, (i64, i64), i64) {
-        let [z0, z2] = Self::fft2_real([x[0], x[2]]);
-        let [z1, z3] = Self::fft2_real([x[1], x[3]]);
-        let y0 = z0 + z1;
-        let y1 = (z2, -z3);
-        let y2 = z0 - z1;
-        return (y0, y1, y2);
-    }
-
-    #[inline(always)]
-    fn ifft4_real(y: (i64, (i64, i64), i64)) -> [u64; 4] {
-        let z0 = (y.0 + y.2) >> 1;
-        let z1 = (y.0 - y.2) >> 1;
-        let z2 = y.1 .0;
-        let z3 = -y.1 .1;
-
-        let [x0, x2] = Self::ifft2_real([z0, z2]);
-        let [x1, x3] = Self::ifft2_real([z1, z3]);
-
-        return [x0, x1, x2, x3];
-    }
-
-    #[inline(always)]
-    fn block1(x: [i64; 3], y: [i64; 3]) -> [i64; 3] {
-        let [x0, x1, x2] = x;
-        let [y0, y1, y2] = y;
-        let z0 = x0 * y0 + x1 * y2 + x2 * y1;
-        let z1 = x0 * y1 + x1 * y0 + x2 * y2;
-        let z2 = x0 * y2 + x1 * y1 + x2 * y0;
-
-        return [z0, z1, z2];
-    }
-
-    #[inline(always)]
-    fn block2(x: [(i64, i64); 3], y: [(i64, i64); 3]) -> [(i64, i64); 3] {
-        let [(x0r, x0i), (x1r, x1i), (x2r, x2i)] = x;
-        let [(y0r, y0i), (y1r, y1i), (y2r, y2i)] = y;
-        let x0s = x0r + x0i;
-        let x1s = x1r + x1i;
-        let x2s = x2r + x2i;
-        let y0s = y0r + y0i;
-        let y1s = y1r + y1i;
-        let y2s = y2r + y2i;
-
-        // Compute x0​y0 ​− ix1​y2​ − ix2​y1​ using Karatsuba for complex numbers multiplication
-        let m0 = (x0r * y0r, x0i * y0i);
-        let m1 = (x1r * y2r, x1i * y2i);
-        let m2 = (x2r * y1r, x2i * y1i);
-        let z0r = (m0.0 - m0.1) + (x1s * y2s - m1.0 - m1.1) + (x2s * y1s - m2.0 - m2.1);
-        let z0i = (x0s * y0s - m0.0 - m0.1) + (-m1.0 + m1.1) + (-m2.0 + m2.1);
-        let z0 = (z0r, z0i);
-
-        // Compute x0​y1​ + x1​y0​ − ix2​y2 using Karatsuba for complex numbers multiplication
-        let m0 = (x0r * y1r, x0i * y1i);
-        let m1 = (x1r * y0r, x1i * y0i);
-        let m2 = (x2r * y2r, x2i * y2i);
-        let z1r = (m0.0 - m0.1) + (m1.0 - m1.1) + (x2s * y2s - m2.0 - m2.1);
-        let z1i = (x0s * y1s - m0.0 - m0.1) + (x1s * y0s - m1.0 - m1.1) + (-m2.0 + m2.1);
-        let z1 = (z1r, z1i);
-
-        // Compute x0​y2​ + x1​y1 ​+ x2​y0​ using Karatsuba for complex numbers multiplication
-        let m0 = (x0r * y2r, x0i * y2i);
-        let m1 = (x1r * y1r, x1i * y1i);
-        let m2 = (x2r * y0r, x2i * y0i);
-        let z2r = (m0.0 - m0.1) + (m1.0 - m1.1) + (m2.0 - m2.1);
-        let z2i = (x0s * y2s - m0.0 - m0.1) + (x1s * y1s - m1.0 - m1.1) + (x2s * y0s - m2.0 - m2.1);
-        let z2 = (z2r, z2i);
-
-        return [z0, z1, z2];
-    }
-
-    #[inline(always)]
-    fn block3(x: [i64; 3], y: [i64; 3]) -> [i64; 3] {
-        let [x0, x1, x2] = x;
-        let [y0, y1, y2] = y;
-        let z0 = x0 * y0 - x1 * y2 - x2 * y1;
-        let z1 = x0 * y1 + x1 * y0 - x2 * y2;
-        let z2 = x0 * y2 + x1 * y1 + x2 * y0;
-
-        return [z0, z1, z2];
-    }
 }
 
 // MDS
 // ================================================================================================
-/// Rescue MDS matrix in frequency domain. More precisely, this is the output of the 3 4-point 
-/// (real) FFT i.e. just before the multiplication with the appropriate twiddle factors and 
-/// application of the final 4 3-point FFT to get the represention of the MDS matrix, which is
-/// the circular matrix with first row [17, 15, 41, 16, 2, 28, 13, 13, 39, 18, 34, 20],
-/// in frequency domain.
-const MDS_FREQ_BLOCK_ONE: [i64; 3] = [64, 128, 64];
-const MDS_FREQ_BLOCK_TWO: [(i64, i64); 3] = [(4, -2), (-8, 2), (32, 2)];
-const MDS_FREQ_BLOCK_THREE: [i64; 3] = [-4, -32, 8];
+/// Rescue MDS matrix
+/// Computed using algorithm 4 from <https://eprint.iacr.org/2020/1143.pdf>
+const MDS: [[BaseElement; STATE_WIDTH]; STATE_WIDTH] = [
+    [
+        BaseElement::new(2108866337646019936),
+        BaseElement::new(11223275256334781131),
+        BaseElement::new(2318414738826783588),
+        BaseElement::new(11240468238955543594),
+        BaseElement::new(8007389560317667115),
+        BaseElement::new(11080831380224887131),
+        BaseElement::new(3922954383102346493),
+        BaseElement::new(17194066286743901609),
+        BaseElement::new(152620255842323114),
+        BaseElement::new(7203302445933022224),
+        BaseElement::new(17781531460838764471),
+        BaseElement::new(2306881200),
+    ],
+    [
+        BaseElement::new(3368836954250922620),
+        BaseElement::new(5531382716338105518),
+        BaseElement::new(7747104620279034727),
+        BaseElement::new(14164487169476525880),
+        BaseElement::new(4653455932372793639),
+        BaseElement::new(5504123103633670518),
+        BaseElement::new(3376629427948045767),
+        BaseElement::new(1687083899297674997),
+        BaseElement::new(8324288417826065247),
+        BaseElement::new(17651364087632826504),
+        BaseElement::new(15568475755679636039),
+        BaseElement::new(4656488262337620150),
+    ],
+    [
+        BaseElement::new(2560535215714666606),
+        BaseElement::new(10793518538122219186),
+        BaseElement::new(408467828146985886),
+        BaseElement::new(13894393744319723897),
+        BaseElement::new(17856013635663093677),
+        BaseElement::new(14510101432365346218),
+        BaseElement::new(12175743201430386993),
+        BaseElement::new(12012700097100374591),
+        BaseElement::new(976880602086740182),
+        BaseElement::new(3187015135043748111),
+        BaseElement::new(4630899319883688283),
+        BaseElement::new(17674195666610532297),
+    ],
+    [
+        BaseElement::new(10940635879119829731),
+        BaseElement::new(9126204055164541072),
+        BaseElement::new(13441880452578323624),
+        BaseElement::new(13828699194559433302),
+        BaseElement::new(6245685172712904082),
+        BaseElement::new(3117562785727957263),
+        BaseElement::new(17389107632996288753),
+        BaseElement::new(3643151412418457029),
+        BaseElement::new(10484080975961167028),
+        BaseElement::new(4066673631745731889),
+        BaseElement::new(8847974898748751041),
+        BaseElement::new(9548808324754121113),
+    ],
+    [
+        BaseElement::new(15656099696515372126),
+        BaseElement::new(309741777966979967),
+        BaseElement::new(16075523529922094036),
+        BaseElement::new(5384192144218250710),
+        BaseElement::new(15171244241641106028),
+        BaseElement::new(6660319859038124593),
+        BaseElement::new(6595450094003204814),
+        BaseElement::new(15330207556174961057),
+        BaseElement::new(2687301105226976975),
+        BaseElement::new(15907414358067140389),
+        BaseElement::new(2767130804164179683),
+        BaseElement::new(8135839249549115549),
+    ],
+    [
+        BaseElement::new(14687393836444508153),
+        BaseElement::new(8122848807512458890),
+        BaseElement::new(16998154830503301252),
+        BaseElement::new(2904046703764323264),
+        BaseElement::new(11170142989407566484),
+        BaseElement::new(5448553946207765015),
+        BaseElement::new(9766047029091333225),
+        BaseElement::new(3852354853341479440),
+        BaseElement::new(14577128274897891003),
+        BaseElement::new(11994931371916133447),
+        BaseElement::new(8299269445020599466),
+        BaseElement::new(2859592328380146288),
+    ],
+    [
+        BaseElement::new(4920761474064525703),
+        BaseElement::new(13379538658122003618),
+        BaseElement::new(3169184545474588182),
+        BaseElement::new(15753261541491539618),
+        BaseElement::new(622292315133191494),
+        BaseElement::new(14052907820095169428),
+        BaseElement::new(5159844729950547044),
+        BaseElement::new(17439978194716087321),
+        BaseElement::new(9945483003842285313),
+        BaseElement::new(13647273880020281344),
+        BaseElement::new(14750994260825376),
+        BaseElement::new(12575187259316461486),
+    ],
+    [
+        BaseElement::new(3371852905554824605),
+        BaseElement::new(8886257005679683950),
+        BaseElement::new(15677115160380392279),
+        BaseElement::new(13242906482047961505),
+        BaseElement::new(12149996307978507817),
+        BaseElement::new(1427861135554592284),
+        BaseElement::new(4033726302273030373),
+        BaseElement::new(14761176804905342155),
+        BaseElement::new(11465247508084706095),
+        BaseElement::new(12112647677590318112),
+        BaseElement::new(17343938135425110721),
+        BaseElement::new(14654483060427620352),
+    ],
+    [
+        BaseElement::new(5421794552262605237),
+        BaseElement::new(14201164512563303484),
+        BaseElement::new(5290621264363227639),
+        BaseElement::new(1020180205893205576),
+        BaseElement::new(14311345105258400438),
+        BaseElement::new(7828111500457301560),
+        BaseElement::new(9436759291445548340),
+        BaseElement::new(5716067521736967068),
+        BaseElement::new(15357555109169671716),
+        BaseElement::new(4131452666376493252),
+        BaseElement::new(16785275933585465720),
+        BaseElement::new(11180136753375315897),
+    ],
+    [
+        BaseElement::new(10451661389735482801),
+        BaseElement::new(12128852772276583847),
+        BaseElement::new(10630876800354432923),
+        BaseElement::new(6884824371838330777),
+        BaseElement::new(16413552665026570512),
+        BaseElement::new(13637837753341196082),
+        BaseElement::new(2558124068257217718),
+        BaseElement::new(4327919242598628564),
+        BaseElement::new(4236040195908057312),
+        BaseElement::new(2081029262044280559),
+        BaseElement::new(2047510589162918469),
+        BaseElement::new(6835491236529222042),
+    ],
+    [
+        BaseElement::new(5675273097893923172),
+        BaseElement::new(8120839782755215647),
+        BaseElement::new(9856415804450870143),
+        BaseElement::new(1960632704307471239),
+        BaseElement::new(15279057263127523057),
+        BaseElement::new(17999325337309257121),
+        BaseElement::new(72970456904683065),
+        BaseElement::new(8899624805082057509),
+        BaseElement::new(16980481565524365258),
+        BaseElement::new(6412696708929498357),
+        BaseElement::new(13917768671775544479),
+        BaseElement::new(5505378218427096880),
+    ],
+    [
+        BaseElement::new(10318314766641004576),
+        BaseElement::new(17320192463105632563),
+        BaseElement::new(11540812969169097044),
+        BaseElement::new(7270556942018024148),
+        BaseElement::new(4755326086930560682),
+        BaseElement::new(2193604418377108959),
+        BaseElement::new(11681945506511803967),
+        BaseElement::new(8000243866012209465),
+        BaseElement::new(6746478642521594042),
+        BaseElement::new(12096331252283646217),
+        BaseElement::new(13208137848575217268),
+        BaseElement::new(5548519654341606996),
+    ],
+];
+
+/// Rescue Inverse MDS matrix
+/// Computed using algorithm 4 from <https://eprint.iacr.org/2020/1143.pdf> and then
+/// inverting the resulting matrix.
+const INV_MDS: [[BaseElement; STATE_WIDTH]; STATE_WIDTH] = [
+    [
+        BaseElement::new(1025714968950054217),
+        BaseElement::new(2820417286206414279),
+        BaseElement::new(4993698564949207576),
+        BaseElement::new(12970218763715480197),
+        BaseElement::new(15096702659601816313),
+        BaseElement::new(5737881372597660297),
+        BaseElement::new(13327263231927089804),
+        BaseElement::new(4564252978131632277),
+        BaseElement::new(16119054824480892382),
+        BaseElement::new(6613927186172915989),
+        BaseElement::new(6454498710731601655),
+        BaseElement::new(2510089799608156620),
+    ],
+    [
+        BaseElement::new(14311337779007263575),
+        BaseElement::new(10306799626523962951),
+        BaseElement::new(7776331823117795156),
+        BaseElement::new(4922212921326569206),
+        BaseElement::new(8669179866856828412),
+        BaseElement::new(936244772485171410),
+        BaseElement::new(4077406078785759791),
+        BaseElement::new(2938383611938168107),
+        BaseElement::new(16650590241171797614),
+        BaseElement::new(16578411244849432284),
+        BaseElement::new(17600191004694808340),
+        BaseElement::new(5913375445729949081),
+    ],
+    [
+        BaseElement::new(13640353831792923980),
+        BaseElement::new(1583879644687006251),
+        BaseElement::new(17678309436940389401),
+        BaseElement::new(6793918274289159258),
+        BaseElement::new(3594897835134355282),
+        BaseElement::new(2158539885379341689),
+        BaseElement::new(12473871986506720374),
+        BaseElement::new(14874332242561185932),
+        BaseElement::new(16402478875851979683),
+        BaseElement::new(9893468322166516227),
+        BaseElement::new(8142413325661539529),
+        BaseElement::new(3444000755516388321),
+    ],
+    [
+        BaseElement::new(14009777257506018221),
+        BaseElement::new(18218829733847178457),
+        BaseElement::new(11151899210182873569),
+        BaseElement::new(14653120475631972171),
+        BaseElement::new(9591156713922565586),
+        BaseElement::new(16622517275046324812),
+        BaseElement::new(3958136700677573712),
+        BaseElement::new(2193274161734965529),
+        BaseElement::new(15125079516929063010),
+        BaseElement::new(3648852869044193741),
+        BaseElement::new(4405494440143722315),
+        BaseElement::new(15549070131235639125),
+    ],
+    [
+        BaseElement::new(14324333194410783741),
+        BaseElement::new(12565645879378458115),
+        BaseElement::new(4028590290335558535),
+        BaseElement::new(17936155181893467294),
+        BaseElement::new(1833939650657097992),
+        BaseElement::new(14310984655970610026),
+        BaseElement::new(4701042357351086687),
+        BaseElement::new(1226379890265418475),
+        BaseElement::new(2550212856624409740),
+        BaseElement::new(5670703442709406167),
+        BaseElement::new(3281485106506301394),
+        BaseElement::new(9804247840970323440),
+    ],
+    [
+        BaseElement::new(7778523590474814059),
+        BaseElement::new(7154630063229321501),
+        BaseElement::new(17790326505487126055),
+        BaseElement::new(3160574440608126866),
+        BaseElement::new(7292349907185131376),
+        BaseElement::new(1916491575080831825),
+        BaseElement::new(11523142515674812675),
+        BaseElement::new(2162357063341827157),
+        BaseElement::new(6650415936886875699),
+        BaseElement::new(11522955632464608509),
+        BaseElement::new(16740856792338897018),
+        BaseElement::new(16987840393715133187),
+    ],
+    [
+        BaseElement::new(14499296811525152023),
+        BaseElement::new(118549270069446537),
+        BaseElement::new(3041471724857448013),
+        BaseElement::new(3827228106225598612),
+        BaseElement::new(2081369067662751050),
+        BaseElement::new(15406142490454329462),
+        BaseElement::new(8943531526276617760),
+        BaseElement::new(3545513411057560337),
+        BaseElement::new(11433277564645295966),
+        BaseElement::new(9558995950666358829),
+        BaseElement::new(7443251815414752292),
+        BaseElement::new(12335092608217610725),
+    ],
+    [
+        BaseElement::new(184304165023253232),
+        BaseElement::new(11596940249585433199),
+        BaseElement::new(18170668175083122019),
+        BaseElement::new(8318891703682569182),
+        BaseElement::new(4387895409295967519),
+        BaseElement::new(14599228871586336059),
+        BaseElement::new(2861651216488619239),
+        BaseElement::new(567601091253927304),
+        BaseElement::new(10135289435539766316),
+        BaseElement::new(14905738261734377063),
+        BaseElement::new(3345637344934149303),
+        BaseElement::new(3159874422865401171),
+    ],
+    [
+        BaseElement::new(1134458872778032479),
+        BaseElement::new(4102035717681749376),
+        BaseElement::new(14030271225872148070),
+        BaseElement::new(10312336662487337312),
+        BaseElement::new(12938229830489392977),
+        BaseElement::new(17758804398255988457),
+        BaseElement::new(15482323580054918356),
+        BaseElement::new(1010277923244261213),
+        BaseElement::new(12904552397519353856),
+        BaseElement::new(5073478003078459047),
+        BaseElement::new(11514678194579805863),
+        BaseElement::new(4419017610446058921),
+    ],
+    [
+        BaseElement::new(2916054498252226520),
+        BaseElement::new(9880379926449218161),
+        BaseElement::new(15314650755395914465),
+        BaseElement::new(8335514387550394159),
+        BaseElement::new(8955267746483690029),
+        BaseElement::new(16353914237438359160),
+        BaseElement::new(4173425891602463552),
+        BaseElement::new(14892581052359168234),
+        BaseElement::new(17561678290843148035),
+        BaseElement::new(7292975356887551984),
+        BaseElement::new(18039512759118984712),
+        BaseElement::new(5411253583520971237),
+    ],
+    [
+        BaseElement::new(9848042270158364544),
+        BaseElement::new(809689769037458603),
+        BaseElement::new(5884047526712050760),
+        BaseElement::new(12956871945669043745),
+        BaseElement::new(14265127496637532237),
+        BaseElement::new(6211568220597222123),
+        BaseElement::new(678544061771515015),
+        BaseElement::new(16295989318674734123),
+        BaseElement::new(11782767968925152203),
+        BaseElement::new(1359397660819991739),
+        BaseElement::new(16148400912425385689),
+        BaseElement::new(14440017265059055146),
+    ],
+    [
+        BaseElement::new(1634272668217219807),
+        BaseElement::new(16290589064070324125),
+        BaseElement::new(5311838222680798126),
+        BaseElement::new(15044064140936894715),
+        BaseElement::new(15775025788428030421),
+        BaseElement::new(12586374713559327349),
+        BaseElement::new(8118943473454062014),
+        BaseElement::new(13223746794660766349),
+        BaseElement::new(13059674280609257192),
+        BaseElement::new(16605443174349648289),
+        BaseElement::new(13586971219878687822),
+        BaseElement::new(16337009014471658360),
+    ],
+];
 
 // ROUND CONSTANTS
 // ================================================================================================

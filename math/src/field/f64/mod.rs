@@ -67,12 +67,6 @@ impl BaseElement {
     pub const fn inner(&self) -> u64{
         self.0
     }
-
-    /// Returns a new field element from the provided 'value'. Assumes that 'value' is already
-    /// in canonical Montgomery form.
-    pub const fn new_unsafe(value: u64) -> BaseElement {
-        BaseElement(value)
-    }
 }
 
 impl FieldElement for BaseElement {
