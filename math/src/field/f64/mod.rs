@@ -51,7 +51,7 @@ const ELEMENT_BYTES: usize = core::mem::size_of::<u64>();
 // FIELD ELEMENT
 // ================================================================================================
 
-/// Represents base field element in the field.
+/// Represents base field element in the field
 ///
 /// Internal values are stored in the range [0, 2^64). The backing type is `u64`.
 #[derive(Copy, Clone, Debug, Default)]
