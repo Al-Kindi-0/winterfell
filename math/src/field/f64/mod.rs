@@ -67,6 +67,12 @@ impl BaseElement {
     pub const fn inner(&self) -> u64{
         self.0
     }
+
+    /// Returns a new field element from the provided 'value'. Assumes that 'value' is already
+    /// in canonical Montgomery form.
+    pub const fn new_unsafe(value: u64) -> BaseElement {
+        BaseElement(value)
+    }
 }
 
 impl FieldElement for BaseElement {
@@ -137,7 +143,7 @@ impl FieldElement for BaseElement {
     }
 
     fn elements_as_bytes(elements: &[Self]) -> &[u8] {
-        // TODO: take endianness into account
+        // TODO: take endianness into account.
         let p = elements.as_ptr();
         let len = elements.len() * Self::ELEMENT_BYTES;
         unsafe { slice::from_raw_parts(p as *const u8, len) }
