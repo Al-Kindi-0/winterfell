@@ -14,6 +14,9 @@ pub use digest::ElementDigest;
 #[cfg(test)]
 mod tests;
 
+mod mds_freq;
+use mds_freq::mds_multiply_freq;
+
 // CONSTANTS
 // ================================================================================================
 
@@ -268,6 +271,12 @@ impl Rp64_256 {
     /// The output of the hash function can be read from state elements 4, 5, 6, and 7.
     pub const DIGEST_RANGE: Range<usize> = DIGEST_RANGE;
 
+    /// Round constants added to the hasher state in the first half of the Rescue Prime round.
+    pub const ARK1: [[BaseElement; STATE_WIDTH]; NUM_ROUNDS] = ARK1;
+
+    /// Round constants added to the hasher state in the second half of the Rescue Prime round.
+    pub const ARK2: [[BaseElement; STATE_WIDTH]; NUM_ROUNDS] = ARK2;
+
     // RESCUE PERMUTATION
     // --------------------------------------------------------------------------------------------
 
@@ -300,12 +309,32 @@ impl Rp64_256 {
     #[inline(always)]
     fn apply_mds(state: &mut [BaseElement; STATE_WIDTH]) {
         let mut result = [BaseElement::ZERO; STATE_WIDTH];
-        result.iter_mut().zip(MDS).for_each(|(r, mds_row)| {
-            state.iter().zip(mds_row).for_each(|(&s, m)| {
-                *r += m * s;
-            });
-        });
-        *state = result
+
+        // Using the linearity of the operations we can split the state into a low||high decomposition
+        // and operate on each with no overflow and then combine/reduce the result to a field element.
+        let mut state_l = [0u64; STATE_WIDTH];
+        let mut state_h = [0u64; STATE_WIDTH];
+
+        for r in 0..STATE_WIDTH {
+            let s = state[r].inner();
+            state_h[r] = s >> 32;
+            state_l[r] = (s as u32) as u64;
+        }
+
+        let state_h = mds_multiply_freq(state_h);
+        let state_l = mds_multiply_freq(state_l);
+
+        for r in 0..STATE_WIDTH {
+            let s = state_l[r] as u128 + ((state_h[r] as u128) << 32);
+            let s_hi = (s >> 64) as u64;
+            let s_lo = s as u64;
+            let z = (s_hi << 32) - s_hi;
+            let (res, over) = s_lo.overflowing_add(z);
+
+            result[r] =
+                BaseElement::new_unsafe(res.wrapping_add(0u32.wrapping_sub(over as u32) as u64));
+        }
+        *state = result;
     }
 
     #[inline(always)]
@@ -315,11 +344,26 @@ impl Rp64_256 {
 
     #[inline(always)]
     fn apply_sbox(state: &mut [BaseElement; STATE_WIDTH]) {
-        state.iter_mut().for_each(|v| {
-            let t2 = v.square();
-            let t4 = t2.square();
-            *v *= t2 * t4;
-        });
+        state[0] = Self::pow_7(state[0]);
+        state[1] = Self::pow_7(state[1]);
+        state[2] = Self::pow_7(state[2]);
+        state[3] = Self::pow_7(state[3]);
+        state[4] = Self::pow_7(state[4]);
+        state[5] = Self::pow_7(state[5]);
+        state[6] = Self::pow_7(state[6]);
+        state[7] = Self::pow_7(state[7]);
+        state[8] = Self::pow_7(state[8]);
+        state[9] = Self::pow_7(state[9]);
+        state[10] = Self::pow_7(state[10]);
+        state[11] = Self::pow_7(state[11]);
+    }
+
+    #[inline(always)]
+    fn pow_7(x: BaseElement) -> BaseElement {
+        let x2 = x.square();
+        let x4 = x2.square();
+        let x3 = x * x2;
+        x3 * x4
     }
 
     #[inline(always)]
@@ -362,175 +406,346 @@ impl Rp64_256 {
 // MDS
 // ================================================================================================
 /// Rescue MDS matrix
-/// Computed using algorithm 4 from <https://eprint.iacr.org/2020/1143.pdf>
 const MDS: [[BaseElement; STATE_WIDTH]; STATE_WIDTH] = [
     [
-        BaseElement::new(2108866337646019936),
-        BaseElement::new(11223275256334781131),
-        BaseElement::new(2318414738826783588),
-        BaseElement::new(11240468238955543594),
-        BaseElement::new(8007389560317667115),
-        BaseElement::new(11080831380224887131),
-        BaseElement::new(3922954383102346493),
-        BaseElement::new(17194066286743901609),
-        BaseElement::new(152620255842323114),
-        BaseElement::new(7203302445933022224),
-        BaseElement::new(17781531460838764471),
-        BaseElement::new(2306881200),
+        BaseElement::new(17),
+        BaseElement::new(15),
+        BaseElement::new(41),
+        BaseElement::new(16),
+        BaseElement::new(2),
+        BaseElement::new(28),
+        BaseElement::new(13),
+        BaseElement::new(13),
+        BaseElement::new(39),
+        BaseElement::new(18),
+        BaseElement::new(34),
+        BaseElement::new(20),
     ],
     [
-        BaseElement::new(3368836954250922620),
-        BaseElement::new(5531382716338105518),
-        BaseElement::new(7747104620279034727),
-        BaseElement::new(14164487169476525880),
-        BaseElement::new(4653455932372793639),
-        BaseElement::new(5504123103633670518),
-        BaseElement::new(3376629427948045767),
-        BaseElement::new(1687083899297674997),
-        BaseElement::new(8324288417826065247),
-        BaseElement::new(17651364087632826504),
-        BaseElement::new(15568475755679636039),
-        BaseElement::new(4656488262337620150),
+        BaseElement::new(20),
+        BaseElement::new(17),
+        BaseElement::new(15),
+        BaseElement::new(41),
+        BaseElement::new(16),
+        BaseElement::new(2),
+        BaseElement::new(28),
+        BaseElement::new(13),
+        BaseElement::new(13),
+        BaseElement::new(39),
+        BaseElement::new(18),
+        BaseElement::new(34),
     ],
     [
-        BaseElement::new(2560535215714666606),
-        BaseElement::new(10793518538122219186),
-        BaseElement::new(408467828146985886),
-        BaseElement::new(13894393744319723897),
-        BaseElement::new(17856013635663093677),
-        BaseElement::new(14510101432365346218),
-        BaseElement::new(12175743201430386993),
-        BaseElement::new(12012700097100374591),
-        BaseElement::new(976880602086740182),
-        BaseElement::new(3187015135043748111),
-        BaseElement::new(4630899319883688283),
-        BaseElement::new(17674195666610532297),
+        BaseElement::new(34),
+        BaseElement::new(20),
+        BaseElement::new(17),
+        BaseElement::new(15),
+        BaseElement::new(41),
+        BaseElement::new(16),
+        BaseElement::new(2),
+        BaseElement::new(28),
+        BaseElement::new(13),
+        BaseElement::new(13),
+        BaseElement::new(39),
+        BaseElement::new(18),
     ],
     [
-        BaseElement::new(10940635879119829731),
-        BaseElement::new(9126204055164541072),
-        BaseElement::new(13441880452578323624),
-        BaseElement::new(13828699194559433302),
-        BaseElement::new(6245685172712904082),
-        BaseElement::new(3117562785727957263),
-        BaseElement::new(17389107632996288753),
-        BaseElement::new(3643151412418457029),
-        BaseElement::new(10484080975961167028),
-        BaseElement::new(4066673631745731889),
-        BaseElement::new(8847974898748751041),
-        BaseElement::new(9548808324754121113),
+        BaseElement::new(18),
+        BaseElement::new(34),
+        BaseElement::new(20),
+        BaseElement::new(17),
+        BaseElement::new(15),
+        BaseElement::new(41),
+        BaseElement::new(16),
+        BaseElement::new(2),
+        BaseElement::new(28),
+        BaseElement::new(13),
+        BaseElement::new(13),
+        BaseElement::new(39),
     ],
     [
-        BaseElement::new(15656099696515372126),
-        BaseElement::new(309741777966979967),
-        BaseElement::new(16075523529922094036),
-        BaseElement::new(5384192144218250710),
-        BaseElement::new(15171244241641106028),
-        BaseElement::new(6660319859038124593),
-        BaseElement::new(6595450094003204814),
-        BaseElement::new(15330207556174961057),
-        BaseElement::new(2687301105226976975),
-        BaseElement::new(15907414358067140389),
-        BaseElement::new(2767130804164179683),
-        BaseElement::new(8135839249549115549),
+        BaseElement::new(39),
+        BaseElement::new(18),
+        BaseElement::new(34),
+        BaseElement::new(20),
+        BaseElement::new(17),
+        BaseElement::new(15),
+        BaseElement::new(41),
+        BaseElement::new(16),
+        BaseElement::new(2),
+        BaseElement::new(28),
+        BaseElement::new(13),
+        BaseElement::new(13),
     ],
     [
-        BaseElement::new(14687393836444508153),
-        BaseElement::new(8122848807512458890),
-        BaseElement::new(16998154830503301252),
-        BaseElement::new(2904046703764323264),
-        BaseElement::new(11170142989407566484),
-        BaseElement::new(5448553946207765015),
-        BaseElement::new(9766047029091333225),
-        BaseElement::new(3852354853341479440),
-        BaseElement::new(14577128274897891003),
-        BaseElement::new(11994931371916133447),
-        BaseElement::new(8299269445020599466),
-        BaseElement::new(2859592328380146288),
+        BaseElement::new(13),
+        BaseElement::new(39),
+        BaseElement::new(18),
+        BaseElement::new(34),
+        BaseElement::new(20),
+        BaseElement::new(17),
+        BaseElement::new(15),
+        BaseElement::new(41),
+        BaseElement::new(16),
+        BaseElement::new(2),
+        BaseElement::new(28),
+        BaseElement::new(13),
     ],
     [
-        BaseElement::new(4920761474064525703),
-        BaseElement::new(13379538658122003618),
-        BaseElement::new(3169184545474588182),
-        BaseElement::new(15753261541491539618),
-        BaseElement::new(622292315133191494),
-        BaseElement::new(14052907820095169428),
-        BaseElement::new(5159844729950547044),
-        BaseElement::new(17439978194716087321),
-        BaseElement::new(9945483003842285313),
-        BaseElement::new(13647273880020281344),
-        BaseElement::new(14750994260825376),
-        BaseElement::new(12575187259316461486),
+        BaseElement::new(13),
+        BaseElement::new(13),
+        BaseElement::new(39),
+        BaseElement::new(18),
+        BaseElement::new(34),
+        BaseElement::new(20),
+        BaseElement::new(17),
+        BaseElement::new(15),
+        BaseElement::new(41),
+        BaseElement::new(16),
+        BaseElement::new(2),
+        BaseElement::new(28),
     ],
     [
-        BaseElement::new(3371852905554824605),
-        BaseElement::new(8886257005679683950),
-        BaseElement::new(15677115160380392279),
-        BaseElement::new(13242906482047961505),
-        BaseElement::new(12149996307978507817),
-        BaseElement::new(1427861135554592284),
-        BaseElement::new(4033726302273030373),
-        BaseElement::new(14761176804905342155),
-        BaseElement::new(11465247508084706095),
-        BaseElement::new(12112647677590318112),
-        BaseElement::new(17343938135425110721),
-        BaseElement::new(14654483060427620352),
+        BaseElement::new(28),
+        BaseElement::new(13),
+        BaseElement::new(13),
+        BaseElement::new(39),
+        BaseElement::new(18),
+        BaseElement::new(34),
+        BaseElement::new(20),
+        BaseElement::new(17),
+        BaseElement::new(15),
+        BaseElement::new(41),
+        BaseElement::new(16),
+        BaseElement::new(2),
     ],
     [
-        BaseElement::new(5421794552262605237),
-        BaseElement::new(14201164512563303484),
-        BaseElement::new(5290621264363227639),
-        BaseElement::new(1020180205893205576),
-        BaseElement::new(14311345105258400438),
-        BaseElement::new(7828111500457301560),
-        BaseElement::new(9436759291445548340),
-        BaseElement::new(5716067521736967068),
-        BaseElement::new(15357555109169671716),
-        BaseElement::new(4131452666376493252),
-        BaseElement::new(16785275933585465720),
-        BaseElement::new(11180136753375315897),
+        BaseElement::new(2),
+        BaseElement::new(28),
+        BaseElement::new(13),
+        BaseElement::new(13),
+        BaseElement::new(39),
+        BaseElement::new(18),
+        BaseElement::new(34),
+        BaseElement::new(20),
+        BaseElement::new(17),
+        BaseElement::new(15),
+        BaseElement::new(41),
+        BaseElement::new(16),
     ],
     [
-        BaseElement::new(10451661389735482801),
-        BaseElement::new(12128852772276583847),
-        BaseElement::new(10630876800354432923),
-        BaseElement::new(6884824371838330777),
-        BaseElement::new(16413552665026570512),
-        BaseElement::new(13637837753341196082),
-        BaseElement::new(2558124068257217718),
-        BaseElement::new(4327919242598628564),
-        BaseElement::new(4236040195908057312),
-        BaseElement::new(2081029262044280559),
-        BaseElement::new(2047510589162918469),
-        BaseElement::new(6835491236529222042),
+        BaseElement::new(16),
+        BaseElement::new(2),
+        BaseElement::new(28),
+        BaseElement::new(13),
+        BaseElement::new(13),
+        BaseElement::new(39),
+        BaseElement::new(18),
+        BaseElement::new(34),
+        BaseElement::new(20),
+        BaseElement::new(17),
+        BaseElement::new(15),
+        BaseElement::new(41),
     ],
     [
-        BaseElement::new(5675273097893923172),
-        BaseElement::new(8120839782755215647),
-        BaseElement::new(9856415804450870143),
-        BaseElement::new(1960632704307471239),
-        BaseElement::new(15279057263127523057),
-        BaseElement::new(17999325337309257121),
-        BaseElement::new(72970456904683065),
-        BaseElement::new(8899624805082057509),
-        BaseElement::new(16980481565524365258),
-        BaseElement::new(6412696708929498357),
-        BaseElement::new(13917768671775544479),
-        BaseElement::new(5505378218427096880),
+        BaseElement::new(41),
+        BaseElement::new(16),
+        BaseElement::new(2),
+        BaseElement::new(28),
+        BaseElement::new(13),
+        BaseElement::new(13),
+        BaseElement::new(39),
+        BaseElement::new(18),
+        BaseElement::new(34),
+        BaseElement::new(20),
+        BaseElement::new(17),
+        BaseElement::new(15),
     ],
     [
-        BaseElement::new(10318314766641004576),
-        BaseElement::new(17320192463105632563),
-        BaseElement::new(11540812969169097044),
-        BaseElement::new(7270556942018024148),
-        BaseElement::new(4755326086930560682),
-        BaseElement::new(2193604418377108959),
-        BaseElement::new(11681945506511803967),
-        BaseElement::new(8000243866012209465),
-        BaseElement::new(6746478642521594042),
-        BaseElement::new(12096331252283646217),
-        BaseElement::new(13208137848575217268),
-        BaseElement::new(5548519654341606996),
+        BaseElement::new(15),
+        BaseElement::new(41),
+        BaseElement::new(16),
+        BaseElement::new(2),
+        BaseElement::new(28),
+        BaseElement::new(13),
+        BaseElement::new(13),
+        BaseElement::new(39),
+        BaseElement::new(18),
+        BaseElement::new(34),
+        BaseElement::new(20),
+        BaseElement::new(17),
+    ],
+];
+
+/// Rescue Inverse MDS matrix
+const INV_MDS: [[BaseElement; STATE_WIDTH]; STATE_WIDTH] = [
+    [
+        BaseElement::new(8386575955297330374),
+        BaseElement::new(12243788021200855645),
+        BaseElement::new(128690909467520215),
+        BaseElement::new(3710019852814837202),
+        BaseElement::new(12036999583539127392),
+        BaseElement::new(4984521098135580022),
+        BaseElement::new(9864392587504233340),
+        BaseElement::new(1385581819355263477),
+        BaseElement::new(7471478974207765647),
+        BaseElement::new(15004557337233918446),
+        BaseElement::new(11010945932670469968),
+        BaseElement::new(5934110681624869157),
+    ],
+    [
+        BaseElement::new(5934110681624869157),
+        BaseElement::new(8386575955297330374),
+        BaseElement::new(12243788021200855645),
+        BaseElement::new(128690909467520215),
+        BaseElement::new(3710019852814837202),
+        BaseElement::new(12036999583539127392),
+        BaseElement::new(4984521098135580022),
+        BaseElement::new(9864392587504233340),
+        BaseElement::new(1385581819355263477),
+        BaseElement::new(7471478974207765647),
+        BaseElement::new(15004557337233918446),
+        BaseElement::new(11010945932670469968),
+    ],
+    [
+        BaseElement::new(11010945932670469968),
+        BaseElement::new(5934110681624869157),
+        BaseElement::new(8386575955297330374),
+        BaseElement::new(12243788021200855645),
+        BaseElement::new(128690909467520215),
+        BaseElement::new(3710019852814837202),
+        BaseElement::new(12036999583539127392),
+        BaseElement::new(4984521098135580022),
+        BaseElement::new(9864392587504233340),
+        BaseElement::new(1385581819355263477),
+        BaseElement::new(7471478974207765647),
+        BaseElement::new(15004557337233918446),
+    ],
+    [
+        BaseElement::new(15004557337233918446),
+        BaseElement::new(11010945932670469968),
+        BaseElement::new(5934110681624869157),
+        BaseElement::new(8386575955297330374),
+        BaseElement::new(12243788021200855645),
+        BaseElement::new(128690909467520215),
+        BaseElement::new(3710019852814837202),
+        BaseElement::new(12036999583539127392),
+        BaseElement::new(4984521098135580022),
+        BaseElement::new(9864392587504233340),
+        BaseElement::new(1385581819355263477),
+        BaseElement::new(7471478974207765647),
+    ],
+    [
+        BaseElement::new(7471478974207765647),
+        BaseElement::new(15004557337233918446),
+        BaseElement::new(11010945932670469968),
+        BaseElement::new(5934110681624869157),
+        BaseElement::new(8386575955297330374),
+        BaseElement::new(12243788021200855645),
+        BaseElement::new(128690909467520215),
+        BaseElement::new(3710019852814837202),
+        BaseElement::new(12036999583539127392),
+        BaseElement::new(4984521098135580022),
+        BaseElement::new(9864392587504233340),
+        BaseElement::new(1385581819355263477),
+    ],
+    [
+        BaseElement::new(1385581819355263477),
+        BaseElement::new(7471478974207765647),
+        BaseElement::new(15004557337233918446),
+        BaseElement::new(11010945932670469968),
+        BaseElement::new(5934110681624869157),
+        BaseElement::new(8386575955297330374),
+        BaseElement::new(12243788021200855645),
+        BaseElement::new(128690909467520215),
+        BaseElement::new(3710019852814837202),
+        BaseElement::new(12036999583539127392),
+        BaseElement::new(4984521098135580022),
+        BaseElement::new(9864392587504233340),
+    ],
+    [
+        BaseElement::new(9864392587504233340),
+        BaseElement::new(1385581819355263477),
+        BaseElement::new(7471478974207765647),
+        BaseElement::new(15004557337233918446),
+        BaseElement::new(11010945932670469968),
+        BaseElement::new(5934110681624869157),
+        BaseElement::new(8386575955297330374),
+        BaseElement::new(12243788021200855645),
+        BaseElement::new(128690909467520215),
+        BaseElement::new(3710019852814837202),
+        BaseElement::new(12036999583539127392),
+        BaseElement::new(4984521098135580022),
+    ],
+    [
+        BaseElement::new(4984521098135580022),
+        BaseElement::new(9864392587504233340),
+        BaseElement::new(1385581819355263477),
+        BaseElement::new(7471478974207765647),
+        BaseElement::new(15004557337233918446),
+        BaseElement::new(11010945932670469968),
+        BaseElement::new(5934110681624869157),
+        BaseElement::new(8386575955297330374),
+        BaseElement::new(12243788021200855645),
+        BaseElement::new(128690909467520215),
+        BaseElement::new(3710019852814837202),
+        BaseElement::new(12036999583539127392),
+    ],
+    [
+        BaseElement::new(12036999583539127392),
+        BaseElement::new(4984521098135580022),
+        BaseElement::new(9864392587504233340),
+        BaseElement::new(1385581819355263477),
+        BaseElement::new(7471478974207765647),
+        BaseElement::new(15004557337233918446),
+        BaseElement::new(11010945932670469968),
+        BaseElement::new(5934110681624869157),
+        BaseElement::new(8386575955297330374),
+        BaseElement::new(12243788021200855645),
+        BaseElement::new(128690909467520215),
+        BaseElement::new(3710019852814837202),
+    ],
+    [
+        BaseElement::new(3710019852814837202),
+        BaseElement::new(12036999583539127392),
+        BaseElement::new(4984521098135580022),
+        BaseElement::new(9864392587504233340),
+        BaseElement::new(1385581819355263477),
+        BaseElement::new(7471478974207765647),
+        BaseElement::new(15004557337233918446),
+        BaseElement::new(11010945932670469968),
+        BaseElement::new(5934110681624869157),
+        BaseElement::new(8386575955297330374),
+        BaseElement::new(12243788021200855645),
+        BaseElement::new(128690909467520215),
+    ],
+    [
+        BaseElement::new(128690909467520215),
+        BaseElement::new(3710019852814837202),
+        BaseElement::new(12036999583539127392),
+        BaseElement::new(4984521098135580022),
+        BaseElement::new(9864392587504233340),
+        BaseElement::new(1385581819355263477),
+        BaseElement::new(7471478974207765647),
+        BaseElement::new(15004557337233918446),
+        BaseElement::new(11010945932670469968),
+        BaseElement::new(5934110681624869157),
+        BaseElement::new(8386575955297330374),
+        BaseElement::new(12243788021200855645),
+    ],
+    [
+        BaseElement::new(12243788021200855645),
+        BaseElement::new(128690909467520215),
+        BaseElement::new(3710019852814837202),
+        BaseElement::new(12036999583539127392),
+        BaseElement::new(4984521098135580022),
+        BaseElement::new(9864392587504233340),
+        BaseElement::new(1385581819355263477),
+        BaseElement::new(7471478974207765647),
+        BaseElement::new(15004557337233918446),
+        BaseElement::new(11010945932670469968),
+        BaseElement::new(5934110681624869157),
+        BaseElement::new(8386575955297330374),
     ],
 ];
 
