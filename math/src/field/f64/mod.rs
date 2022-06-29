@@ -257,6 +257,7 @@ impl Eq for BaseElement {}
 impl Add for BaseElement {
     type Output = Self;
 
+    /// Addition in BaseField
     #[inline]
     #[allow(clippy::suspicious_arithmetic_impl)]
     fn add(self, rhs: Self) -> Self {
