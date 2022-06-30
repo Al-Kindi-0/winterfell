@@ -3,9 +3,7 @@
 // This source &code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-// FFT MDS MULTIPLICATION HELPER FUNCTIONS
-// --------------------------------------------------------------------------------------------
-// MDS
+// FFT-BASED MDS MULTIPLICATION HELPER FUNCTIONS
 // ================================================================================================
 /// Rescue MDS matrix in frequency domain. More precisely, this is the output of the 3 4-point
 /// (real) FFT of the first column of the MDS matrix i.e. just before the multiplication with
@@ -137,9 +135,10 @@ fn block3(x: [i64; 3], y: [i64; 3]) -> [i64; 3] {
 
 #[cfg(test)]
 mod tests {
-    use super::mds_multiply_freq;
+    use super::super::Rp64_256;
+    use crate::hash::rescue::rp64_256::MDS;
     use math::{fields::f64::BaseElement, FieldElement};
-    use crate::hash::rescue::rp64_256::{MDS,INV_MDS};
+    use proptest::prelude::*;
 
     const STATE_WIDTH: usize = 12;
 
@@ -154,68 +153,22 @@ mod tests {
         *state = result;
     }
 
-    #[inline(always)]
-    fn apply_mds(state: &mut [BaseElement; STATE_WIDTH]) {
-        let mut result = [BaseElement::ZERO; STATE_WIDTH];
+    proptest! {
+        #[test]
+        fn mds_freq_proptest(a in any::<[u64;STATE_WIDTH]>()) {
 
-        let mut state_l = [0u64; STATE_WIDTH];
-        let mut state_h = [0u64; STATE_WIDTH];
+            let mut v1 = [BaseElement::ZERO;STATE_WIDTH];
+            let mut v2;
 
-        for r in 0..STATE_WIDTH {
-            let s = state[r].inner();
-            state_h[r] = s >> 32;
-            state_l[r] = (s as u32) as u64;
-        }
-
-        let state_h = mds_multiply_freq(state_h);
-        let state_l = mds_multiply_freq(state_l);
-
-        for r in 0..STATE_WIDTH {
-            let s = state_l[r] as u128 + ((state_h[r] as u128) << 32);
-            let s_hi = (s >> 64) as u64;
-            let s_lo = s as u64;
-            let z = (s_hi << 32) - s_hi;
-            let (res, over) = s_lo.overflowing_add(z);
-
-            result[r] =
-                BaseElement::from_mont(res.wrapping_add(0u32.wrapping_sub(over as u32) as u64));
-        }
-        *state = result;
-    }
-
-    #[test]
-    fn mds_freq_check() {
-        use rand_utils::rand_array;
-
-        for _ in 0..10000 {
-            let mut s1: [BaseElement; 12] = rand_array();
-            let mut s2: [BaseElement; 12] = s1.clone();
-            apply_mds_naive(&mut s1);
-            apply_mds(&mut s2);
-
-            assert_eq!(s1, s2);
-        }
-    }
-
-    #[test]
-    fn mds_inv_test() {
-        let mut mul_result = [[BaseElement::new(0); STATE_WIDTH]; STATE_WIDTH];
-        for i in 0..STATE_WIDTH {
-            for j in 0..STATE_WIDTH {
-                let result = {
-                    let mut result = BaseElement::new(0);
-                    for k in 0..STATE_WIDTH {
-                        result += MDS[i][k] * INV_MDS[k][j]
-                    }
-                    result
-                };
-                mul_result[i][j] = result;
-                if i == j {
-                    assert_eq!(result, BaseElement::new(1));
-                } else {
-                    assert_eq!(result, BaseElement::new(0));
-                }
+            for i in 0..STATE_WIDTH {
+                v1[i] = BaseElement::new(a[i]);
             }
+            v2 = v1.clone();
+
+            apply_mds_naive(&mut v1);
+            Rp64_256::apply_mds(&mut v2);
+
+            prop_assert_eq!(v1, v2);
         }
     }
 }
