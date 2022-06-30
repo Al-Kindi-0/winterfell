@@ -332,7 +332,7 @@ impl Rp64_256 {
             let (res, over) = s_lo.overflowing_add(z);
 
             result[r] =
-                BaseElement::new_unsafe(res.wrapping_add(0u32.wrapping_sub(over as u32) as u64));
+                BaseElement::from_mont(res.wrapping_add(0u32.wrapping_sub(over as u32) as u64));
         }
         *state = result;
     }

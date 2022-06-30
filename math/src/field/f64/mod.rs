@@ -5,8 +5,7 @@
 
 //! An implementation of a 64-bit STARK-friendly prime field with modulus $2^{64} - 2^{32} + 1$
 //! using Montgomery representation.
-//! Our implementation follows https://eprint.iacr.org/2022/274.pdf and is constant-time except
-//! for the mont_red_var() function.
+//! Our implementation follows https://eprint.iacr.org/2022/274.pdf and is constant-time.
 //!
 //! This field supports very fast modular arithmetic and has a number of other attractive
 //! properties, including:
@@ -14,8 +13,6 @@
 //! * Field arithmetic in this field can be implemented using a few 32-bit addition, subtractions,
 //!   and shifts.
 //! * $8$ is the 64th root of unity which opens up potential for optimized FFT implementations.
-//!
-//! Internally, the values are stored in the range $[0, 2^{64})$ using `u64` as the backing type.
 
 use super::{ExtensibleField, FieldElement, StarkField};
 use core::{
@@ -63,15 +60,15 @@ impl BaseElement {
         Self(mont_red_cst((value as u128) * (R2 as u128)))
     }
 
+    /// Returns a new field element from the provided 'value'. Assumes that 'value' is already
+    /// in canonical Montgomery form.
+    pub const fn from_mont(value: u64) -> BaseElement {
+        BaseElement(value)
+    }
+
     /// Returns the non-canonical u64 inner value. 
     pub const fn inner(&self) -> u64{
         self.0
-    }
-
-    /// Returns a new field element from the provided 'value'. Assumes that 'value' is already
-    /// in canonical Montgomery form.
-    pub const fn new_unsafe(value: u64) -> BaseElement {
-        BaseElement(value)
     }
 }
 
@@ -253,7 +250,6 @@ impl Eq for BaseElement {}
 impl Add for BaseElement {
     type Output = Self;
 
-    /// Addition in BaseField
     #[inline]
     #[allow(clippy::suspicious_arithmetic_impl)]
     fn add(self, rhs: Self) -> Self {
@@ -546,7 +542,7 @@ fn exp_acc<const N: usize>(base: BaseElement, tail: BaseElement) -> BaseElement 
 
 /// Montgomery reduction (variable time)
 #[inline(always)]
-pub const fn mont_red_var(x: u128) -> u64 {
+const fn mont_red_var(x: u128) -> u64 {
     const NPRIME: u64 = 4294967297;
     let q = (((x as u64) as u128) * (NPRIME as u128)) as u64;
     let m = (q as u128) * (M as u128);
@@ -560,7 +556,7 @@ pub const fn mont_red_var(x: u128) -> u64 {
 
 /// Montgomery reduction (constant time)
 #[inline(always)]
-pub const fn mont_red_cst(x: u128) -> u64 {
+const fn mont_red_cst(x: u128) -> u64 {
     // See reference above for a description of the following implementation.
     let xl = x as u64;
     let xh = (x >> 64) as u64;
