@@ -106,7 +106,6 @@ impl FieldElement for BaseElement {
                 r *= b;
             }
         }
-
         r
     }
 
