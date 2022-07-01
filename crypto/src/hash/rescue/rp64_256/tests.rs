@@ -100,7 +100,7 @@ fn apply_permutation() {
         BaseElement::new(3277286667222183600),
     ];
 
-    assert_eq!(expected[0], state[0]);
+    assert_eq!(expected, state);
 }
 
 #[test]
