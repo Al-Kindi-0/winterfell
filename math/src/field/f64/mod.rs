@@ -5,7 +5,7 @@
 
 //! An implementation of a 64-bit STARK-friendly prime field with modulus $2^{64} - 2^{32} + 1$
 //! using Montgomery representation.
-//! Our implementation follows https://eprint.iacr.org/2022/274.pdf and is constant-time. 
+//! Our implementation follows https://eprint.iacr.org/2022/274.pdf and is constant-time.
 //!
 //! This field supports very fast modular arithmetic and has a number of other attractive
 //! properties, including:
@@ -66,8 +66,8 @@ impl BaseElement {
         BaseElement(value)
     }
 
-    /// Returns the non-canonical u64 inner value. 
-    pub const fn inner(&self) -> u64{
+    /// Returns the non-canonical u64 inner value.
+    pub const fn inner(&self) -> u64 {
         self.0
     }
 }
@@ -81,7 +81,7 @@ impl FieldElement for BaseElement {
 
     const ELEMENT_BYTES: usize = ELEMENT_BYTES;
     const IS_CANONICAL: bool = false;
-    
+
     #[inline]
     fn double(self) -> Self {
         let ret = (self.0 as u128) << 1;
@@ -555,10 +555,10 @@ const fn mont_red_var(x: u128) -> u64 {
     let m = (q as u128) * (M as u128);
     let y = (((x as i128).wrapping_sub(m as i128)) >> 64) as i64;
     if x < m {
-        return (y + (M as i64)) as u64;
+        (y + (M as i64)) as u64
     } else {
-        return y as u64;
-    };
+        y as u64
+    }
 }
 
 /// Montgomery reduction (constant time)

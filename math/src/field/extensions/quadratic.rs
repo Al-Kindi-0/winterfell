@@ -411,7 +411,7 @@ mod tests {
         bytes.extend_from_slice(&elements[1].0.inner().to_le_bytes());
         bytes.extend_from_slice(&elements[1].1.inner().to_le_bytes());
         bytes.extend_from_slice(&BaseElement::new(5).inner().to_le_bytes());
-        
+
         let result = unsafe { QuadExtension::<BaseElement>::bytes_as_elements(&bytes[..32]) };
         assert!(result.is_ok());
         assert_eq!(elements, result.unwrap());

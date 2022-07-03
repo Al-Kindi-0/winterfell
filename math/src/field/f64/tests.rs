@@ -3,9 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use super::{
-    BaseElement, DeserializationError, FieldElement, Serializable, StarkField, M,
-};
+use super::{BaseElement, DeserializationError, FieldElement, Serializable, StarkField, M};
 use crate::field::{CubeExtension, ExtensionOf, QuadExtension};
 use core::convert::TryFrom;
 use num_bigint::BigUint;
@@ -107,7 +105,6 @@ fn inv() {
     assert_eq!(BaseElement::ONE, BaseElement::inv(BaseElement::ONE));
     assert_eq!(BaseElement::ZERO, BaseElement::inv(BaseElement::ZERO));
 }
-
 
 #[test]
 fn element_as_int() {
