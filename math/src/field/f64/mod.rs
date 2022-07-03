@@ -90,13 +90,6 @@ impl FieldElement for BaseElement {
     }
 
     #[inline]
-    fn double(self) -> Self {
-        let ret = (self.0 as u128) << 1;
-        let (result, over) = (ret as u64, (ret >> 64) as u64);
-        Self(result.wrapping_sub(M * (over as u64)))
-    }
-
-    #[inline]
     fn exp(self, power: Self::PositiveInteger) -> Self {
         let mut b = self;
 
@@ -554,6 +547,7 @@ fn exp_acc<const N: usize>(base: BaseElement, tail: BaseElement) -> BaseElement 
 }
 
 /// Montgomery reduction (variable time)
+#[allow(dead_code)]
 #[inline(always)]
 const fn mont_red_var(x: u128) -> u64 {
     const NPRIME: u64 = 4294967297;
