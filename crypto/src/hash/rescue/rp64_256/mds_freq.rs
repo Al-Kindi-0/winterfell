@@ -9,7 +9,11 @@
 /// This module contains helper functions as well as constants used to perform the vector-matrix
 /// multiplication step of the Rescue prime permutation. The special form of our MDS matrix
 /// i.e. being circular, allows us to reduce the vector-matrix multiplication to a Hadamard product
+<<<<<<< HEAD
 /// of two vectors in "frequency domain". This follows from the simple fact that every circulant
+=======
+/// of two vectors in "the frequency domain". This follows from the simple fact that every circulant
+>>>>>>> dc1b576805cda054e7cde03d0ba0483b20c16973
 /// matrix has the columns of the discrete Fourier transform matrix as orthogonal eigenvectors.
 /// The implementation also avoids the use of 3-point FFTs, and 3-point iFFTs, and substitutes that
 /// with explicit expressions. It also avoids, due to the form of our matrix in the frequency domain,
