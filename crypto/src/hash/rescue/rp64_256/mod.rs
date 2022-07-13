@@ -350,26 +350,18 @@ impl Rp64_256 {
 
     #[inline(always)]
     fn apply_sbox(state: &mut [BaseElement; STATE_WIDTH]) {
-        state[0] = Self::pow_7(state[0]);
-        state[1] = Self::pow_7(state[1]);
-        state[2] = Self::pow_7(state[2]);
-        state[3] = Self::pow_7(state[3]);
-        state[4] = Self::pow_7(state[4]);
-        state[5] = Self::pow_7(state[5]);
-        state[6] = Self::pow_7(state[6]);
-        state[7] = Self::pow_7(state[7]);
-        state[8] = Self::pow_7(state[8]);
-        state[9] = Self::pow_7(state[9]);
-        state[10] = Self::pow_7(state[10]);
-        state[11] = Self::pow_7(state[11]);
-    }
-
-    #[inline(always)]
-    fn pow_7(x: BaseElement) -> BaseElement {
-        let x2 = x.square();
-        let x4 = x2.square();
-        let x3 = x * x2;
-        x3 * x4
+        state[0] = state[0].exp7();
+        state[1] = state[1].exp7();
+        state[2] = state[2].exp7();
+        state[3] = state[3].exp7();
+        state[4] = state[4].exp7();
+        state[5] = state[5].exp7();
+        state[6] = state[6].exp7();
+        state[7] = state[7].exp7();
+        state[8] = state[8].exp7();
+        state[9] = state[9].exp7();
+        state[10] = state[10].exp7();
+        state[11] = state[11].exp7();
     }
 
     #[inline(always)]
