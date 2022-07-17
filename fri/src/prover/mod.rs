@@ -389,8 +389,7 @@ fn query_layer<B: StarkField, E: FieldElement<BaseField = B>, H: Hasher, const N
     FriProofLayer::new(queried_values, proof)
 }
 
-/// Builds a single proof layer by querying the evaluations of the passed in FRI layer at the
-/// specified position.
+
 fn query_layer_one<
     B: StarkField,
     E: FieldElement<BaseField = B>,
@@ -401,20 +400,18 @@ fn query_layer_one<
     position: &[usize],
     index: usize,
 ) -> FriProofQuery {
-    // build Merkle authentication paths for all query positions
     let proof = layer
         .tree
         .prove_batch(position)
         .expect("failed to generate a Merkle proof for FRI layer queries");
 
-    // build a list of polynomial evaluations at each position; since evaluations in FRI layers
-    // are stored in transposed form, a position refers to N evaluations which are committed
-    // in a single leaf
+    
     let evaluations: &[[E; N]] = group_slice_elements(&layer.evaluations);
     let queried_value: [E; N] = evaluations[position[0]];
-    //if index == 0 {
+    if index == 1 {
         //println!("Proof correct {:?}", proof);
-    //}
+        println!("Queried values prover {:?}",queried_value);
+    }
     //println!("Queried values {:?}", queried_value);
     FriProofQuery::new(vec![queried_value], proof)
 }
