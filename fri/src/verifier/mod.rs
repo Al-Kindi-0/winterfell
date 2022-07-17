@@ -5,9 +5,13 @@
 
 //! Contains an implementation of FRI verifier and associated components.
 
-use crate::{folding::fold_positions, utils::map_positions_to_indexes, FriOptions, VerifierError};
-use core::{convert::TryInto, marker::PhantomData, mem};
-use crypto::{ElementHasher, RandomCoin};
+use crate::{
+    folding::fold_positions,
+    utils::{map_positions_to_index, map_positions_to_indexes},
+    FriOptions, VerifierError,
+};
+use core::{convert::TryInto, marker::PhantomData, mem, fmt::Debug};
+use crypto::{ElementHasher, RandomCoin, BatchMerkleProof, MerkleTree};
 use math::{fft, log2, polynom, FieldElement, StarkField};
 use utils::collections::Vec;
 
@@ -76,8 +80,8 @@ impl<B, E, C, H> FriVerifier<B, E, C, H>
 where
     B: StarkField,
     E: FieldElement<BaseField = B>,
-    C: VerifierChannel<E, Hasher = H>,
-    H: ElementHasher<BaseField = B>,
+    C: VerifierChannel<E, Hasher = H> + Clone,
+    H: ElementHasher<BaseField = B> + Debug,
 {
     /// Returns a new instance of FRI verifier created from the specified parameters.
     ///
@@ -244,6 +248,67 @@ where
         let mut max_degree_plus_1 = self.max_poly_degree + 1;
         let mut positions = positions.to_vec();
         let mut evaluations = evaluations.to_vec();
+        /*
+        let mut channel = (*channel).clone();
+        for (i, position) in positions.iter().enumerate() {
+            println!("index {:?} position {:?}", i, position);
+            let mut pos = position;
+            for depth in 0..self.options.num_fri_layers(self.domain_size) {
+                let mut folded_pos = pos % domain_size;
+                let position_index = map_positions_to_index(
+                    &folded_pos,
+                    domain_size,
+                    self.options.folding_factor(),
+                    self.num_partitions,
+                );
+
+                let layer_commitment = self.layer_commitments[depth];
+                // TODO: This should take one position index and return either the leaf and then we take the query value
+                // or even better directly the query value 
+                let layer_value = channel.read_layer_queries::<N>(&vec![position_index], &layer_commitment)?;
+                let layer_value = layer_value[i];
+
+            }
+        }
+        */
+
+        //println!("All positions verifier {:?}", positions);
+        for position in positions.iter() {
+
+            //We ask the channel for the sequence of (query_value_per_layer, merkle_proofs) at each postion.
+            // This should be implemented at the channel level and using the FriProofQuery::parse method
+            let mut query = channel.read_queries();
+            let mut cur_pos = *position;
+            for depth in 0..self.options.num_fri_layers(self.domain_size) {
+                let target_domain_size = domain_size /self.options.folding_factor();
+                let mut query_level:(Vec<E>, BatchMerkleProof<H>)  = query.remove(0).parse(target_domain_size,self.options.folding_factor()).unwrap();
+                println!("MP is {:?}", query_level);
+                
+                let mut folded_pos = cur_pos % target_domain_size;
+                let position_index = map_positions_to_index(&folded_pos, domain_size, self.options.folding_factor(), self.num_partitions);
+                let layer_commitment = self.layer_commitments[depth];
+                println!("Position {:?}", position);
+                println!("Position folded {:?}", folded_pos);
+                println!("Position index {:?}", position_index);
+                //println!("Commitment {:?}",layer_commitment);
+                println!("Queried values verifier {:?}", query_level.0);
+                MerkleTree::verify_batch(&layer_commitment, &vec![
+                    folded_pos
+                ], &query_level.1)
+            .map_err(|_| VerifierError::LayerCommitmentMismatch)?;
+                //let layer_value = channel.read_layer_queries::<N>(&vec![position_index], &layer_commitment)?;
+                
+
+                println!("Queried values verifier {:?}", query_level.0);
+                println!("Position {:?}", position);
+                println!("Depth {:?}", depth);
+                println!("Layer value {:?}", query_level.0);
+                cur_pos = folded_pos;
+                domain_size /= N;
+            }
+        }
+        println!("finished the part");
+
 
         for depth in 0..self.options.num_fri_layers(self.domain_size) {
             // determine which evaluations were queried in the folded layer
@@ -368,3 +433,4 @@ fn get_query_values<E: FieldElement, const N: usize>(
 
     result
 }
+

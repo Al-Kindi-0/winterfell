@@ -6,7 +6,7 @@
 use super::{DefaultProverChannel, FriProver};
 use crate::{
     verifier::{DefaultVerifierChannel, FriVerifier},
-    FriOptions, FriProof, VerifierError,
+    FriOptions, FriProof_, VerifierError,
 };
 use crypto::{hashers::Blake3_256, Hasher, RandomCoin};
 use math::{fft, fields::f128::BaseElement, FieldElement};
@@ -83,7 +83,7 @@ pub fn build_evaluations(trace_length: usize, lde_blowup: usize) -> Vec<BaseElem
 }
 
 pub fn verify_proof(
-    proof: FriProof,
+    proof: FriProof_,
     commitments: Vec<<Blake3 as Hasher>::Digest>,
     evaluations: &[BaseElement],
     max_degree: usize,
@@ -92,11 +92,11 @@ pub fn verify_proof(
     options: &FriOptions,
 ) -> Result<(), VerifierError> {
     // test proof serialization / deserialization
-    let mut proof_bytes = Vec::new();
-    proof.write_into(&mut proof_bytes);
+    //let mut proof_bytes = Vec::new();
+    //proof.write_into(&mut proof_bytes);
 
-    let mut reader = SliceReader::new(&proof_bytes);
-    let proof = FriProof::read_from(&mut reader).unwrap();
+    //let mut reader = SliceReader::new(&proof_bytes);
+    //let proof = FriProof::read_from(&mut reader).unwrap();
 
     // verify the proof
     let mut channel = DefaultVerifierChannel::<BaseElement, Blake3>::new(

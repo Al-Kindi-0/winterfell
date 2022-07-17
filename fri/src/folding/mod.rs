@@ -163,6 +163,7 @@ pub fn fold_positions(
 ) -> Vec<usize> {
     let target_domain_size = source_domain_size / folding_factor;
 
+    //println!("target_domain size {:?}", target_domain_size);
     let mut result = Vec::new();
     for position in positions {
         let position = position % target_domain_size;

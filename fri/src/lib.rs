@@ -80,6 +80,7 @@ pub use options::FriOptions;
 
 mod proof;
 pub use proof::FriProof;
+pub use proof::FriProof_;
 
 mod errors;
 pub use errors::VerifierError;

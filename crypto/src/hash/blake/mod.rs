@@ -16,7 +16,7 @@ mod tests;
 
 /// Implementation of the [Hasher](super::Hasher) trait for BLAKE3 hash function with 256-bit
 /// output.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq,Clone)]
 pub struct Blake3_256<B: StarkField>(PhantomData<B>);
 
 impl<B: StarkField> Hasher for Blake3_256<B> {
