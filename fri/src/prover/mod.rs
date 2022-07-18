@@ -4,7 +4,7 @@
 // LICENSE file in the root directory of this source tree.
 
 use crate::{
-    folding::{self, apply_drp, fold_positions},
+    folding::{apply_drp, fold_positions},
     proof::{FriProof, FriProofLayer, FriProofQuery, FriProof_},
     utils::hash_values,
     FriOptions, VerifierError,
@@ -232,115 +232,22 @@ where
             !self.layers.is_empty(),
             "FRI layers have not been built yet"
         );
-        let mut positions = positions.to_vec();
-        let mut domain_size = self.layers[0].evaluations.len();
+        let positions = positions.to_vec();
+        let domain_size = self.layers[0].evaluations.len();
         let folding_factor = self.options.folding_factor();
-
-        // for all FRI layers, except the last one, record tree root, determine a set of query
-        // positions, and query the layer at these positions.
-        let mut layers = Vec::with_capacity(self.layers.len());
-        /*
-        for each pos in positions:
-            proofs.append(query_pos_proof(pos))
-
-        def query_pos_proof(pos):
-            for d in depths:
-                pos = pos/N
-                proof = layer.tree.prove(pos)
-                evals = layer.evaluations[index_of_pos_in(positions)]
-                query_iter_fold.append(FriQueryIter {evals, proof})
-            return query_iter_fold
-         */
 
         //println!("All positions prover{:?}", positions);
 
         let mut each_query_proof = Vec::with_capacity(positions.len());
-        for (index, position) in positions.iter().enumerate() {
-            let mut current_domain_size = domain_size;
-            let mut pos = *position;
-            let mut qq = Vec::with_capacity(self.layers.len());
-            for i in 0..self.layers.len() - 1 {
-                let target_domain = current_domain_size / folding_factor;
-                //println!("target domain {:?}", target_domain);
-                let position = pos % target_domain;
-                //println!("Position {:?}", position);
-
-                // sort of a static dispatch for folding_factor parameter
-                let proof_query = match folding_factor {
-                    4 => query_layer_one::<B, E, H, 4>(&self.layers[i], &vec![position], index),
-                    8 => query_layer_one::<B, E, H, 8>(&self.layers[i], &vec![position], index),
-                    16 => query_layer_one::<B, E, H, 16>(&self.layers[i], &vec![position], index),
-                    _ => unimplemented!("folding factor {} is not supported", folding_factor),
-                };
-                if index > 0 {
-                    //println!(
-                    //"Prover MP {:?}",
-                    //proof_query
-                    //.clone()
-                    //.parse::<H, E>(current_domain_size, folding_factor)
-                    //);
-                    //println!("Prover position {:?}", position);
-                    //println!("Prover cmt {:?}", self.layers[0].tree.root());
-                    match MerkleTree::verify_batch(
-                        self.layers[i].tree.root(),
-                        &vec![position],
-                        &proof_query
-                            .clone()
-                            .parse::<H, E>(target_domain, folding_factor)
-                            .unwrap()
-                            .1,
-                    )
-                    .map_err(|_| VerifierError::LayerCommitmentMismatch)
-                    {
-                        Err(_) => {
-                            println!(
-                                "problem wrong proof {:?}",
-                                proof_query
-                                    .clone()
-                                    .parse::<H, E>(target_domain, folding_factor)
-                                    .unwrap()
-                                    .1
-                            )
-                        }
-                        _ => {
-                            //println!("test success!!!!!!!!!!!!!!!!!!!!!!11 at depth {:?}",i);
-                            //println!("Query parsed {:?}",proof_query
-                                    //.clone()
-                                    //.parse::<H, E>(target_domain, folding_factor)
-                                    //.unwrap())
-                        }
-                    };
-                }
-
-                qq.push(proof_query);
-                current_domain_size /= folding_factor;
-                pos = position;
-            }
-            each_query_proof.push(qq);
-        }
-        //println!(
-        //"Each query proof {:?}",
-        //each_query_proof.last().unwrap().last().unwrap().paths.len()
-        //);
-        //println!(
-        //"Each query proof {:?}",
-        //each_query_proof.last().unwrap().len()
-        //);
-        //println!("Each query proof {:?}", each_query_proof.len());
-
-        for i in 0..self.layers.len() - 1 {
-            positions = fold_positions(&positions, domain_size, folding_factor);
-
-            // sort of a static dispatch for folding_factor parameter
-            let proof_layer = match folding_factor {
-                4 => query_layer::<B, E, H, 4>(&self.layers[i], &positions),
-                8 => query_layer::<B, E, H, 8>(&self.layers[i], &positions),
-                16 => query_layer::<B, E, H, 16>(&self.layers[i], &positions),
+        for position in positions.iter() {
+            let proof_query = match folding_factor {
+                4 => query_layer_full::<B, E, H, 4>(&self.layers, &position, domain_size),
+                8 => query_layer_full::<B, E, H, 8>(&self.layers, &position, domain_size),
+                16 => query_layer_full::<B, E, H, 16>(&self.layers, &position, domain_size),
                 _ => unimplemented!("folding factor {} is not supported", folding_factor),
             };
 
-            layers.push(proof_layer);
-            domain_size /= folding_factor;
+            each_query_proof.push(proof_query);
         }
 
         // use the remaining polynomial values directly as proof; last layer values contain
@@ -365,53 +272,35 @@ where
 // HELPER FUNCTIONS
 // ================================================================================================
 
-/// Builds a single proof layer by querying the evaluations of the passed in FRI layer at the
+/// Builds a single proof for a single query accross layers.
 /// specified positions.
-fn query_layer<B: StarkField, E: FieldElement<BaseField = B>, H: Hasher, const N: usize>(
-    layer: &FriLayer<B, E, H>,
-    positions: &[usize],
-) -> FriProofLayer {
-    // build Merkle authentication paths for all query positions
-    let proof = layer
-        .tree
-        .prove_batch(positions)
-        .expect("failed to generate a Merkle proof for FRI layer queries");
-
-    // build a list of polynomial evaluations at each position; since evaluations in FRI layers
-    // are stored in transposed form, a position refers to N evaluations which are committed
-    // in a single leaf
-    let evaluations: &[[E; N]] = group_slice_elements(&layer.evaluations);
-    let mut queried_values: Vec<[E; N]> = Vec::with_capacity(positions.len());
-    for &position in positions.iter() {
-        queried_values.push(evaluations[position]);
-    }
-
-    FriProofLayer::new(queried_values, proof)
-}
-
-
-fn query_layer_one<
+fn query_layer_full<
     B: StarkField,
     E: FieldElement<BaseField = B>,
     H: Hasher + Debug,
     const N: usize,
 >(
-    layer: &FriLayer<B, E, H>,
-    position: &[usize],
-    index: usize,
-) -> FriProofQuery {
-    let proof = layer
-        .tree
-        .prove_batch(position)
-        .expect("failed to generate a Merkle proof for FRI layer queries");
+    layers: &Vec<FriLayer<B, E, H>>,
+    position: &usize,
+    domain_size: usize,
+) -> Vec<FriProofQuery> {
+    let mut current_domain_size = domain_size;
+    let mut pos = *position;
+    let mut qq = Vec::with_capacity(layers.len());
+    for layer in layers.iter() {
+        let target_domain = current_domain_size / N;
+        let position = pos % target_domain;
+        let proof = layer
+            .tree
+            .prove_batch(&vec![position])
+            .expect("failed to generate a Merkle proof for FRI layer queries");
 
-    
-    let evaluations: &[[E; N]] = group_slice_elements(&layer.evaluations);
-    let queried_value: [E; N] = evaluations[position[0]];
-    if index == 1 {
-        //println!("Proof correct {:?}", proof);
-        println!("Queried values prover {:?}",queried_value);
+        let evaluations: &[[E; N]] = group_slice_elements(&layer.evaluations);
+        let queried_value: [E; N] = evaluations[position];
+        qq.push(FriProofQuery::new(vec![queried_value], proof));
+        current_domain_size /= N;
+        pos = position;
     }
-    //println!("Queried values {:?}", queried_value);
-    FriProofQuery::new(vec![queried_value], proof)
+
+    qq
 }

@@ -38,7 +38,7 @@ pub fn map_positions_to_indexes(
 }
 
 /// Maps a position in the evaluation domain to its index in commitment Merkle tree.
-pub fn map_positions_to_index(
+pub fn map_position_to_index(
     position: &usize,
     source_domain_size: usize,
     folding_factor: usize,
@@ -59,6 +59,7 @@ pub fn map_positions_to_index(
 
     position
 }
+
 /// Hashes each of the arrays in the provided slice and returns a vector of resulting hashes.
 pub fn hash_values<H, E, const N: usize>(values: &[[E; N]]) -> Vec<H::Digest>
 where
