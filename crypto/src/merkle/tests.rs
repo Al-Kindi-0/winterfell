@@ -232,6 +232,32 @@ fn verify_batch() {
     assert!(MerkleTree::verify_batch(tree.root(), &[0, 1, 2, 3, 4, 5, 6, 7], &proof).is_ok());
 }
 
+#[test]
+fn verify_unbatch() {
+    let leaves = Digest256::bytes_as_digests(&LEAVES8).to_vec();
+    let tree = MerkleTree::<Blake3_256>::new(leaves).unwrap();
+
+    let proof1 = tree.prove(1).unwrap();
+    let proof2 = tree.prove(2).unwrap();
+    let proof1_2 = tree.prove_batch(&[1,2]).unwrap();
+    let result = BatchMerkleProof::unbatch(proof1_2,&[1,2], 3).unwrap();
+
+    assert_eq!(proof1,result[0]);
+    assert_eq!(proof2,result[1]);
+
+
+    let proof3 = tree.prove(3).unwrap();
+    let proof4 = tree.prove(4).unwrap();
+    let proof6 = tree.prove(6).unwrap();
+    let proof3_4_6 = tree.prove_batch(&[3,4,6]).unwrap();
+    let result = BatchMerkleProof::unbatch(proof3_4_6,&[3,4,6], 3).unwrap();
+
+    assert_eq!(proof3,result[0]);
+    assert_eq!(proof4,result[1]);
+    assert_eq!(proof6,result[2]);   
+    
+}
+
 proptest! {
     #[test]
     fn prove_n_verify(tree in random_blake3_merkle_tree(128),

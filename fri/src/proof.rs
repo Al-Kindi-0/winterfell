@@ -3,6 +3,8 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
+use core::num;
+
 use crypto::{BatchMerkleProof, ElementHasher, Hasher};
 use math::{log2, FieldElement};
 use utils::{
@@ -151,6 +153,7 @@ impl FriProof {
                     i, err
                 ))
             })?;
+            eprintln!("The queries for layer {:?} are of length {:?}",i,qv.len());
             layer_proofs.push(mp);
             layer_queries.push(qv);
         }
@@ -316,6 +319,7 @@ impl FriProofLayer {
                 "a FRI layer must contain at least one query".to_string(),
             ));
         }
+        eprintln!("num_queries is {:?}",num_queries);
         let mut hashed_queries = vec![H::Digest::default(); num_queries];
         let mut query_values = Vec::with_capacity(num_queries * folding_factor);
 

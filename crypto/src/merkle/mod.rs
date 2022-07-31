@@ -1,6 +1,6 @@
 // Copyright (c) Facebook, Inc. and its affiliates.
 //
-// This source code is licensed under the MIT license found in the
+// This &source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
 use crate::{errors::MerkleTreeError, hash::Hasher};
@@ -197,7 +197,9 @@ impl<H: Hasher> MerkleTree<H> {
         }
 
         let index_map = map_indexes(indexes, self.depth())?;
+        //eprintln!("Index map {:?}", index_map);
         let indexes = normalize_indexes(indexes);
+        //eprintln!("Indexes {:?}",indexes);
         let mut leaves = vec![H::Digest::default(); index_map.len()];
         let mut nodes: Vec<Vec<H::Digest>> = Vec::with_capacity(indexes.len());
 

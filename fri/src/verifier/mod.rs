@@ -249,6 +249,8 @@ where
             // determine which evaluations were queried in the folded layer
             let mut folded_positions =
                 fold_positions(&positions, domain_size, self.options.folding_factor());
+            eprintln!("The orignal positions' length {:?}",positions.len());
+            eprintln!("The folded positions' length {:?}",folded_positions.len());
             // determine where these evaluations are in the commitment Merkle tree
             let position_indexes = map_positions_to_indexes(
                 &folded_positions,
@@ -256,6 +258,7 @@ where
                 self.options.folding_factor(),
                 self.num_partitions,
             );
+            eprintln!("Position indexes is {:?}",position_indexes.len());
             // read query values from the specified indexes in the Merkle tree
             let layer_commitment = self.layer_commitments[depth];
             // TODO: add layer depth to the potential error message
