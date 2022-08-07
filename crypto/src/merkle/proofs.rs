@@ -1,9 +1,9 @@
 // Copyright (c) Facebook, Inc. and its affiliates.
 //
-// This source code is licensed under the MIT license found in the
+// This &&source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use crate::{errors::MerkleTreeError, Hasher};
+use crate::{errors::MerkleTreeError, Hasher, MerkleTree};
 use utils::{
     collections::{BTreeMap, Vec},
     string::ToString,
@@ -140,8 +140,13 @@ impl<H: Hasher> BatchMerkleProof<H> {
         let mut v = BTreeMap::new();
 
         // replace odd indexes, offset, and sort in ascending order
+        println!("indexes raw {:?}", indexes);
         let index_map = super::map_indexes(indexes, self.depth as usize)?;
+
+        println!("indexes map {:?}", index_map);
+
         let indexes = super::normalize_indexes(indexes);
+        println!("indexes normalized {:?}", indexes);
         if indexes.len() != self.nodes.len() {
             return Err(MerkleTreeError::InvalidProof);
         }
@@ -265,7 +270,8 @@ impl<H: Hasher> BatchMerkleProof<H> {
         batch_proof: BatchMerkleProof<H>,
         indexes: &[usize],
         depth: usize,
-    ) -> Result<Vec<Vec<H::Digest>>,MerkleTreeError> {
+        original_tree: &MerkleTree<H>,
+    ) -> Result<Vec<Vec<H::Digest>>, MerkleTreeError> {
         if indexes.is_empty() {
             return Err(MerkleTreeError::TooFewLeafIndexes);
         }
@@ -275,71 +281,70 @@ impl<H: Hasher> BatchMerkleProof<H> {
                 indexes.len(),
             ));
         }
+
         let mut leaves = batch_proof.leaves.clone();
         leaves.reverse();
-        let mut complete_leaves = Vec::with_capacity(1 << (depth + 1));
+
+        let mut partial_tree = Vec::with_capacity(1 << (depth + 1));
+
         for _ in 0..(1 << (depth + 1)) {
-            complete_leaves.push(H::Digest::default());
+            partial_tree.push(H::Digest::default());
         }
-        //println!("Length of complete_leaves {:?}", complete_leaves.len());
+
         for i in indexes {
             if let Some(leave) = leaves.pop() {
-                complete_leaves[*i + (1 << (depth))] = leave;
+                partial_tree[*i + (1 << (depth))] = leave;
             } else {
                 println!("Error in poping");
             }
         }
-        //println!("complete leaves begin {:?}",complete_leaves[9]);
-        //println!("complete leaves begin {:?}",complete_leaves[10]);
-        // get the queue of nodes in depth first order
-        let nodes = batch_proof.nodes;
-        let mut flattened_nodes = vec![];
-        for i in 0..(1 << depth) {
-            for l in &nodes {
-                if i < l.len() {
-                    flattened_nodes.push(l[i]);
+
+        // Get the queue of nodes in depth first order
+        let mut flattened_nodes = batch_proof.nodes;
+        /*
+                let mut flattened_nodes = vec![];
+                for i in (0..(1 << depth)).rev() {
+                    (nodes).iter().rev().for_each(|l| {
+                        if i < l.len() {
+                            flattened_nodes.push(l[i]);
+                        }
+                    });
                 }
-            }
-        }
-        //println!("nodes {:?}", nodes);
-        //println!("flattened nodes {:?}", flattened_nodes);
+                println!("Nodes are {:?}", nodes);
+                println!("Nodes flattened are {:?}", flattened_nodes);
 
-        //flattened_nodes.reverse();
-        // Filling up the intermediate nodes
-
-        //println!(
-        //"RESULT IS {:?}",
-        //Self::populate_tree(&A, &E, &flattened_nodes, &d, &mut complete_leaves)
-        //);
-
-        //println!("initial depth {:?}", d);
+                flattened_nodes.reverse();
+        */
         let a = indexes.to_vec();
         let e = batch_proof.leaves;
         let d = depth;
 
-        Self::populate_tree(&a, &e, &flattened_nodes, &d, &mut complete_leaves);
+        let root = Self::populate_tree(&a, &e, &flattened_nodes, &d, &mut partial_tree);
+        println!("The original tree root is {:?}", original_tree.root());
+        println!("The partial tree root is {:?}", root);
+        //assert_eq!(*original_tree.root(),root.unwrap()[0]);
 
         for i in (1 << depth)..0 {
-            complete_leaves[i] = hash_2x1::<H>(complete_leaves[2 * i], complete_leaves[2 * i + 1]);
+            partial_tree[i] = hash_2x1::<H>(partial_tree[2 * i], partial_tree[2 * i + 1]);
         }
 
         let mut result = vec![];
         for i in indexes {
-            result.push(get_path::<H>(*i, &complete_leaves).to_vec());
-            println!(
-                "The proof for index {:?} is {:?}",
-                i,
-                get_path::<H>(*i, &complete_leaves)
-            );
+            result.push(get_path::<H>(*i, &partial_tree).to_vec());
         }
+
+        println!("The tree is {:?}", partial_tree);
+        println!("The original tree is {:?}", original_tree.nodes);
+        println!("The original tree is {:?}", original_tree.leaves());
         Ok(result)
+        //Ok(vec![vec![partial_tree[1]]])
     }
 
     /// The main function to compute all necessary nodes needed for the individual Merkle paths.
     fn populate_tree(
         a: &[usize],
         e: &[H::Digest],
-        m: &[H::Digest],
+        m: &Vec<Vec<H::Digest>>,
         depth: &usize,
         tree: &mut Vec<H::Digest>,
     ) -> Option<Vec<H::Digest>> {
@@ -355,72 +360,68 @@ impl<H: Hasher> BatchMerkleProof<H> {
         }
 
         let mut i = 0;
-        // assign generated hashes to a new E that will be used for next iteration
+        let mut j = 0;
+        // Construct a new E as in the paper
         while i < b.len() {
+            // The first case is the duplicate one where the parent node can be computed from
+            // nodes that where previously computed
             if b.len() > 1 && b.get(i) == b.get(i + 1) {
-                //println!("We are in duplicate case for {:?}", b.get(i));
-                //println!("the tree index is {:?}", a[i] + (1 << depth));
-                //println!("the index from a is {:?}", a[i]);
-                //println!("I am hashing {:?} and {:?}", e[i], e[i + 1]);
-                //println!("and the combined hash is {:?}", hash_2x1(e[i], e[i + 1]));
-                //println!("Should be inserted in {:?}", (a[i] + (1 << depth)) / 2);
                 e_new.push(hash_2x1::<H>(e[i], e[i + 1]));
                 let insert_pos = (a[i] + (1 << depth)) / 2;
-                //println!("Hashing parent node of {:?} and {:?} is {:?}",e[i],e[i+1], hash_2x1(e[i],e[i+1]));
-                //println!("It should be {:?}",hash_2x1(
-                //hash_2x1(leaves[0], leaves[1]),
-                //hash_2x1(leaves[2], leaves[3]),
-                //));
                 tree[insert_pos] = hash_2x1::<H>(e[i], e[i + 1]);
 
                 i += 2;
-            } else {
-                let head = if !m_new.is_empty() {
-                    m_new.remove(0)
+            }
+            // The second case is where we need to pop a node in order to progress up the tree
+            else {
+                println!("=======================================");
+                println!("m_new[j] is {:?}", m_new);
+                println!("index j is {:}", j);
+                println!("A is {:?}", a);
+                println!("B is {:?}", b);
+                println!("=======================================");
+                let next = if !m_new[j].is_empty() {
+                    m_new[j].remove(0)
                 } else {
+                    println!("empty j {:?}", j);
                     return None;
                 };
-
                 if a[i] % 2 == 0 {
-                    //println!("We are in the case of poping from stack (e[i],popped)");
-                    //println!("Element popped {:?}", head);
-                    //println!("Hashed with {:?}", e[i]);
-                    //println!("Resulting in {:?}", hash_2x1(e[i], head));
-                    e_new.push(hash_2x1::<H>(e[i], head));
-                    //println!("Should be inserted in {:?}", (a[i] + (1 << depth)) / 2);
+                    //println!("a[i] even is {:?}",a[i]);
+                    e_new.push(hash_2x1::<H>(e[i], next));
                     let insert_pos = a[i] + (1 << depth);
-                    //println!("Case 2: the hash calculated is {:?}", head);
-                    //println!("the correct hash is {:?}", leaves[3]);
-                    tree[insert_pos ^ 1] = head;
-                    tree[insert_pos / 2] = hash_2x1::<H>(e[i], head);
+                    tree[insert_pos ^ 1] = next;
+                    tree[insert_pos / 2] = hash_2x1::<H>(e[i], next);
+                    j += 1;
                 } else {
-                    //println!("We are in the case of poping from stack (popped, e[i])");
-                    //println!("Element popped {:?}", head);
-                    //println!("Hashed with {:?}", e[i]);
-                    //println!("Resulting in {:?}", hash_2x1(head, e[i]));
-                    //println!("Should be inserted in {:?}", (a[i] + (1 << depth)) / 2);
-                    e_new.push(hash_2x1::<H>(head, e[i]));
+                    //println!("a[i] odd is {:?}",a[i]);
+                    e_new.push(hash_2x1::<H>(next, e[i]));
                     let insert_pos = a[i] + (1 << depth);
-                    //println!("Case 3:insert pos is {:?}", hash_2x1(head, e[i]));
-                    tree[insert_pos ^ 1] = head;
-                    tree[insert_pos / 2] = hash_2x1::<H>(head, e[i]);
+                    tree[insert_pos ^ 1] = next;
+                    tree[insert_pos / 2] = hash_2x1::<H>(next, e[i]);
+                    println!("The focus index is {:?}", a[i]);
+                    println!("Sibling is {:?}", next);
+                    println!("parent pos i {:?}", insert_pos / 2);
+                    j += 1;
                 }
                 i += 1;
             }
         }
         // Generate indices for parents of current b
-        let mut a_new: Vec<usize> = b.iter().map(|(_, b)| b / 2).collect(); 
-        //println!("a_new is {:?}", a_new);
-        //a_new.sort_unstable();
+        let mut a_new: Vec<usize> = b.iter().map(|(_, b)| b / 2).collect();
+        println!("a_new is {:?}", a_new);
         a_new.dedup();
-
+        m_new.retain(|l| {!l.is_empty()});
+        // Repeat if not finished
         if (!m_new.is_empty() || e_new.len() > 1) && !a_new.is_empty() {
             let e = e_new.clone();
             e_new = Self::populate_tree(&a_new, &e, &m_new, &(*depth - 1), tree)?;
         }
+        println!("e_new is {:?}", e_new);
+        // Only for debuging, to be removed
+
         Some(e_new)
     }
-
 
     // SERIALIZATION / DESERIALIZATION
     // --------------------------------------------------------------------------------------------
@@ -511,6 +512,7 @@ fn are_siblings(left: usize, right: usize) -> bool {
     left & 1 == 0 && right - 1 == left
 }
 
+/// Computes the Merkle path from the computed (partial) tree.
 pub fn get_path<H: Hasher>(index: usize, tree: &[H::Digest]) -> Vec<H::Digest> {
     let mut index = index + tree.len() / 2;
     let mut proof = vec![tree[index]];
@@ -522,6 +524,7 @@ pub fn get_path<H: Hasher>(index: usize, tree: &[H::Digest]) -> Vec<H::Digest> {
     return proof;
 }
 
+/// Hash 2 to 1
 fn hash_2x1<H: Hasher>(v1: H::Digest, v2: H::Digest) -> H::Digest {
     H::merge(&[v1, v2])
 }
