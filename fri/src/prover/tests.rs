@@ -21,7 +21,7 @@ type Blake3 = Blake3_256<BaseElement>;
 fn fri_prove_verify() {
     let trace_length = 4096;
     let lde_blowup = 8;
-
+    
     let options = FriOptions::new(lde_blowup, 4, 256);
     let mut channel = build_prover_channel(trace_length, &options);
     let evaluations = build_evaluations(trace_length, lde_blowup);
@@ -112,5 +112,7 @@ pub fn verify_proof(
         .iter()
         .map(|&p| evaluations[p])
         .collect::<Vec<_>>();
-    verifier.verify(&mut channel, &queried_evaluations, &positions)
+    verifier.verify_query(&mut channel, &queried_evaluations, positions)
+    //verifier.verify(&mut channel, &queried_evaluations, &positions)
+    
 }
