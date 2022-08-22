@@ -2,8 +2,13 @@
 //
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
+use core::mem;
 
-use crate::{utils::hash_values, FriProof, VerifierError};
+use crate::{
+    folding::fold_positions,
+    utils::{hash_values, map_positions_to_indexes},
+    FriProof, VerifierError,
+};
 use crypto::{BatchMerkleProof, ElementHasher, Hasher, MerkleTree};
 use math::FieldElement;
 use utils::{collections::Vec, group_vector_elements, transpose_slice, DeserializationError};
@@ -64,6 +69,22 @@ pub trait VerifierChannel<E: FieldElement> {
 
     /// Reads and removes the remainder (last FRI layer) values from the channel.
     fn take_fri_remainder(&mut self) -> Vec<E>;
+
+    /// Reads the query positions and returns, for each query, the quotient group, of size N, which
+    /// corresponds to the folded position at the layer. These N-values are augmented with the
+    /// Merkle proof of their inclusion against the corresponding layer commitment.
+    fn unbatch<const N: usize>(
+        &self,
+        positions: &[usize],
+        domain_size: usize,
+        folding_factor: usize,
+        layer_commitments: Vec<<<Self as VerifierChannel<E>>::Hasher as Hasher>::Digest>,
+    ) -> Vec<
+        Vec<(
+            Vec<<<Self as VerifierChannel<E>>::Hasher as Hasher>::Digest>,
+            [E; N],
+        )>,
+    >;
 
     // PROVIDED METHODS
     // --------------------------------------------------------------------------------------------
@@ -194,5 +215,75 @@ where
 
     fn take_fri_remainder(&mut self) -> Vec<E> {
         self.remainder.clone()
+    }
+
+    fn unbatch<const N: usize>(
+        &self,
+        positions_: &[usize],
+        domain_size: usize,
+        folding_factor: usize,
+        layer_commitments: Vec<H::Digest>,
+    ) -> Vec<Vec<(Vec<H::Digest>, [E; N])>> {
+        let queries = self.layer_queries.clone();
+        let mut current_domain_size = domain_size;
+        let mut positions = positions_.to_vec();
+        let depth = layer_commitments.len() - 1;
+        let mut result: Vec<Vec<(usize, Vec<<H as Hasher>::Digest>, [E; N])>> = Vec::new();
+
+        for i in 0..depth {
+            let mut folded_positions =
+                fold_positions(&positions, current_domain_size, folding_factor);
+            let position_indexes = map_positions_to_indexes(
+                &folded_positions,
+                current_domain_size,
+                folding_factor,
+                self.num_partitions,
+            );
+            assert_eq!(position_indexes, folded_positions);
+
+            let unbatched_proof = self.layer_proofs[i].into_paths(&position_indexes).unwrap();
+            let x = group_vector_elements::<E, N>(queries[i].clone());
+            assert_eq!(x.len(), unbatched_proof.len());
+
+            let partial_result = {
+                let mut partial_result: Vec<_> = Vec::new();
+                for j in 0..unbatched_proof.len() {
+                    let tmp = (position_indexes[j], unbatched_proof[j].clone(), x[j]);
+                    partial_result.push(tmp);
+                }
+                partial_result
+            };
+            result.push(partial_result);
+            mem::swap(&mut positions, &mut folded_positions);
+            current_domain_size = current_domain_size / folding_factor;
+        }
+
+        let mut final_result: Vec<Vec<(Vec<<H as Hasher>::Digest>, [E; N])>> = Vec::new();
+        for p in positions_.iter() {
+            let mut current_domain_size = domain_size;
+            let current_position = p;
+
+            let query_across_layers = {
+                let mut query_across_layers: Vec<(Vec<<H as Hasher>::Digest>, [E; N])> = Vec::new();
+                for i in 0..depth {
+                    current_domain_size = current_domain_size / folding_factor;
+                    let current_position = current_position % current_domain_size;
+                    let queries_current_layer = result[i].clone();
+
+                    let single_query = queries_current_layer
+                        .iter()
+                        .find(|(i, _, _)| *i == current_position)
+                        .unwrap();
+                    let single_query = ((*single_query).1.clone(), single_query.2);
+
+                    query_across_layers.push(single_query);
+                }
+                query_across_layers
+            };
+            final_result.push(query_across_layers);
+        }
+        assert!(final_result.len() == (*positions_).len());
+        assert!(final_result[0].len() == depth);
+        final_result
     }
 }

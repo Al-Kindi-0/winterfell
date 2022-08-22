@@ -112,5 +112,5 @@ pub fn verify_proof(
         .iter()
         .map(|&p| evaluations[p])
         .collect::<Vec<_>>();
-    verifier.verify(&mut channel, &queried_evaluations, &positions)
+    verifier.verify_query(&mut channel, &queried_evaluations, &positions)
 }
