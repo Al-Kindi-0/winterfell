@@ -5,7 +5,7 @@
 
 use crypto::ElementHasher;
 use math::FieldElement;
-use utils::{collections::Vec, iter_mut, uninit_vector};
+use utils::{collections::{Vec, BTreeMap}, iter_mut, uninit_vector};
 
 #[cfg(feature = "concurrent")]
 use utils::iterators::*;
@@ -71,4 +71,37 @@ where
         *r = H::hash_elements(v);
     });
     result
+}
+
+pub struct AdviceProvider<E,const N: usize> where E: FieldElement{
+    sets: BTreeMap<[u8; 32], MerklePathSet<E>>,
+}
+pub type Word<E: FieldElement> = [E; 4];
+
+pub struct MerklePathSet<E> where E: FieldElement {
+    root: Word<E>,
+    total_depth: u32,
+    paths: BTreeMap<u64, Vec<Word<E>>>,
+}
+
+impl<E,const N: usize> AdviceProvider<E,N> where E: FieldElement{
+    // CONSTRUCTOR
+    // --------------------------------------------------------------------------------------------
+    /// Returns a new advice provider instantiated from the specified program inputs.
+    pub fn new(inputs: Vec<Vec<(Vec<Word<E>>, [E; N])>>, commitments: Vec<Word<E>>) -> Self {
+
+        let mut sets = BTreeMap::new();
+
+        for q in inputs.iter(){
+            for (q_layer,commit_layer) in q.iter().zip(commitments.iter()){
+                sets.insert(commit_layer, q_layer);
+            }
+        }
+
+        Self {
+            sets: BTreeMap::new(),
+        }
+    }
+
+
 }
