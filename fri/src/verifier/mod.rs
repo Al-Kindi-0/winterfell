@@ -10,7 +10,7 @@ use crate::{
     utils::{map_position_to_index, map_positions_to_indexes},
     FriOptions, VerifierError,
 };
-use core::{convert::TryInto, marker::PhantomData, mem, num};
+use core::{convert::TryInto, marker::PhantomData, mem};
 use crypto::{ElementHasher, MerkleTree, RandomCoin};
 use math::{fft, log2, polynom, FieldElement, StarkField};
 use utils::collections::Vec;

@@ -6,7 +6,7 @@ use core::mem;
 
 use crate::{
     folding::fold_positions,
-    utils::{hash_values, map_positions_to_indexes},
+    utils::{hash_values, map_positions_to_indexes, AdviceProvider},
     FriProof, VerifierError,
 };
 use crypto::{BatchMerkleProof, ElementHasher, Hasher, MerkleTree};
@@ -194,6 +194,7 @@ impl<E, H> VerifierChannel<E> for DefaultVerifierChannel<E, H>
 where
     E: FieldElement,
     H: ElementHasher<BaseField = E::BaseField>,
+
 {
     type Hasher = H;
 
@@ -229,6 +230,7 @@ where
         let mut positions = positions_.to_vec();
         let depth = layer_commitments.len() - 1;
         let mut result: Vec<Vec<(usize, Vec<<H as Hasher>::Digest>, [E; N])>> = Vec::new();
+        let mut advice = AdviceProvider::<H,E,N>::new();
 
         for i in 0..depth {
             let mut folded_positions =
@@ -274,9 +276,20 @@ where
                         .iter()
                         .find(|(i, _, _)| *i == current_position)
                         .unwrap();
-                    let single_query = ((*single_query).1.clone(), single_query.2);
+                    let path = (*single_query).1.clone();
+                    let values = single_query.2;
+                    // advice.add(root = layer_commitments[i], depth = single_query.0.len(), index = current_position, path = single_query.0)
+                    // //leaf_from_index is used to determine the position of the leaf in the Merkle proof
+                    // advice.add_leaf(leaf_from_index(single_query.0, current_position), value = single_query.2)
 
-                    query_across_layers.push(single_query);
+                    advice.add(layer_commitments[i], current_position, &path, &values);
+                    //println!("dictionary {:?}", advice.dict);
+                    let _result = advice.get_tree_node(layer_commitments[i], path.len() as u32, current_position as u64).unwrap();
+                    //println!("result {:?}", result);
+                    //println!("values {:?}",values);
+                    //advice.add_leaf(&leaf_from_index::<H>(&single_query.0, current_position), &single_query.1);
+
+                    query_across_layers.push((path,values));
                 }
                 query_across_layers
             };
