@@ -8,10 +8,17 @@ use crate::{
     verifier::{DefaultVerifierChannel, FriVerifier},
     FriOptions, FriProof, VerifierError,
 };
-use crypto::{hashers::Blake3_256, Hasher, RandomCoin};
-use math::{fft, fields::f128::BaseElement, FieldElement};
+use crypto::{Hasher, RandomCoin};
+use math::{fft, fields::QuadExtension, FieldElement};
 use utils::{collections::Vec, Deserializable, Serializable, SliceReader};
 
+use math::fields::f64::BaseElement;
+type ExtElement = QuadExtension<BaseElement>;
+
+//use crypto::hashers::Rp64_256;
+//type Blake3 = Rp64_256;
+
+use crypto::hashers::Blake3_256;
 type Blake3 = Blake3_256<BaseElement>;
 
 // PROVE/VERIFY TEST
@@ -65,16 +72,18 @@ fn fri_prove_verify() {
 pub fn build_prover_channel(
     trace_length: usize,
     options: &FriOptions,
-) -> DefaultProverChannel<BaseElement, BaseElement, Blake3> {
+) -> DefaultProverChannel<BaseElement, ExtElement, Blake3> {
     DefaultProverChannel::new(trace_length * options.blowup_factor(), 32)
 }
 
-pub fn build_evaluations(trace_length: usize, lde_blowup: usize) -> Vec<BaseElement> {
-    let mut p = (0..trace_length as u128)
-        .map(BaseElement::new)
+pub fn build_evaluations(trace_length: usize, lde_blowup: usize) -> Vec<ExtElement> {
+    let mut p = (0..trace_length as u64)
+        .map(|i| (i, i))
+        .map(|(i, j)| ExtElement::new(i.into(), j.into()))
+        //.map(ExtElement::new)
         .collect::<Vec<_>>();
     let domain_size = trace_length * lde_blowup;
-    p.resize(domain_size, BaseElement::ZERO);
+    p.resize(domain_size, ExtElement::ZERO);
 
     let twiddles = fft::get_twiddles::<BaseElement>(domain_size);
 
@@ -85,7 +94,7 @@ pub fn build_evaluations(trace_length: usize, lde_blowup: usize) -> Vec<BaseElem
 pub fn verify_proof(
     proof: FriProof,
     commitments: Vec<<Blake3 as Hasher>::Digest>,
-    evaluations: &[BaseElement],
+    evaluations: &[ExtElement],
     max_degree: usize,
     domain_size: usize,
     positions: &[usize],
@@ -99,7 +108,7 @@ pub fn verify_proof(
     let proof = FriProof::read_from(&mut reader).unwrap();
 
     // verify the proof
-    let mut channel = DefaultVerifierChannel::<BaseElement, Blake3>::new(
+    let mut channel = DefaultVerifierChannel::<ExtElement, Blake3>::new(
         proof,
         commitments,
         domain_size,
@@ -112,5 +121,5 @@ pub fn verify_proof(
         .iter()
         .map(|&p| evaluations[p])
         .collect::<Vec<_>>();
-    verifier.verify(&mut channel, &queried_evaluations, &positions)
+    verifier.verify_query(&mut channel, &queried_evaluations, &positions)
 }

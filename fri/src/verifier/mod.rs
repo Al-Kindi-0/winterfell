@@ -5,7 +5,11 @@
 
 //! Contains an implementation of FRI verifier and associated components.
 
-use crate::{folding::fold_positions, utils::map_positions_to_indexes, FriOptions, VerifierError};
+use crate::{
+    folding::fold_positions,
+    utils::{map_positions_to_indexes, AdviceProvider},
+    FriOptions, VerifierError,
+};
 use core::{convert::TryInto, marker::PhantomData, mem};
 use crypto::{ElementHasher, RandomCoin};
 use math::{fft, log2, polynom, FieldElement, StarkField};
@@ -317,6 +321,127 @@ where
         // make sure the remainder values satisfy the degree
         verify_remainder(remainder, max_degree_plus_1 - 1)
     }
+
+    // VERIFICATION PROCEDURE QUERY-WISE
+    // --------------------------------------------------------------------------------------------
+    /// Executes the query phase of the FRI protocol ONE QUERY POSITION AT A TIME.
+    ///
+    /// Returns `Ok(())` if values in the `evaluations` slice represent evaluations of a polynomial
+    /// with degree <= `max_poly_degree` at x coordinates specified by the `positions` slice.
+    ///
+    /// Thus, `positions` parameter represents the positions in the evaluation domain at which the
+    /// verifier queries the prover at the first FRI layer. Similarly, the `evaluations` parameter
+    /// specifies the evaluations of the polynomial at the first FRI layer returned by the prover
+    /// for these positions.
+    ///
+    /// Evaluations of layer polynomials for all subsequent FRI layers the verifier reads from the
+    /// specified `channel`.
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// * The length of `evaluations` is not equal to the length of `positions`.
+    /// * An unsupported folding factor was specified by the `options` for this verifier.
+    /// * Decommitments to polynomial evaluations don't match the commitment value at any of the
+    ///   FRI layers.
+    /// * The verifier detects an error in how the degree-respecting projection was applied
+    ///   at any of the FRI layers.
+    /// * The degree of the remainder at the last FRI layer is greater than the degree implied by
+    ///   `max_poly_degree` reduced by the folding factor at each FRI layer.
+    pub fn verify_query(
+        &self,
+        channel: &mut C,
+        evaluations: &[E],
+        positions: &[usize],
+    ) -> Result<(), VerifierError> {
+        if evaluations.len() != positions.len() {
+            return Err(VerifierError::NumPositionEvaluationMismatch(
+                positions.len(),
+                evaluations.len(),
+            ));
+        }
+
+        // static dispatch for folding factor parameter
+        let folding_factor = self.options.folding_factor();
+        match folding_factor {
+            4 => self.verify_generic_query::<4>(channel, evaluations, positions),
+            8 => self.verify_generic_query::<8>(channel, evaluations, positions),
+            16 => self.verify_generic_query::<16>(channel, evaluations, positions),
+            _ => Err(VerifierError::UnsupportedFoldingFactor(folding_factor)),
+        }
+    }
+
+    /// This is the actual implementation of the verification procedure described above, but it
+    /// also takes folding factor as a generic parameter N.
+    fn verify_generic_query<const N: usize>(
+        &self,
+        channel: &mut C,
+        evaluations: &[E],
+        positions: &[usize],
+    ) -> Result<(), VerifierError> {
+        // pre-compute roots of unity used in computing x coordinates in the folded domain
+        let folding_roots = (0..N)
+            .map(|i| {
+                self.domain_generator
+                    .exp(((self.domain_size / N * i) as u64).into())
+            })
+            .collect::<Vec<_>>();
+
+        // 1 ----- verify the recursive components of the FRI proof -----------------------------------
+        let positions = positions.to_vec();
+        let evaluations = evaluations.to_vec();
+        let mut final_max_poly_degree_plus_1 = 0;
+        let mut final_pos_eval: Vec<(usize, E)> = vec![];
+        let mut total_num_hash = 0usize;
+
+        // Get the queries from the channel in a vertical configuration
+        let advice_provider = channel.unbatch::<N>(
+            &positions,
+            self.domain_size,
+            self.options.folding_factor(),
+            self.layer_commitments.clone(),
+        );
+
+        for (index, &position) in positions.iter().enumerate() {
+            //println!("Index is {:?}", index);
+            let (cur_pos, evaluation, num_hash, final_max_poly_degree_plus_1_) =
+                iterate_through_query::<B, E, H, N>(
+                    &self.layer_commitments,
+                    &folding_roots,
+                    &self.layer_alphas,
+                    &advice_provider,
+                    position,
+                    self.options.num_fri_layers(self.domain_size),
+                    self.domain_size,
+                    &evaluations[index],
+                    self.domain_generator,
+                    self.max_poly_degree + 1,
+                )?;
+
+            total_num_hash = num_hash;
+            final_max_poly_degree_plus_1 = final_max_poly_degree_plus_1_;
+
+            final_pos_eval.push((cur_pos, evaluation));
+        }
+        eprintln!(
+            "Number of hashes during FRI verification per query is {:?}",
+            total_num_hash
+        );
+
+        // 2 ----- verify the remainder of the FRI proof ----------------------------------------------
+
+        // read the remainder from the channel and make sure it matches with the columns
+        // of the previous layer
+        let remainder_commitment = self.layer_commitments.last().unwrap();
+        let remainder = channel.read_remainder::<N>(remainder_commitment)?;
+        for (pos, eval) in final_pos_eval.iter() {
+            if remainder[*pos] != *eval {
+                return Err(VerifierError::InvalidRemainderFolding);
+            }
+        }
+
+        // make sure the remainder values satisfy the degree
+        verify_remainder(remainder, final_max_poly_degree_plus_1 - 1)
+    }
 }
 
 // REMAINDER DEGREE VERIFICATION
@@ -367,4 +492,86 @@ fn get_query_values<E: FieldElement, const N: usize>(
     }
 
     result
+}
+
+fn iterate_through_query<B, E, H, const N: usize>(
+    layer_commitments: &Vec<H::Digest>,
+    folding_roots: &Vec<B>,
+    layer_alphas: &Vec<E>,
+    advice_provider: &AdviceProvider<H, E, N>,
+    position: usize,
+    number_of_layers: usize,
+    initial_domain_size: usize,
+    evaluation: &E,
+    domain_generator: B,
+    max_degree_plus_1: usize,
+) -> Result<(usize, E, usize, usize), VerifierError>
+where
+    B: StarkField,
+    E: FieldElement<BaseField = B>,
+    H: ElementHasher<BaseField = B>,
+{
+    let mut cur_pos = position;
+    let mut evaluation = *evaluation;
+    let mut domain_size = initial_domain_size;
+    let mut domain_generator = domain_generator;
+    let mut max_degree_plus_1 = max_degree_plus_1;
+    let domain_offset = B::GENERATOR;
+    let mut num_hash = 0usize;
+
+    for depth in 0..number_of_layers {
+        let target_domain_size = domain_size / N;
+
+        let folded_pos = cur_pos % target_domain_size;
+        // Assumes the num_partitions == 1
+        let position_index = folded_pos;
+
+        let tree_depth = log2(target_domain_size) + 1;
+
+        let query_values = advice_provider
+            .get_tree_node(layer_commitments[depth], tree_depth, position_index as u64)
+            .unwrap();
+        let query_value = query_values[cur_pos / target_domain_size];
+
+        if evaluation != query_value {
+            return Err(VerifierError::InvalidLayerFolding(depth));
+        }
+
+        #[rustfmt::skip]
+        let xe = domain_generator.exp((folded_pos as u64).into()) * (domain_offset);
+        let xs: [E; N] = folding_roots
+            .iter()
+            .map(|&r| E::from(xe * r))
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+        let row_poly = polynom::interpolate(&xs, &query_values, true);
+
+        let alpha = layer_alphas[depth];
+
+        // check that when the polynomials are evaluated at alpha, the result is equal to
+        // the corresponding column value
+        evaluation = polynom::eval(&row_poly, alpha);
+
+        // make sure next degree reduction does not result in degree truncation
+        if max_degree_plus_1 % N != 0 {
+            return Err(VerifierError::DegreeTruncation(
+                max_degree_plus_1 - 1,
+                N,
+                depth,
+            ));
+        }
+
+        // update variables for the next iteration of the loop
+        max_degree_plus_1 /= N;
+        domain_generator = domain_generator.exp((N as u32).into());
+        cur_pos = folded_pos;
+        domain_size /= N;
+
+        // Estimate number of hashings required per query
+        let degree_of_extension = evaluation.as_bytes().len() / domain_offset.as_bytes().len();
+        num_hash += (tree_depth as usize - 1) + (N * degree_of_extension) / 4;
+        //num_hash += tree_depth as usize - 1;
+    }
+    Ok((cur_pos, evaluation, num_hash, max_degree_plus_1))
 }
