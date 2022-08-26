@@ -10,7 +10,7 @@ use crate::{
     FriProof, VerifierError,
 };
 use crypto::{BatchMerkleProof, ElementHasher, Hasher, MerkleTree};
-use math::FieldElement;
+use math::{FieldElement};
 use utils::{collections::Vec, group_vector_elements, transpose_slice, DeserializationError};
 
 // VERIFIER CHANNEL TRAIT
@@ -79,12 +79,13 @@ pub trait VerifierChannel<E: FieldElement> {
         domain_size: usize,
         folding_factor: usize,
         layer_commitments: Vec<<<Self as VerifierChannel<E>>::Hasher as Hasher>::Digest>,
-    ) -> Vec<
-        Vec<(
-            Vec<<<Self as VerifierChannel<E>>::Hasher as Hasher>::Digest>,
-            [E; N],
-        )>,
-    >;
+    )  -> AdviceProvider<Self::Hasher, E, N>;
+    //-> Vec<
+        //Vec<(
+            //Vec<<<Self as VerifierChannel<E>>::Hasher as Hasher>::Digest>,
+            //[E; N],
+        //)>,
+    //>;
 
     // PROVIDED METHODS
     // --------------------------------------------------------------------------------------------
@@ -224,7 +225,7 @@ where
         domain_size: usize,
         folding_factor: usize,
         layer_commitments: Vec<H::Digest>,
-    ) -> Vec<Vec<(Vec<H::Digest>, [E; N])>> {
+    ) -> AdviceProvider<H, E, N> {
         let queries = self.layer_queries.clone();
         let mut current_domain_size = domain_size;
         let mut positions = positions_.to_vec();
@@ -278,16 +279,8 @@ where
                         .unwrap();
                     let path = (*single_query).1.clone();
                     let values = single_query.2;
-                    // advice.add(root = layer_commitments[i], depth = single_query.0.len(), index = current_position, path = single_query.0)
-                    // //leaf_from_index is used to determine the position of the leaf in the Merkle proof
-                    // advice.add_leaf(leaf_from_index(single_query.0, current_position), value = single_query.2)
 
                     advice.add(layer_commitments[i], current_position, &path, &values);
-                    //println!("dictionary {:?}", advice.dict);
-                    let _result = advice.get_tree_node(layer_commitments[i], path.len() as u32, current_position as u64).unwrap();
-                    //println!("result {:?}", result);
-                    //println!("values {:?}",values);
-                    //advice.add_leaf(&leaf_from_index::<H>(&single_query.0, current_position), &single_query.1);
 
                     query_across_layers.push((path,values));
                 }
@@ -297,6 +290,7 @@ where
         }
         assert!(final_result.len() == (*positions_).len());
         assert!(final_result[0].len() == depth);
-        final_result
+
+        advice
     }
 }

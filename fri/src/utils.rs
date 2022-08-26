@@ -131,7 +131,7 @@ where
     }
 
     pub fn get_tree_node(
-        &mut self,
+        &self,
         root: H::Digest,
         depth: u32,
         index: u64,
@@ -197,6 +197,9 @@ where
     }
 
     pub fn get_node(&self, depth: u32, index: u64) -> Result<H::Digest, AdviceSetError> {
+        //println!("self.total_depth is {:?}", self.total_depth);
+        //println!("depth is {:?}", self.total_depth);
+
         if index >= 2u64.pow(self.total_depth) {
             return Err(AdviceSetError::InvalidIndex(self.total_depth, index));
         }
@@ -253,10 +256,6 @@ pub enum ExecutionError {
 
 #[derive(Clone, Debug)]
 pub enum AdviceSetError {
-    DepthTooSmall,
-    DepthTooBig(u32),
-    NumLeavesNotPowerOfTwo(usize),
-    InvalidKey(u64),
     InvalidIndex(u32, u64),
     InvalidDepth(u32, u32),
     InvalidPath(),

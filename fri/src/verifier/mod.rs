@@ -7,11 +7,11 @@
 
 use crate::{
     folding::fold_positions,
-    utils::{map_position_to_index, map_positions_to_indexes},
+    utils::{map_positions_to_indexes, AdviceProvider},
     FriOptions, VerifierError,
 };
 use core::{convert::TryInto, marker::PhantomData, mem};
-use crypto::{ElementHasher, MerkleTree, RandomCoin};
+use crypto::{ElementHasher, RandomCoin};
 use math::{fft, log2, polynom, FieldElement, StarkField};
 use utils::collections::Vec;
 
@@ -394,42 +394,38 @@ where
         let mut total_num_hash = 0usize;
 
         // Get the queries from the channel in a vertical configuration
-        let queries = channel.unbatch::<N>(
+        let advice_provider = channel.unbatch::<N>(
             &positions,
             self.domain_size,
             self.options.folding_factor(),
             self.layer_commitments.clone(),
         );
-        // The number of queries provided by the prover is the same as the number of queries requested by the verifier
-        assert!(queries.len() == positions.len());
-        // Sanity check
-        assert!(queries[0].len() == self.options.num_fri_layers(self.domain_size));
 
-        for (index, position) in positions.iter().enumerate() {
-
+        for (index, &position) in positions.iter().enumerate() {
             //println!("Index is {:?}", index);
-            let (cur_pos, evaluation, num_hash, final_max_poly_degree_plus_1_) = iterate_through_query::<B, E, H, N>(
-                &self.layer_commitments,
-                &folding_roots,
-                &self.layer_alphas,
-                &queries[index],
-                *position,
-                self.num_partitions,
-                self.options.folding_factor(),
-                self.options.num_fri_layers(self.domain_size),
-                self.domain_size,
-                &evaluations[index],
-                self.domain_generator,
-                self.max_poly_degree + 1,
-                self.options.domain_offset(),
-            )?;
+            let (cur_pos, evaluation, num_hash, final_max_poly_degree_plus_1_) =
+                iterate_through_query::<B, E, H, N>(
+                    &self.layer_commitments,
+                    &folding_roots,
+                    &self.layer_alphas,
+                    &advice_provider,
+                    position,
+                    self.options.num_fri_layers(self.domain_size),
+                    self.domain_size,
+                    &evaluations[index],
+                    self.domain_generator,
+                    self.max_poly_degree + 1,
+                )?;
 
-            total_num_hash += num_hash;
+            total_num_hash = num_hash;
             final_max_poly_degree_plus_1 = final_max_poly_degree_plus_1_;
 
             final_pos_eval.push((cur_pos, evaluation));
         }
-        eprintln!("Total number of hashes during FRI verification is {:?}", total_num_hash);
+        eprintln!(
+            "Number of hashes during FRI verification per query is {:?}",
+            total_num_hash
+        );
 
         // 2 ----- verify the remainder of the FRI proof ----------------------------------------------
 
@@ -502,16 +498,13 @@ fn iterate_through_query<B, E, H, const N: usize>(
     layer_commitments: &Vec<H::Digest>,
     folding_roots: &Vec<B>,
     layer_alphas: &Vec<E>,
-    query: &Vec<(Vec<<H>::Digest>, [E; N])>,
+    advice_provider: &AdviceProvider<H, E, N>,
     position: usize,
-    num_partitions: usize,
-    folding_factor: usize,
     number_of_layers: usize,
-    domain_size: usize,
+    initial_domain_size: usize,
     evaluation: &E,
     domain_generator: B,
     max_degree_plus_1: usize,
-    domain_offset: B,
 ) -> Result<(usize, E, usize, usize), VerifierError>
 where
     B: StarkField,
@@ -520,24 +513,24 @@ where
 {
     let mut cur_pos = position;
     let mut evaluation = *evaluation;
-    let mut domain_size = domain_size;
+    let mut domain_size = initial_domain_size;
     let mut domain_generator = domain_generator;
     let mut max_degree_plus_1 = max_degree_plus_1;
+    let domain_offset = B::GENERATOR;
     let mut num_hash = 0usize;
 
     for depth in 0..number_of_layers {
-        //println!("Depth is {:?}",depth);
-        let target_domain_size = domain_size / folding_factor;
-        let (query_proof, query_values) = &query[depth];
+        let target_domain_size = domain_size / N;
 
         let folded_pos = cur_pos % target_domain_size;
-        let position_index =
-            map_position_to_index(&folded_pos, domain_size, folding_factor, num_partitions);
+        // Assumes the num_partitions == 1
+        let position_index = folded_pos;
 
-        MerkleTree::<H>::verify(layer_commitments[depth], position_index, &query_proof)
-            .map_err(|_| VerifierError::LayerCommitmentMismatch)?;
-        num_hash += query_proof.len() - 1;
+        let tree_depth = log2(target_domain_size) + 1;
 
+        let query_values = advice_provider
+            .get_tree_node(layer_commitments[depth], tree_depth, position_index as u64)
+            .unwrap();
         let query_value = query_values[cur_pos / target_domain_size];
 
         if evaluation != query_value {
@@ -545,14 +538,14 @@ where
         }
 
         #[rustfmt::skip]
-                let xe = domain_generator.exp((folded_pos as u64).into()) * (domain_offset);
+        let xe = domain_generator.exp((folded_pos as u64).into()) * (domain_offset);
         let xs: [E; N] = folding_roots
             .iter()
             .map(|&r| E::from(xe * r))
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
-        let row_poly = polynom::interpolate(&xs, query_values, true);
+        let row_poly = polynom::interpolate(&xs, &query_values, true);
 
         let alpha = layer_alphas[depth];
 
@@ -574,6 +567,11 @@ where
         domain_generator = domain_generator.exp((N as u32).into());
         cur_pos = folded_pos;
         domain_size /= N;
+
+        // Estimate number of hashings required per query
+        let degree_of_extension = evaluation.as_bytes().len() / domain_offset.as_bytes().len();
+        num_hash += (tree_depth as usize - 1) + (N * degree_of_extension) / 4;
+        //num_hash += tree_depth as usize - 1;
     }
     Ok((cur_pos, evaluation, num_hash, max_degree_plus_1))
 }
