@@ -219,6 +219,7 @@ where
         // static dispatch for folding factor parameter
         let folding_factor = self.options.folding_factor();
         match folding_factor {
+            2 => self.verify_generic::<2>(channel, evaluations, positions),
             4 => self.verify_generic::<4>(channel, evaluations, positions),
             8 => self.verify_generic::<8>(channel, evaluations, positions),
             16 => self.verify_generic::<16>(channel, evaluations, positions),
@@ -363,6 +364,7 @@ where
         // static dispatch for folding factor parameter
         let folding_factor = self.options.folding_factor();
         match folding_factor {
+            2 => self.verify_generic_query::<2>(channel, evaluations, positions),
             4 => self.verify_generic_query::<4>(channel, evaluations, positions),
             8 => self.verify_generic_query::<8>(channel, evaluations, positions),
             16 => self.verify_generic_query::<16>(channel, evaluations, positions),
@@ -462,6 +464,7 @@ fn verify_remainder<B: StarkField, E: FieldElement<BaseField = B>>(
     let inv_twiddles = fft::get_inv_twiddles(remainder.len());
     fft::interpolate_poly(&mut remainder, &inv_twiddles);
     let poly = remainder;
+    println!("remiander poly is {:?}", poly);
 
     // make sure the degree is valid
     if max_degree < polynom::degree_of(&poly) {

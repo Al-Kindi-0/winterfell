@@ -29,7 +29,7 @@ fn fri_prove_verify() {
     let trace_length = 4096;
     let lde_blowup = 8;
 
-    let options = FriOptions::new(lde_blowup, 4, 256);
+    let options = FriOptions::new(lde_blowup, 4, 8);
     let mut channel = build_prover_channel(trace_length, &options);
     let evaluations = build_evaluations(trace_length, lde_blowup);
 
@@ -116,7 +116,7 @@ pub fn verify_proof(
     )
     .unwrap();
     let mut coin = RandomCoin::<BaseElement, Blake3>::new(&[]);
-    let verifier = FriVerifier::new(&mut channel, &mut coin, options.clone(), max_degree).unwrap();
+    let verifier = FriVerifier::new(&mut channel, &mut coin, options.clone(), max_degree)?;
     let queried_evaluations = positions
         .iter()
         .map(|&p| evaluations[p])

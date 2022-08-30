@@ -172,7 +172,9 @@ where
         // reduce the degree by folding_factor at each iteration until the remaining polynomial
         // is small enough; + 1 is for the remainder
         for _ in 0..self.options.num_fri_layers(evaluations.len()) + 1 {
+            //println!("evaluations of the layer to be built {:?}",evaluations);
             match self.folding_factor() {
+                2 => self.build_layer::<2>(channel, &mut evaluations),
                 4 => self.build_layer::<4>(channel, &mut evaluations),
                 8 => self.build_layer::<8>(channel, &mut evaluations),
                 16 => self.build_layer::<16>(channel, &mut evaluations),
@@ -183,6 +185,7 @@ where
         // make sure remainder length does not exceed max allowed value
         let last_layer = &self.layers[self.layers.len() - 1];
         let remainder_size = last_layer.evaluations.len();
+        println!("remainder values {:?}",last_layer.evaluations);
         debug_assert!(
             remainder_size <= self.options.max_remainder_size(),
             "last FRI layer cannot exceed {} elements, but was {} elements",
@@ -244,6 +247,7 @@ where
 
             // sort of a static dispatch for folding_factor parameter
             let proof_layer = match folding_factor {
+                2 => query_layer::<B, E, H, 2>(&self.layers[i], &positions),
                 4 => query_layer::<B, E, H, 4>(&self.layers[i], &positions),
                 8 => query_layer::<B, E, H, 8>(&self.layers[i], &positions),
                 16 => query_layer::<B, E, H, 16>(&self.layers[i], &positions),
