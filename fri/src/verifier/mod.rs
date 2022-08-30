@@ -215,6 +215,7 @@ where
         // static dispatch for folding factor parameter
         let folding_factor = self.options.folding_factor();
         match folding_factor {
+            2 => self.verify_generic::<2>(channel, evaluations, positions),
             4 => self.verify_generic::<4>(channel, evaluations, positions),
             8 => self.verify_generic::<8>(channel, evaluations, positions),
             16 => self.verify_generic::<16>(channel, evaluations, positions),
@@ -314,7 +315,8 @@ where
             }
         }
 
-        // make sure the remainder values satisfy the degree
+        // make sure the remainder values satisfy the degree bound if the remainder should represent
+        // a polynomial of degree greater than 0.
         verify_remainder(remainder, max_degree_plus_1 - 1)
     }
 }
@@ -330,19 +332,29 @@ fn verify_remainder<B: StarkField, E: FieldElement<BaseField = B>>(
     if max_degree >= remainder.len() - 1 {
         return Err(VerifierError::RemainderDegreeNotValid);
     }
-
-    // interpolate remainder polynomial from its evaluations; we don't shift the domain here
-    // because the degree of the polynomial will not change as long as we interpolate over a
-    // coset of the original domain.
-    let inv_twiddles = fft::get_inv_twiddles(remainder.len());
-    fft::interpolate_poly(&mut remainder, &inv_twiddles);
-    let poly = remainder;
-
-    // make sure the degree is valid
-    if max_degree < polynom::degree_of(&poly) {
-        Err(VerifierError::RemainderDegreeMismatch(max_degree))
+    // in case `remainder` represents a polynomial of degree `0` then the final check simplifies
+    // to checking that the codeword values are identical. This should probably be combined with
+    // the above so that `remainder[position] != evaluation` is done only once.
+    if max_degree == 0 {
+        if !remainder.windows(2).all(|a| a[0] == a[1]) {
+            return Err(VerifierError::RemainderDegreeMismatch(max_degree));
+        } else {
+            Ok(())
+        }
     } else {
-        Ok(())
+        // interpolate remainder polynomial from its evaluations; we don't shift the domain here
+        // because the degree of the polynomial will not change as long as we interpolate over a
+        // coset of the original domain.
+        let inv_twiddles = fft::get_inv_twiddles(remainder.len());
+        fft::interpolate_poly(&mut remainder, &inv_twiddles);
+        let poly = remainder;
+
+        // make sure the degree is valid
+        if max_degree < polynom::degree_of(&poly) {
+            Err(VerifierError::RemainderDegreeMismatch(max_degree))
+        } else {
+            Ok(())
+        }
     }
 }
 
