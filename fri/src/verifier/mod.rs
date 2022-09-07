@@ -393,7 +393,8 @@ where
         let evaluations = evaluations.to_vec();
         let mut final_max_poly_degree_plus_1 = 0;
         let mut final_pos_eval: Vec<(usize, E)> = vec![];
-        let mut total_num_hash = 0usize;
+        let mut total_num_hash_trees = 0usize;
+        let mut total_num_hash_leaves = 0usize;
 
         // Get the queries from the channel in a vertical configuration
         let advice_provider = channel.unbatch::<N>(
@@ -405,7 +406,7 @@ where
 
         for (index, &position) in positions.iter().enumerate() {
             //println!("Index is {:?}", index);
-            let (cur_pos, evaluation, num_hash, final_max_poly_degree_plus_1_) =
+            let (cur_pos, evaluation, num_hash_trees, num_hash_leaves, final_max_poly_degree_plus_1_) =
                 iterate_through_query::<B, E, H, N>(
                     &self.layer_commitments,
                     &folding_roots,
@@ -419,16 +420,21 @@ where
                     self.max_poly_degree + 1,
                 )?;
 
-            total_num_hash = num_hash;
+            total_num_hash_trees = num_hash_trees;
+            total_num_hash_leaves = num_hash_leaves;
             final_max_poly_degree_plus_1 = final_max_poly_degree_plus_1_;
 
             final_pos_eval.push((cur_pos, evaluation));
         }
         eprintln!(
-            "Number of hashes during FRI verification per query is {:?}",
-            total_num_hash
+            "Number of tree-hashes during FRI verification per query is {:?}",
+            total_num_hash_trees
         );
 
+        eprintln!(
+            "Number of leaves-hashes during FRI verification per query is {:?}",
+            total_num_hash_leaves
+        );
         // 2 ----- verify the remainder of the FRI proof ----------------------------------------------
 
         // read the remainder from the channel and make sure it matches with the columns
@@ -464,7 +470,7 @@ fn verify_remainder<B: StarkField, E: FieldElement<BaseField = B>>(
     let inv_twiddles = fft::get_inv_twiddles(remainder.len());
     fft::interpolate_poly(&mut remainder, &inv_twiddles);
     let poly = remainder;
-    println!("remiander poly is {:?}", poly);
+    //println!("remainder poly is {:?}", poly);
 
     // make sure the degree is valid
     if max_degree < polynom::degree_of(&poly) {
@@ -508,7 +514,7 @@ fn iterate_through_query<B, E, H, const N: usize>(
     evaluation: &E,
     domain_generator: B,
     max_degree_plus_1: usize,
-) -> Result<(usize, E, usize, usize), VerifierError>
+) -> Result<(usize, E, usize, usize, usize), VerifierError>
 where
     B: StarkField,
     E: FieldElement<BaseField = B>,
@@ -520,7 +526,8 @@ where
     let mut domain_generator = domain_generator;
     let mut max_degree_plus_1 = max_degree_plus_1;
     let domain_offset = B::GENERATOR;
-    let mut num_hash = 0usize;
+    let mut num_hash_trees = 0usize;
+    let mut num_hash_leaves = 0usize;
 
     for depth in 0..number_of_layers {
         let target_domain_size = domain_size / N;
@@ -573,8 +580,12 @@ where
 
         // Estimate number of hashings required per query
         let degree_of_extension = evaluation.as_bytes().len() / domain_offset.as_bytes().len();
-        num_hash += (tree_depth as usize - 1) + (N * degree_of_extension) / 4;
-        //num_hash += tree_depth as usize - 1;
+        num_hash_trees += tree_depth as usize - 1;
+        num_hash_leaves += (N * degree_of_extension) / 4;
+        
+        println!("At depth {:?}", depth);
+        println!("# hashes MT is {:?}", num_hash_trees);
+        println!("# hashes L is {:?}", num_hash_leaves);
     }
-    Ok((cur_pos, evaluation, num_hash, max_degree_plus_1))
+    Ok((cur_pos, evaluation, num_hash_trees, num_hash_leaves, max_degree_plus_1))
 }

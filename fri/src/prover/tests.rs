@@ -9,11 +9,12 @@ use crate::{
     FriOptions, FriProof, VerifierError,
 };
 use crypto::{Hasher, RandomCoin};
-use math::{fft, fields::QuadExtension, FieldElement};
+use math::{fft, fields::{QuadExtension, CubeExtension}, FieldElement};
 use utils::{collections::Vec, Deserializable, Serializable, SliceReader};
 
 use math::fields::f64::BaseElement;
 type ExtElement = QuadExtension<BaseElement>;
+//type ExtElement = CubeExtension<BaseElement>;
 
 //use crypto::hashers::Rp64_256;
 //type Blake3 = Rp64_256;
@@ -26,10 +27,10 @@ type Blake3 = Blake3_256<BaseElement>;
 
 #[test]
 fn fri_prove_verify() {
-    let trace_length = 4096;
+    let trace_length = 1<<11;
     let lde_blowup = 8;
 
-    let options = FriOptions::new(lde_blowup, 4, 8);
+    let options = FriOptions::new(lde_blowup, 4, 16);
     let mut channel = build_prover_channel(trace_length, &options);
     let evaluations = build_evaluations(trace_length, lde_blowup);
 
@@ -78,8 +79,10 @@ pub fn build_prover_channel(
 
 pub fn build_evaluations(trace_length: usize, lde_blowup: usize) -> Vec<ExtElement> {
     let mut p = (0..trace_length as u64)
-        .map(|i| (i, i))
+        .map(|i| (i, i,))
         .map(|(i, j)| ExtElement::new(i.into(), j.into()))
+        //.map(|i| (i, i, i))
+        //.map(|(i, j, k)| ExtElement::new(i.into(), j.into(), k.into()))
         //.map(ExtElement::new)
         .collect::<Vec<_>>();
     let domain_size = trace_length * lde_blowup;
