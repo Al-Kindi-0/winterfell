@@ -315,8 +315,7 @@ where
             }
         }
 
-        // make sure the remainder values satisfy the degree bound if the remainder should represent
-        // a polynomial of degree greater than 0.
+        // make sure the remainder values satisfy the degree
         verify_remainder(remainder, max_degree_plus_1 - 1)
     }
 }
@@ -333,8 +332,7 @@ fn verify_remainder<B: StarkField, E: FieldElement<BaseField = B>>(
         return Err(VerifierError::RemainderDegreeNotValid);
     }
     // in case `remainder` represents a polynomial of degree `0` then the final check simplifies
-    // to checking that the codeword values are identical. This should probably be combined with
-    // the above so that `remainder[position] != evaluation` is done only once.
+    // to checking that the codeword values are identical.
     if max_degree == 0 {
         if !remainder.windows(2).all(|a| a[0] == a[1]) {
             return Err(VerifierError::RemainderDegreeMismatch(max_degree));
