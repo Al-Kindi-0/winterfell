@@ -406,19 +406,24 @@ where
 
         for (index, &position) in positions.iter().enumerate() {
             //println!("Index is {:?}", index);
-            let (cur_pos, evaluation, num_hash_trees, num_hash_leaves, final_max_poly_degree_plus_1_) =
-                iterate_through_query::<B, E, H, N>(
-                    &self.layer_commitments,
-                    &folding_roots,
-                    &self.layer_alphas,
-                    &advice_provider,
-                    position,
-                    self.options.num_fri_layers(self.domain_size),
-                    self.domain_size,
-                    &evaluations[index],
-                    self.domain_generator,
-                    self.max_poly_degree + 1,
-                )?;
+            let (
+                cur_pos,
+                evaluation,
+                num_hash_trees,
+                num_hash_leaves,
+                final_max_poly_degree_plus_1_,
+            ) = iterate_through_query::<B, E, H, N>(
+                &self.layer_commitments,
+                &folding_roots,
+                &self.layer_alphas,
+                &advice_provider,
+                position,
+                self.options.num_fri_layers(self.domain_size),
+                self.domain_size,
+                &evaluations[index],
+                self.domain_generator,
+                self.max_poly_degree + 1,
+            )?;
 
             total_num_hash_trees = num_hash_trees;
             total_num_hash_leaves = num_hash_leaves;
@@ -557,11 +562,49 @@ where
             .unwrap();
         let row_poly = polynom::interpolate(&xs, &query_values, true);
 
+        fn fri_2<E, B>(f_x: E, f_minus_x: E, x_star: E, alpha: E) -> E
+        where
+            B: StarkField,
+            E: FieldElement<BaseField = B>,
+        {
+            (f_x + f_minus_x + ((f_x - f_minus_x) * alpha / x_star))/E::ONE.double()
+        }
+
+        let expected = if N == 2 {
+            let f_minus_x = query_values[1];
+            let f_x = query_values[0];
+            let x_star = xs[0];
+            let alpha = layer_alphas[depth];
+
+            fri_2(f_x, f_minus_x, x_star, alpha)
+        } else if N == 4 {
+            let f_minus_x = query_values[2];
+            let f_x = query_values[0];
+            let x_star = xs[0];
+            let alpha = layer_alphas[depth];
+            
+            let tmp0 = fri_2(f_x, f_minus_x, x_star, alpha);
+
+            let f_minus_x = query_values[3];
+            let f_x = query_values[1];
+            let x_star = xs[1];
+            let alpha = layer_alphas[depth];
+            
+            let tmp1 = fri_2(f_x, f_minus_x, x_star, alpha);
+
+            fri_2(tmp0, tmp1, xs[0] * xs[0], alpha * alpha)
+
+        } else {
+            E::ZERO
+        };
+
         let alpha = layer_alphas[depth];
 
         // check that when the polynomials are evaluated at alpha, the result is equal to
         // the corresponding column value
         evaluation = polynom::eval(&row_poly, alpha);
+
+        println!("Test {:?} and {:?}", expected, evaluation);
 
         // make sure next degree reduction does not result in degree truncation
         if max_degree_plus_1 % N != 0 {
@@ -582,10 +625,16 @@ where
         let degree_of_extension = evaluation.as_bytes().len() / domain_offset.as_bytes().len();
         num_hash_trees += tree_depth as usize - 1;
         num_hash_leaves += (N * degree_of_extension) / 4;
-        
+
         println!("At depth {:?}", depth);
         println!("# hashes MT is {:?}", num_hash_trees);
         println!("# hashes L is {:?}", num_hash_leaves);
     }
-    Ok((cur_pos, evaluation, num_hash_trees, num_hash_leaves, max_degree_plus_1))
+    Ok((
+        cur_pos,
+        evaluation,
+        num_hash_trees,
+        num_hash_leaves,
+        max_degree_plus_1,
+    ))
 }
