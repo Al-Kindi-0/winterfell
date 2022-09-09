@@ -12,7 +12,11 @@ use crate::{
 };
 use core::{convert::TryInto, marker::PhantomData, mem};
 use crypto::{ElementHasher, RandomCoin};
-use math::{fft, log2, polynom, FieldElement, StarkField};
+use math::{
+    fft, log2,
+    polynom::{self, eval},
+    FieldElement, StarkField,
+};
 use utils::collections::Vec;
 
 mod channel;
@@ -364,7 +368,7 @@ where
         // static dispatch for folding factor parameter
         let folding_factor = self.options.folding_factor();
         match folding_factor {
-            2 => self.verify_generic_query::<2>(channel, evaluations, positions),
+            2 => self.verify_generic_query_2(channel, evaluations, positions),
             4 => self.verify_generic_query::<4>(channel, evaluations, positions),
             8 => self.verify_generic_query::<8>(channel, evaluations, positions),
             16 => self.verify_generic_query::<16>(channel, evaluations, positions),
@@ -455,6 +459,172 @@ where
         // make sure the remainder values satisfy the degree
         verify_remainder(remainder, final_max_poly_degree_plus_1 - 1)
     }
+
+    /// This is the actual implementation of the verification procedure described above for N=2
+    fn verify_generic_query_2(
+        &self,
+        channel: &mut C,
+        evaluations: &[E],
+        positions: &[usize],
+    ) -> Result<(), VerifierError> {
+        // pre-compute roots of unity used in computing x coordinates in the folded domain
+        let folding_roots = (0..2)
+            .map(|i| {
+                self.domain_generator
+                    .exp(((self.domain_size / 2 * i) as u64).into())
+            })
+            .collect::<Vec<_>>();
+
+        // 1 ----- verify the recursive components of the FRI proof -----------------------------------
+        let positions = positions.to_vec();
+        let evaluations = evaluations.to_vec();
+        let mut final_max_poly_degree_plus_1 = 0;
+        let mut final_pos_eval: Vec<(usize, E)> = vec![];
+        let mut total_num_hash_trees = 0usize;
+        let mut total_num_hash_leaves = 0usize;
+
+        // Get the queries from the channel in a vertical configuration
+        let advice_provider = channel.unbatch::<2>(
+            &positions,
+            self.domain_size,
+            self.options.folding_factor(),
+            self.layer_commitments.clone(),
+        );
+
+        for (index, &position) in positions.iter().enumerate() {
+            //println!("Index is {:?}", index);
+            let (
+                cur_pos,
+                evaluation,
+                num_hash_trees,
+                num_hash_leaves,
+                final_max_poly_degree_plus_1_,
+            ) = iterate_through_query_2::<B, E, H>(
+                &self.layer_commitments,
+                &folding_roots,
+                &self.layer_alphas,
+                &advice_provider,
+                position,
+                self.options.num_fri_layers(self.domain_size),
+                self.domain_size,
+                &evaluations[index],
+                self.domain_generator,
+                self.max_poly_degree + 1,
+            )?;
+
+            total_num_hash_trees = num_hash_trees;
+            total_num_hash_leaves = num_hash_leaves;
+            final_max_poly_degree_plus_1 = final_max_poly_degree_plus_1_;
+
+            final_pos_eval.push((cur_pos, evaluation));
+        }
+        eprintln!(
+            "Number of tree-hashes during FRI verification per query is {:?}",
+            total_num_hash_trees
+        );
+
+        eprintln!(
+            "Number of leaves-hashes during FRI verification per query is {:?}",
+            total_num_hash_leaves
+        );
+        // 2 ----- verify the remainder of the FRI proof ----------------------------------------------
+
+        // read the remainder from the channel and make sure it matches with the columns
+        // of the previous layer
+        let remainder_commitment = self.layer_commitments.last().unwrap();
+        let remainder = channel.read_remainder::<2>(remainder_commitment)?;
+        for (pos, eval) in final_pos_eval.iter() {
+            if remainder[*pos] != *eval {
+                return Err(VerifierError::InvalidRemainderFolding);
+            }
+        }
+
+        // make sure the remainder values satisfy the degree
+        verify_remainder(remainder, final_max_poly_degree_plus_1 - 1)
+    }
+
+    /// This is the actual implementation of the verification procedure described above for N=4
+    fn verify_generic_query_4(
+        &self,
+        channel: &mut C,
+        evaluations: &[E],
+        positions: &[usize],
+    ) -> Result<(), VerifierError> {
+        // pre-compute roots of unity used in computing x coordinates in the folded domain
+        let folding_roots = (0..4)
+            .map(|i| {
+                self.domain_generator
+                    .exp(((self.domain_size / 4 * i) as u64).into())
+            })
+            .collect::<Vec<_>>();
+
+        // 1 ----- verify the recursive components of the FRI proof -----------------------------------
+        let positions = positions.to_vec();
+        let evaluations = evaluations.to_vec();
+        let mut final_max_poly_degree_plus_1 = 0;
+        let mut final_pos_eval: Vec<(usize, E)> = vec![];
+        let mut total_num_hash_trees = 0usize;
+        let mut total_num_hash_leaves = 0usize;
+
+        // Get the queries from the channel in a vertical configuration
+        let advice_provider = channel.unbatch::<4>(
+            &positions,
+            self.domain_size,
+            self.options.folding_factor(),
+            self.layer_commitments.clone(),
+        );
+
+        for (index, &position) in positions.iter().enumerate() {
+            //println!("Index is {:?}", index);
+            let (
+                cur_pos,
+                evaluation,
+                num_hash_trees,
+                num_hash_leaves,
+                final_max_poly_degree_plus_1_,
+            ) = iterate_through_query_4::<B, E, H>(
+                &self.layer_commitments,
+                &folding_roots,
+                &self.layer_alphas,
+                &advice_provider,
+                position,
+                self.options.num_fri_layers(self.domain_size),
+                self.domain_size,
+                &evaluations[index],
+                self.domain_generator,
+                self.max_poly_degree + 1,
+            )?;
+
+            total_num_hash_trees = num_hash_trees;
+            total_num_hash_leaves = num_hash_leaves;
+            final_max_poly_degree_plus_1 = final_max_poly_degree_plus_1_;
+
+            final_pos_eval.push((cur_pos, evaluation));
+        }
+        eprintln!(
+            "Number of tree-hashes during FRI verification per query is {:?}",
+            total_num_hash_trees
+        );
+
+        eprintln!(
+            "Number of leaves-hashes during FRI verification per query is {:?}",
+            total_num_hash_leaves
+        );
+        // 2 ----- verify the remainder of the FRI proof ----------------------------------------------
+
+        // read the remainder from the channel and make sure it matches with the columns
+        // of the previous layer
+        let remainder_commitment = self.layer_commitments.last().unwrap();
+        let remainder = channel.read_remainder::<2>(remainder_commitment)?;
+        for (pos, eval) in final_pos_eval.iter() {
+            if remainder[*pos] != *eval {
+                return Err(VerifierError::InvalidRemainderFolding);
+            }
+        }
+
+        // make sure the remainder values satisfy the degree
+        verify_remainder(remainder, final_max_poly_degree_plus_1 - 1)
+    }
 }
 
 // REMAINDER DEGREE VERIFICATION
@@ -469,19 +639,42 @@ fn verify_remainder<B: StarkField, E: FieldElement<BaseField = B>>(
         return Err(VerifierError::RemainderDegreeNotValid);
     }
 
-    // interpolate remainder polynomial from its evaluations; we don't shift the domain here
-    // because the degree of the polynomial will not change as long as we interpolate over a
-    // coset of the original domain.
-    let inv_twiddles = fft::get_inv_twiddles(remainder.len());
-    fft::interpolate_poly(&mut remainder, &inv_twiddles);
-    let poly = remainder;
-    //println!("remainder poly is {:?}", poly);
+    if max_degree == 0 {
+        // make sure the remainder values correspond to a constant polynomial
+        if !remainder.windows(2).all(|a| a[0] == a[1]) {
+            return Err(VerifierError::RemainderDegreeMismatch(max_degree));
+        } else {
+            Ok(())
+        }
+    } else if max_degree == 1 {
+        // because the degree of the polynomial will not change as long as we interpolate over a
+        // coset of the original domain.
+        let inv_twiddles = fft::get_inv_twiddles(remainder.len());
+        fft::interpolate_poly(&mut remainder, &inv_twiddles);
+        let poly = remainder;
+        //println!("remainder poly is {:?}", poly);
 
-    // make sure the degree is valid
-    if max_degree < polynom::degree_of(&poly) {
-        Err(VerifierError::RemainderDegreeMismatch(max_degree))
+        // make sure the degree is valid
+        if max_degree < polynom::degree_of(&poly) {
+            Err(VerifierError::RemainderDegreeMismatch(max_degree))
+        } else {
+            Ok(())
+        }
     } else {
-        Ok(())
+        // interpolate remainder polynomial from its evaluations; we don't shift the domain here
+        // because the degree of the polynomial will not change as long as we interpolate over a
+        // coset of the original domain.
+        let inv_twiddles = fft::get_inv_twiddles(remainder.len());
+        fft::interpolate_poly(&mut remainder, &inv_twiddles);
+        let poly = remainder;
+        //println!("remainder poly is {:?}", poly);
+
+        // make sure the degree is valid
+        if max_degree < polynom::degree_of(&poly) {
+            Err(VerifierError::RemainderDegreeMismatch(max_degree))
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -562,49 +755,11 @@ where
             .unwrap();
         let row_poly = polynom::interpolate(&xs, &query_values, true);
 
-        fn fri_2<E, B>(f_x: E, f_minus_x: E, x_star: E, alpha: E) -> E
-        where
-            B: StarkField,
-            E: FieldElement<BaseField = B>,
-        {
-            (f_x + f_minus_x + ((f_x - f_minus_x) * alpha / x_star))/E::ONE.double()
-        }
-
-        let expected = if N == 2 {
-            let f_minus_x = query_values[1];
-            let f_x = query_values[0];
-            let x_star = xs[0];
-            let alpha = layer_alphas[depth];
-
-            fri_2(f_x, f_minus_x, x_star, alpha)
-        } else if N == 4 {
-            let f_minus_x = query_values[2];
-            let f_x = query_values[0];
-            let x_star = xs[0];
-            let alpha = layer_alphas[depth];
-            
-            let tmp0 = fri_2(f_x, f_minus_x, x_star, alpha);
-
-            let f_minus_x = query_values[3];
-            let f_x = query_values[1];
-            let x_star = xs[1];
-            let alpha = layer_alphas[depth];
-            
-            let tmp1 = fri_2(f_x, f_minus_x, x_star, alpha);
-
-            fri_2(tmp0, tmp1, xs[0] * xs[0], alpha * alpha)
-
-        } else {
-            E::ZERO
-        };
-
         let alpha = layer_alphas[depth];
 
         // check that when the polynomials are evaluated at alpha, the result is equal to
         // the corresponding column value
         evaluation = polynom::eval(&row_poly, alpha);
-
-        println!("Test {:?} and {:?}", expected, evaluation);
 
         // make sure next degree reduction does not result in degree truncation
         if max_degree_plus_1 % N != 0 {
@@ -637,4 +792,211 @@ where
         num_hash_leaves,
         max_degree_plus_1,
     ))
+}
+
+fn iterate_through_query_2<B, E, H>(
+    layer_commitments: &Vec<H::Digest>,
+    folding_roots: &Vec<B>,
+    layer_alphas: &Vec<E>,
+    advice_provider: &AdviceProvider<H, E, 2>,
+    position: usize,
+    number_of_layers: usize,
+    initial_domain_size: usize,
+    evaluation: &E,
+    domain_generator: B,
+    max_degree_plus_1: usize,
+) -> Result<(usize, E, usize, usize, usize), VerifierError>
+where
+    B: StarkField,
+    E: FieldElement<BaseField = B>,
+    H: ElementHasher<BaseField = B>,
+{
+    let mut cur_pos = position;
+    let mut evaluation = *evaluation;
+    let mut domain_size = initial_domain_size;
+    let mut domain_generator = domain_generator;
+    let mut max_degree_plus_1 = max_degree_plus_1;
+    let domain_offset = B::GENERATOR;
+    let mut num_hash_trees = 0usize;
+    let mut num_hash_leaves = 0usize;
+
+    for depth in 0..number_of_layers {
+        let target_domain_size = domain_size / 2;
+
+        let folded_pos = cur_pos % target_domain_size;
+        // Assumes the num_partitions == 1
+        let position_index = folded_pos;
+
+        let tree_depth = log2(target_domain_size) + 1;
+
+        let query_values = advice_provider
+            .get_tree_node(layer_commitments[depth], tree_depth, position_index as u64)
+            .unwrap();
+        let query_value = query_values[cur_pos / target_domain_size];
+
+        if evaluation != query_value {
+            return Err(VerifierError::InvalidLayerFolding(depth));
+        }
+
+        #[rustfmt::skip]
+        let xe = domain_generator.exp((folded_pos as u64).into()) * (domain_offset);
+        let xs: [E; 2] = folding_roots
+            .iter()
+            .map(|&r| E::from(xe * r))
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+
+        evaluation = {
+            let f_minus_x = query_values[1];
+            let f_x = query_values[0];
+            let x_star = xs[0];
+            let alpha = layer_alphas[depth];
+
+            fri_2(f_x, f_minus_x, x_star, alpha)
+        };
+
+        // make sure next degree reduction does not result in degree truncation
+        if max_degree_plus_1 % 2 != 0 {
+            return Err(VerifierError::DegreeTruncation(
+                max_degree_plus_1 - 1,
+                2,
+                depth,
+            ));
+        }
+
+        // update variables for the next iteration of the loop
+        max_degree_plus_1 /= 2;
+        domain_generator = domain_generator.exp((2 as u32).into());
+        cur_pos = folded_pos;
+        domain_size /= 2;
+
+        // Estimate number of hashings required per query
+        let degree_of_extension = evaluation.as_bytes().len() / domain_offset.as_bytes().len();
+        num_hash_trees += tree_depth as usize - 1;
+        num_hash_leaves += (2 * degree_of_extension) / 4;
+
+        println!("At depth {:?}", depth);
+        println!("# hashes MT is {:?}", num_hash_trees);
+        println!("# hashes L is {:?}", num_hash_leaves);
+    }
+    Ok((
+        cur_pos,
+        evaluation,
+        num_hash_trees,
+        num_hash_leaves,
+        max_degree_plus_1,
+    ))
+}
+
+fn iterate_through_query_4<B, E, H>(
+    layer_commitments: &Vec<H::Digest>,
+    folding_roots: &Vec<B>,
+    layer_alphas: &Vec<E>,
+    advice_provider: &AdviceProvider<H, E, 4>,
+    position: usize,
+    number_of_layers: usize,
+    initial_domain_size: usize,
+    evaluation: &E,
+    domain_generator: B,
+    max_degree_plus_1: usize,
+) -> Result<(usize, E, usize, usize, usize), VerifierError>
+where
+    B: StarkField,
+    E: FieldElement<BaseField = B>,
+    H: ElementHasher<BaseField = B>,
+{
+    let mut cur_pos = position;
+    let mut evaluation = *evaluation;
+    let mut domain_size = initial_domain_size;
+    let mut domain_generator = domain_generator;
+    let mut max_degree_plus_1 = max_degree_plus_1;
+    let domain_offset = B::GENERATOR;
+    let mut num_hash_trees = 0usize;
+    let mut num_hash_leaves = 0usize;
+
+    for depth in 0..number_of_layers {
+        let target_domain_size = domain_size / 4;
+
+        let folded_pos = cur_pos % target_domain_size;
+        // Assumes the num_partitions == 1
+        let position_index = folded_pos;
+
+        let tree_depth = log2(target_domain_size) + 1;
+
+        let query_values = advice_provider
+            .get_tree_node(layer_commitments[depth], tree_depth, position_index as u64)
+            .unwrap();
+        let query_value = query_values[cur_pos / target_domain_size];
+
+        if evaluation != query_value {
+            return Err(VerifierError::InvalidLayerFolding(depth));
+        }
+
+        #[rustfmt::skip]
+        let xe = domain_generator.exp((folded_pos as u64).into()) * (domain_offset);
+        let xs: [E; 4] = folding_roots
+            .iter()
+            .map(|&r| E::from(xe * r))
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+
+        evaluation = {
+            let f_minus_x = query_values[2];
+            let f_x = query_values[0];
+            let x_star = xs[0];
+            let alpha = layer_alphas[depth];
+
+            let tmp0 = fri_2(f_x, f_minus_x, x_star, alpha);
+
+            let f_minus_x = query_values[3];
+            let f_x = query_values[1];
+            let x_star = xs[1];
+            let alpha = layer_alphas[depth];
+
+            let tmp1 = fri_2(f_x, f_minus_x, x_star, alpha);
+
+            fri_2(tmp0, tmp1, xs[0] * xs[0], alpha * alpha)
+        };
+
+        // make sure next degree reduction does not result in degree truncation
+        if max_degree_plus_1 % 2 != 0 {
+            return Err(VerifierError::DegreeTruncation(
+                max_degree_plus_1 - 1,
+                2,
+                depth,
+            ));
+        }
+
+        // update variables for the next iteration of the loop
+        max_degree_plus_1 /= 2;
+        domain_generator = domain_generator.exp((2 as u32).into());
+        cur_pos = folded_pos;
+        domain_size /= 2;
+
+        // Estimate number of hashings required per query
+        let degree_of_extension = evaluation.as_bytes().len() / domain_offset.as_bytes().len();
+        num_hash_trees += tree_depth as usize - 1;
+        num_hash_leaves += (2 * degree_of_extension) / 4;
+
+        println!("At depth {:?}", depth);
+        println!("# hashes MT is {:?}", num_hash_trees);
+        println!("# hashes L is {:?}", num_hash_leaves);
+    }
+    Ok((
+        cur_pos,
+        evaluation,
+        num_hash_trees,
+        num_hash_leaves,
+        max_degree_plus_1,
+    ))
+}
+
+fn fri_2<E, B>(f_x: E, f_minus_x: E, x_star: E, alpha: E) -> E
+where
+    B: StarkField,
+    E: FieldElement<BaseField = B>,
+{
+    (f_x + f_minus_x + ((f_x - f_minus_x) * alpha / x_star)) / E::ONE.double()
 }

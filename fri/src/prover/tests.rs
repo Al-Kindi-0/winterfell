@@ -30,7 +30,7 @@ fn fri_prove_verify() {
     let trace_length = 1<<11;
     let lde_blowup = 8;
 
-    let options = FriOptions::new(lde_blowup, 4, 16);
+    let options = FriOptions::new(lde_blowup, 2, 8);
     let mut channel = build_prover_channel(trace_length, &options);
     let evaluations = build_evaluations(trace_length, lde_blowup);
 
