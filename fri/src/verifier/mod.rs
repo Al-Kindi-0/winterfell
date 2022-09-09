@@ -5,11 +5,15 @@
 
 //! Contains an implementation of FRI verifier and associated components.
 
-use crate::{folding::fold_positions, utils::map_positions_to_indexes, FriOptions, VerifierError};
-use core::{convert::TryInto, marker::PhantomData, mem};
-use crypto::{ElementHasher, RandomCoin};
+use crate::{
+    folding::fold_positions,
+    utils::{map_positions_to_indexes, map_position_to_index},
+    FriOptions, VerifierError,
+};
+use core::{convert::TryInto, fmt::Debug, marker::PhantomData, mem};
+use crypto::{BatchMerkleProof, ElementHasher, MerkleTree, RandomCoin};
 use math::{fft, log2, polynom, FieldElement, StarkField};
-use utils::collections::Vec;
+use utils::{collections::Vec, group_slice_elements};
 
 mod channel;
 pub use channel::{DefaultVerifierChannel, VerifierChannel};
@@ -76,8 +80,8 @@ impl<B, E, C, H> FriVerifier<B, E, C, H>
 where
     B: StarkField,
     E: FieldElement<BaseField = B>,
-    C: VerifierChannel<E, Hasher = H>,
-    H: ElementHasher<BaseField = B>,
+    C: VerifierChannel<E, Hasher = H> + Clone,
+    H: ElementHasher<BaseField = B> + Debug,
 {
     /// Returns a new instance of FRI verifier created from the specified parameters.
     ///
@@ -239,68 +243,93 @@ where
             .collect::<Vec<_>>();
 
         // 1 ----- verify the recursive components of the FRI proof -----------------------------------
-        let mut domain_generator = self.domain_generator;
-        let mut domain_size = self.domain_size;
+        let positions = positions.to_vec();
+        let evaluations = evaluations.to_vec();
+
+        let mut query;
+        let mut cur_pos = 0;
+        let mut dom_size;
+        let mut evaluation = E::ZERO;
+        let mut domain_generator;
         let mut max_degree_plus_1 = self.max_poly_degree + 1;
-        let mut positions = positions.to_vec();
-        let mut evaluations = evaluations.to_vec();
+        let mut final_pos_eval: Vec<(usize, E)> = vec![];
+        for (index, position) in positions.iter().enumerate() {
+            //We ask the channel for the sequence of (query_value_per_layer, merkle_proof) at each postion.
+            // This should be implemented at the channel level and using the FriProofQuery::parse method
+            final_pos_eval.push((cur_pos, evaluation));
+            query = channel.read_queries();
+            cur_pos = *position;
+            dom_size = self.domain_size;
+            evaluation = evaluations[index];
+            domain_generator = self.domain_generator;
+            max_degree_plus_1 = self.max_poly_degree + 1;
+            for depth in 0..self.options.num_fri_layers(self.domain_size) {
+                let target_domain_size = dom_size / self.options.folding_factor();
+                let (query_values, query_proof): (Vec<E>, BatchMerkleProof<H>) = query
+                    .remove(0)
+                    .parse(target_domain_size, self.options.folding_factor())
+                    .unwrap();
+                //println!("MP is {:?}", query_level);
 
-        for depth in 0..self.options.num_fri_layers(self.domain_size) {
-            // determine which evaluations were queried in the folded layer
-            let mut folded_positions =
-                fold_positions(&positions, domain_size, self.options.folding_factor());
-            // determine where these evaluations are in the commitment Merkle tree
-            let position_indexes = map_positions_to_indexes(
-                &folded_positions,
-                domain_size,
-                self.options.folding_factor(),
-                self.num_partitions,
-            );
-            // read query values from the specified indexes in the Merkle tree
-            let layer_commitment = self.layer_commitments[depth];
-            // TODO: add layer depth to the potential error message
-            let layer_values = channel.read_layer_queries(&position_indexes, &layer_commitment)?;
-            let query_values =
-                get_query_values::<E, N>(&layer_values, &positions, &folded_positions, domain_size);
-            if evaluations != query_values {
-                return Err(VerifierError::InvalidLayerFolding(depth));
-            }
+                let folded_pos = cur_pos % target_domain_size;
+                let position_index = map_position_to_index(
+                    &folded_pos,
+                    dom_size,
+                    self.options.folding_factor(),
+                    self.num_partitions,
+                );
+                let layer_commitment = self.layer_commitments[depth];
 
-            // build a set of x coordinates for each row polynomial
-            #[rustfmt::skip]
-            let xs = folded_positions.iter().map(|&i| {
-                let xe = domain_generator.exp((i as u64).into()) * self.options.domain_offset();
-                folding_roots.iter()
+                MerkleTree::verify_batch(&layer_commitment, &vec![position_index], &query_proof)
+                    .map_err(|_| VerifierError::LayerCommitmentMismatch)?;
+
+                let query_value = get_query_values::<E, N>(
+                    &group_slice_elements(&query_values),
+                    &vec![cur_pos],
+                    &vec![folded_pos],
+                    dom_size,
+                );
+
+                if evaluation != query_value[0] {
+                    return Err(VerifierError::InvalidLayerFolding(depth));
+                }
+
+                #[rustfmt::skip]
+                let xe = domain_generator.exp((folded_pos as u64).into()) * self.options.domain_offset();
+                let xs: [E; N] = folding_roots
+                    .iter()
                     .map(|&r| E::from(xe * r))
-                    .collect::<Vec<_>>().try_into().unwrap()
-            })
-            .collect::<Vec<_>>();
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .unwrap();
+                let row_polys =
+                    polynom::interpolate_batch(&vec![xs], group_slice_elements(&query_values));
 
-            // interpolate x and y values into row polynomials
-            let row_polys = polynom::interpolate_batch(&xs, &layer_values);
+                let alpha = self.layer_alphas[depth];
 
-            // calculate the pseudo-random value used for linear combination in layer folding
-            let alpha = self.layer_alphas[depth];
+                // check that when the polynomials are evaluated at alpha, the result is equal to
+                // the corresponding column value
+                let evaluation_new: Vec<E> =
+                    row_polys.iter().map(|p| polynom::eval(p, alpha)).collect();
+                evaluation = evaluation_new[0];
 
-            // check that when the polynomials are evaluated at alpha, the result is equal to
-            // the corresponding column value
-            evaluations = row_polys.iter().map(|p| polynom::eval(p, alpha)).collect();
+                // make sure next degree reduction does not result in degree truncation
+                if max_degree_plus_1 % N != 0 {
+                    return Err(VerifierError::DegreeTruncation(
+                        max_degree_plus_1 - 1,
+                        N,
+                        depth,
+                    ));
+                }
 
-            // make sure next degree reduction does not result in degree truncation
-            if max_degree_plus_1 % N != 0 {
-                return Err(VerifierError::DegreeTruncation(
-                    max_degree_plus_1 - 1,
-                    N,
-                    depth,
-                ));
+                // update variables for the next iteration of the loop
+                max_degree_plus_1 /= N;
+                domain_generator = domain_generator.exp((N as u32).into());
+                cur_pos = folded_pos;
+                dom_size /= N;
             }
-
-            // update variables for the next iteration of the loop
-            domain_generator = domain_generator.exp((N as u32).into());
-            max_degree_plus_1 /= N;
-            domain_size /= N;
-            mem::swap(&mut positions, &mut folded_positions);
         }
+        //println!("finished the part");
 
         // 2 ----- verify the remainder of the FRI proof ----------------------------------------------
 
@@ -308,8 +337,8 @@ where
         // of the previous layer
         let remainder_commitment = self.layer_commitments.last().unwrap();
         let remainder = channel.read_remainder::<N>(remainder_commitment)?;
-        for (&position, evaluation) in positions.iter().zip(evaluations) {
-            if remainder[position] != evaluation {
+        for (pos, eval) in final_pos_eval.iter().skip(1) {
+            if remainder[*pos] != *eval {
                 return Err(VerifierError::InvalidRemainderFolding);
             }
         }

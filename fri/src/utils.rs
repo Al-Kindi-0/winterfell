@@ -37,6 +37,29 @@ pub fn map_positions_to_indexes(
     result
 }
 
+/// Maps a position in the evaluation domain to its index in commitment Merkle tree.
+pub fn map_position_to_index(
+    position: &usize,
+    source_domain_size: usize,
+    folding_factor: usize,
+    num_partitions: usize,
+) -> usize {
+    // if there was only 1 partition, order of elements in the commitment tree
+    // is the same as the order of elements in the evaluation domain
+    if num_partitions == 1 {
+        return *position;
+    }
+
+    let target_domain_size = source_domain_size / folding_factor;
+    let partition_size = target_domain_size / num_partitions;
+
+    let partition_idx = position % num_partitions;
+    let local_idx = (position - partition_idx) / num_partitions;
+    let position = partition_idx * partition_size + local_idx;
+
+    position
+}
+
 /// Hashes each of the arrays in the provided slice and returns a vector of resulting hashes.
 pub fn hash_values<H, E, const N: usize>(values: &[[E; N]]) -> Vec<H::Digest>
 where

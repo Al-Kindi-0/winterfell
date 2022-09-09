@@ -5,11 +5,11 @@
 
 use crate::{
     folding::{apply_drp, fold_positions},
-    proof::{FriProof, FriProofLayer},
+    proof::{FriProof, FriProofLayer, FriProofQuery, FriProof_},
     utils::hash_values,
-    FriOptions,
+    FriOptions, VerifierError,
 };
-use core::marker::PhantomData;
+use core::{fmt::Debug, marker::PhantomData};
 use crypto::{ElementHasher, Hasher, MerkleTree};
 use math::{FieldElement, StarkField};
 use utils::{collections::Vec, flatten_vector_elements, group_slice_elements, transpose_slice};
@@ -111,7 +111,7 @@ where
     B: StarkField,
     E: FieldElement<BaseField = B>,
     C: ProverChannel<E, Hasher = H>,
-    H: ElementHasher<BaseField = B>,
+    H: ElementHasher<BaseField = B> + Debug,
 {
     // CONSTRUCTOR
     // --------------------------------------------------------------------------------------------
@@ -227,31 +227,27 @@ where
     ///
     /// # Panics
     /// Panics is the prover state is clean (no FRI layers have been build yet).
-    pub fn build_proof(&mut self, positions: &[usize]) -> FriProof {
+    pub fn build_proof(&mut self, positions: &[usize]) -> FriProof_ {
         assert!(
             !self.layers.is_empty(),
             "FRI layers have not been built yet"
         );
-        let mut positions = positions.to_vec();
-        let mut domain_size = self.layers[0].evaluations.len();
+        let positions = positions.to_vec();
+        let domain_size = self.layers[0].evaluations.len();
         let folding_factor = self.options.folding_factor();
 
-        // for all FRI layers, except the last one, record tree root, determine a set of query
-        // positions, and query the layer at these positions.
-        let mut layers = Vec::with_capacity(self.layers.len());
-        for i in 0..self.layers.len() - 1 {
-            positions = fold_positions(&positions, domain_size, folding_factor);
+        //println!("All positions prover{:?}", positions);
 
-            // sort of a static dispatch for folding_factor parameter
-            let proof_layer = match folding_factor {
-                4 => query_layer::<B, E, H, 4>(&self.layers[i], &positions),
-                8 => query_layer::<B, E, H, 8>(&self.layers[i], &positions),
-                16 => query_layer::<B, E, H, 16>(&self.layers[i], &positions),
+        let mut each_query_proof = Vec::with_capacity(positions.len());
+        for position in positions.iter() {
+            let proof_query = match folding_factor {
+                4 => query_layer_full::<B, E, H, 4>(&self.layers, &position, domain_size),
+                8 => query_layer_full::<B, E, H, 8>(&self.layers, &position, domain_size),
+                16 => query_layer_full::<B, E, H, 16>(&self.layers, &position, domain_size),
                 _ => unimplemented!("folding factor {} is not supported", folding_factor),
             };
 
-            layers.push(proof_layer);
-            domain_size /= folding_factor;
+            each_query_proof.push(proof_query);
         }
 
         // use the remaining polynomial values directly as proof; last layer values contain
@@ -268,33 +264,43 @@ where
         // clear layers so that another proof can be generated
         self.reset();
 
-        FriProof::new(layers, remainder, 1)
+        //FriProof::new(layers, remainder, 1)
+        FriProof_::new(each_query_proof, remainder, 1)
     }
 }
 
 // HELPER FUNCTIONS
 // ================================================================================================
 
-/// Builds a single proof layer by querying the evaluations of the passed in FRI layer at the
+/// Builds a single proof for a single query accross layers.
 /// specified positions.
-fn query_layer<B: StarkField, E: FieldElement<BaseField = B>, H: Hasher, const N: usize>(
-    layer: &FriLayer<B, E, H>,
-    positions: &[usize],
-) -> FriProofLayer {
-    // build Merkle authentication paths for all query positions
-    let proof = layer
-        .tree
-        .prove_batch(positions)
-        .expect("failed to generate a Merkle proof for FRI layer queries");
+fn query_layer_full<
+    B: StarkField,
+    E: FieldElement<BaseField = B>,
+    H: Hasher + Debug,
+    const N: usize,
+>(
+    layers: &Vec<FriLayer<B, E, H>>,
+    position: &usize,
+    domain_size: usize,
+) -> Vec<FriProofQuery> {
+    let mut current_domain_size = domain_size;
+    let mut pos = *position;
+    let mut qq = Vec::with_capacity(layers.len());
+    for layer in layers.iter() {
+        let target_domain = current_domain_size / N;
+        let position = pos % target_domain;
+        let proof = layer
+            .tree
+            .prove_batch(&vec![position])
+            .expect("failed to generate a Merkle proof for FRI layer queries");
 
-    // build a list of polynomial evaluations at each position; since evaluations in FRI layers
-    // are stored in transposed form, a position refers to N evaluations which are committed
-    // in a single leaf
-    let evaluations: &[[E; N]] = group_slice_elements(&layer.evaluations);
-    let mut queried_values: Vec<[E; N]> = Vec::with_capacity(positions.len());
-    for &position in positions.iter() {
-        queried_values.push(evaluations[position]);
+        let evaluations: &[[E; N]] = group_slice_elements(&layer.evaluations);
+        let queried_value: [E; N] = evaluations[position];
+        qq.push(FriProofQuery::new(vec![queried_value], proof));
+        current_domain_size /= N;
+        pos = position;
     }
 
-    FriProofLayer::new(queried_values, proof)
+    qq
 }

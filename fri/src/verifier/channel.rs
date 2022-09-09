@@ -3,7 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use crate::{utils::hash_values, FriProof, VerifierError};
+use crate::{utils::hash_values, FriProof, VerifierError, FriProof_, proof::FriProofQuery};
 use crypto::{BatchMerkleProof, ElementHasher, Hasher, MerkleTree};
 use math::FieldElement;
 use utils::{collections::Vec, group_vector_elements, transpose_slice, DeserializationError};
@@ -65,9 +65,34 @@ pub trait VerifierChannel<E: FieldElement> {
     /// Reads and removes the remainder (last FRI layer) values from the channel.
     fn take_fri_remainder(&mut self) -> Vec<E>;
 
+
+    ///
+    fn read_queries(&mut self) -> Vec<FriProofQuery>;
+
     // PROVIDED METHODS
     // --------------------------------------------------------------------------------------------
 
+    /// Returns FRI query values at the specified positions from the current FRI layer and advances
+    /// layer pointer by one.
+    ///
+    /// This also checks if the values are valid against the provided FRI layer commitment.
+    ///
+    /// # Errors
+    /// Returns an error if query values did not match layer commitment.
+    fn read_layer_query<const N: usize>(
+        &mut self,
+        positions: &[usize],
+        commitment: &<<Self as VerifierChannel<E>>::Hasher as Hasher>::Digest,
+    ) -> Result<Vec<[E; N]>, VerifierError> {
+        let layer_proof = self.take_next_fri_layer_proof();
+        MerkleTree::<Self::Hasher>::verify_batch(commitment, positions, &layer_proof)
+            .map_err(|_| VerifierError::LayerCommitmentMismatch)?;
+
+        // TODO: make sure layer queries hash into leaves of layer proof
+
+        let layer_queries = self.take_next_fri_layer_queries();
+        Ok(group_vector_elements(layer_queries))
+    }
     /// Returns FRI query values at the specified positions from the current FRI layer and advances
     /// layer pointer by one.
     ///
@@ -130,10 +155,11 @@ pub trait VerifierChannel<E: FieldElement> {
 ///
 /// Though this implementation is primarily intended for testing purposes, it can be used in
 /// production use cases as well.
+#[derive(Clone)]
 pub struct DefaultVerifierChannel<E: FieldElement, H: ElementHasher<BaseField = E::BaseField>> {
     layer_commitments: Vec<H::Digest>,
-    layer_proofs: Vec<BatchMerkleProof<H>>,
-    layer_queries: Vec<Vec<E>>,
+    
+    queries: Vec<Vec<FriProofQuery>>,
     remainder: Vec<E>,
     num_partitions: usize,
 }
@@ -147,8 +173,9 @@ where
     ///
     /// # Errors
     /// Returns an error if the specified `proof` could not be parsed correctly.
+    
     pub fn new(
-        proof: FriProof,
+        proof: FriProof_,
         layer_commitments: Vec<H::Digest>,
         domain_size: usize,
         folding_factor: usize,
@@ -156,13 +183,12 @@ where
         let num_partitions = proof.num_partitions();
 
         let remainder = proof.parse_remainder()?;
-        let (layer_queries, layer_proofs) =
-            proof.parse_layers::<H, E>(domain_size, folding_factor)?;
+        let queries = proof.queries;
+        
 
         Ok(DefaultVerifierChannel {
             layer_commitments,
-            layer_proofs,
-            layer_queries,
+            queries,
             remainder,
             num_partitions,
         })
@@ -185,14 +211,20 @@ where
     }
 
     fn take_next_fri_layer_proof(&mut self) -> BatchMerkleProof<H> {
-        self.layer_proofs.remove(0)
+        
+        unimplemented!()
     }
 
     fn take_next_fri_layer_queries(&mut self) -> Vec<E> {
-        self.layer_queries.remove(0)
+        unimplemented!()
     }
 
     fn take_fri_remainder(&mut self) -> Vec<E> {
         self.remainder.clone()
+    }
+
+    fn read_queries(&mut self) -> Vec<FriProofQuery> {
+        let query = self.queries.remove(0);
+        query
     }
 }
