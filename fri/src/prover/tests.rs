@@ -27,10 +27,10 @@ type Blake3 = Blake3_256<BaseElement>;
 
 #[test]
 fn fri_prove_verify() {
-    let trace_length = 1<<11;
+    let trace_length = 1<<14;
     let lde_blowup = 8;
 
-    let options = FriOptions::new(lde_blowup, 2, 8);
+    let options = FriOptions::new(lde_blowup, 4, 16);
     let mut channel = build_prover_channel(trace_length, &options);
     let evaluations = build_evaluations(trace_length, lde_blowup);
 
