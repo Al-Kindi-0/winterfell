@@ -185,7 +185,7 @@ where
         // make sure remainder length does not exceed max allowed value
         let last_layer = &self.layers[self.layers.len() - 1];
         let remainder_size = last_layer.evaluations.len();
-        println!("remainder values {:?}",last_layer.evaluations);
+        //println!("remainder values {:?}",last_layer.evaluations);
         debug_assert!(
             remainder_size <= self.options.max_remainder_size(),
             "last FRI layer cannot exceed {} elements, but was {} elements",

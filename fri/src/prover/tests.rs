@@ -27,7 +27,7 @@ type Blake3 = Blake3_256<BaseElement>;
 
 #[test]
 fn fri_prove_verify() {
-    let trace_length = 1<<14;
+    let trace_length = 1<<20;
     let lde_blowup = 8;
 
     let options = FriOptions::new(lde_blowup, 4, 16);
