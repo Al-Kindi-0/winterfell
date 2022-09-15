@@ -485,8 +485,6 @@ where
         let evaluations = evaluations.to_vec();
         let mut final_max_poly_degree_plus_1 = self.max_poly_degree + 1;
         let mut final_pos_eval: Vec<(usize, E)> = vec![];
-        let mut total_num_hash_trees = 0usize;
-        let mut total_num_hash_leaves = 0usize;
 
         // Get the queries from the channel in a vertical configuration
         let advice_provider = channel.unbatch::<2>(
@@ -826,10 +824,7 @@ where
     let mut cur_pos = position;
     let mut evaluation = *evaluation;
     let mut domain_size = initial_domain_size;
-    let mut domain_generator = domain_generator;
     let domain_offset = B::GENERATOR;
-    let mut num_hash_trees = 0usize;
-    let mut num_hash_leaves = 0usize;
 
     for depth in 0..number_of_layers {
         let target_domain_size = domain_size / 2;
