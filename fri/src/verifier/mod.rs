@@ -499,10 +499,7 @@ where
         for (index, &position) in positions.iter().enumerate() {
             d_generator = self.domain_generator;
             counter = Counter::new();
-            let (
-                cur_pos,
-                evaluation,
-            ) = iterate_through_query_2::<B, E, H>(
+            let (cur_pos, evaluation) = iterate_through_query_2::<B, E, H>(
                 &self.layer_commitments,
                 &folding_roots,
                 &self.layer_alphas,
@@ -519,7 +516,7 @@ where
         }
         final_max_poly_degree_plus_1 /=
             (2 as usize).pow(self.options.num_fri_layers(self.domain_size) as u32);
-         eprintln!(
+        eprintln!(
             "Number of tree-hashes during FRI verification per query is {:?}",
             counter.node_hash
         );
@@ -547,11 +544,7 @@ where
         }
 
         // make sure the remainder values satisfy the degree
-        verify_remainder(
-            d_generator,
-            remainder,
-            final_max_poly_degree_plus_1 - 1,
-        )
+        verify_remainder(d_generator, remainder, final_max_poly_degree_plus_1 - 1)
     }
 
     /// This is the actual implementation of the verification procedure described above for N=4
@@ -826,6 +819,10 @@ where
     let mut domain_size = initial_domain_size;
     let domain_offset = B::GENERATOR;
 
+    let initial_domain_generator = *domain_generator;
+    let norm_cst = initial_domain_generator.exp((initial_domain_size as u64 / 2).into());
+    let mut init_exp = initial_domain_generator.exp((position as u64).into());
+
     for depth in 0..number_of_layers {
         let target_domain_size = domain_size / 2;
 
@@ -845,7 +842,20 @@ where
         }
 
         #[rustfmt::skip]
-        let xs = (*domain_generator).exp((folded_pos as u64).into()) * (domain_offset);
+        let xs_original = (*domain_generator).exp((folded_pos as u64).into()) * (domain_offset);
+
+        let xs = {
+            if cur_pos / target_domain_size == 1 {
+                init_exp / norm_cst
+            } else {
+                init_exp
+            }
+        } * domain_offset;
+        
+        //println!("left {:?}", xs_original);
+        //println!("right {:?}", xs);
+
+        init_exp = init_exp * init_exp;
 
         counter.field_exp += 1;
         counter.field_mul += 1;
@@ -857,13 +867,14 @@ where
             let alpha = layer_alphas[depth];
 
             counter.field_inv += 1;
-            counter.field_mul += 2;//multiplication by 1/2 constant
+            counter.field_mul += 2; //multiplication by 1/2 constant
             counter.field_mul_ext += 2;
             counter.field_add_ext += 3;
 
-            fri_2(f_x, f_minus_x, x_star, alpha)
+            (f_x + f_minus_x + ((f_x - f_minus_x) * alpha / x_star)) / E::ONE.double()
         };
 
+        //domain_generator_old = *domain_generator;
         // update variables for the next iteration of the loop
         *domain_generator = (*domain_generator).exp((2 as u32).into());
         cur_pos = folded_pos;
@@ -874,13 +885,15 @@ where
         // Estimate number of hashings required per query
         let degree_of_extension = evaluation.as_bytes().len() / domain_offset.as_bytes().len();
         counter.node_hash += tree_depth as usize - 1;
-        counter.leaves_hash += {if degree_of_extension == 2 {1} else {2}};
-
+        counter.leaves_hash += {
+            if degree_of_extension == 2 {
+                1
+            } else {
+                2
+            }
+        };
     }
-    Ok((
-        cur_pos,
-        evaluation,
-    ))
+    Ok((cur_pos, evaluation))
 }
 
 fn iterate_through_query_4<B, E, H>(
@@ -943,7 +956,7 @@ where
             let tmp0 = fri_2(f_x, f_minus_x, x_star, alpha);
 
             counter.field_inv += 1;
-            counter.field_mul += 2;//multiplication by 1/2 constant
+            counter.field_mul += 2; //multiplication by 1/2 constant
             counter.field_mul_ext += 2;
             counter.field_add_ext += 3;
 
