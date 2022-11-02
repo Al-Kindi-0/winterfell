@@ -8,7 +8,7 @@ use crate::{Example, ExampleOptions};
 use log::debug;
 use std::time::Instant;
 use winterfell::{
-    math::{fields::f128::BaseElement, log2, FieldElement},
+    math::{fields::f64::BaseElement, log2, FieldElement},
     ProofOptions, Prover, StarkProof, Trace, TraceTable, VerifierError,
 };
 
