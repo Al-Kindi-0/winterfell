@@ -3,6 +3,8 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
+use std::collections::HashMap;
+
 use air::{Air, ConstraintDivisor};
 use math::{fft, get_power_series, log2, StarkField};
 use utils::collections::{BTreeMap, Vec};
@@ -25,7 +27,7 @@ pub struct StarkDomain<B: StarkField> {
     ce_domain: Vec<B>,
 
     /// A mapping from adjustment degrees to domain_offset^adjustment_degree.
-    degree_adj_map: BTreeMap<u32, B>,
+    degree_adj_map: HashMap<u32, B>,
 }
 
 // STARK DOMAIN IMPLEMENTATION
@@ -86,7 +88,7 @@ impl<B: StarkField> StarkDomain<B> {
     }
 
     /// Returns the degree adjustment map for this computation.
-    pub fn degree_adj_map(&self) -> BTreeMap<u32, B> {
+    pub fn degree_adj_map(&self) -> HashMap<u32, B> {
         self.degree_adj_map.clone()
     }
 
@@ -101,6 +103,7 @@ impl<B: StarkField> StarkDomain<B> {
     }
 
     /// Returns (offset * g^(step))^degree_adjustment.
+    #[inline(always)]
     pub fn get_ce_x_power_at<A: Air<BaseField = B>>(
         &self,
         step: usize,
@@ -108,7 +111,11 @@ impl<B: StarkField> StarkDomain<B> {
     ) -> A::BaseField {
         let index: usize = step * (degree_adjustment as usize);
         let index = index % (self.ce_domain_size());
-        let xp = self.ce_domain()[index] * *self.degree_adj_map().get(&degree_adjustment).unwrap();
+        let xp = self.ce_domain()[index]
+            * *self
+                .degree_adj_map()
+                .get(&degree_adjustment)
+                .expect("Degree adjustment map malformed");
 
         xp
     }
@@ -130,8 +137,9 @@ impl<B: StarkField> StarkDomain<B> {
 // HELPERS
 // --------------------------------------------------------------------------------------------
 
-fn generate_degree_adj_map<A: Air<BaseField = B>, B: StarkField>(air: &A) -> BTreeMap<u32, B> {
-    let mut degree_adj_map = BTreeMap::new();
+#[inline(always)]
+fn generate_degree_adj_map<A: Air<BaseField = B>, B: StarkField>(air: &A) -> HashMap<u32, B> {
+    let mut degree_adj_map = HashMap::new();
     let domain_offset = air.domain_offset();
     let context = air.context();
     let divisor: ConstraintDivisor<B> = ConstraintDivisor::from_transition(
@@ -139,15 +147,12 @@ fn generate_degree_adj_map<A: Air<BaseField = B>, B: StarkField>(air: &A) -> BTr
         context.num_transition_exemptions(),
     );
     let div_deg = divisor.degree();
-    let (main_constraint_degrees, aux_constraint_degrees) = context.transition_constraint_degrees();
+    let constraint_degrees = context.transition_constraint_degrees();
     let trace_len = context.trace_len();
     let comp_deg = context.composition_degree();
     let target_deg = comp_deg + div_deg;
 
-    for degree in main_constraint_degrees
-        .iter()
-        .chain(aux_constraint_degrees.iter())
-    {
+    for degree in constraint_degrees {
         let evaluation_degree = degree.get_evaluation_degree(trace_len);
         let degree_adjustment = (target_deg - evaluation_degree) as u32;
         let _ = degree_adj_map

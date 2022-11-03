@@ -168,7 +168,7 @@ impl<'a, A: Air, E: FieldElement<BaseField = A::BaseField>> ConstraintEvaluator<
             // evaluate transition constraints and save the merged result the first slot of the
             // evaluations buffer
             evaluations[0] =
-                self.evaluate_main_transition(&main_frame, step, &mut t_evaluations, &domain);
+                self.evaluate_main_transition(&main_frame, &domain, step, &mut t_evaluations);
 
             // when in debug mode, save transition constraint evaluations
             #[cfg(debug_assertions)]
@@ -224,7 +224,7 @@ impl<'a, A: Air, E: FieldElement<BaseField = A::BaseField>> ConstraintEvaluator<
             // evaluations buffer; we evaluate and compose constraints in the same function, we
             // can just add up the results of evaluating main and auxiliary constraints.
             evaluations[0] =
-                self.evaluate_main_transition(&main_frame, step, &mut tm_evaluations, &domain);
+                self.evaluate_main_transition(&main_frame, &domain, step, &mut tm_evaluations);
             evaluations[0] += self.evaluate_aux_transition(
                 &main_frame,
                 &aux_frame,
@@ -269,9 +269,9 @@ impl<'a, A: Air, E: FieldElement<BaseField = A::BaseField>> ConstraintEvaluator<
     fn evaluate_main_transition(
         &self,
         main_frame: &EvaluationFrame<E::BaseField>,
+        domain: &StarkDomain<A::BaseField>,
         step: usize,
         evaluations: &mut [E::BaseField],
-        domain: &StarkDomain<A::BaseField>,
     ) -> E {
         // TODO: use a more efficient way to zero out memory
         evaluations.fill(E::BaseField::ZERO);
@@ -287,7 +287,8 @@ impl<'a, A: Air, E: FieldElement<BaseField = A::BaseField>> ConstraintEvaluator<
         // merge transition constraint evaluations into a single value and return it;
         // we can do this here because all transition constraints have the same divisor.
         self.transition_constraints.main_constraints().iter().fold(E::ZERO, |result, group| {
-            let xp = domain.get_ce_x_power_at::<A>(step, group.degree_adjustment());
+            //let xp = domain.get_ce_x_power_at::<A>(step, group.degree_adjustment());
+            let xp = domain.offset()*domain.ce_domain_generator().exp(((step as u32) * group.degree_adjustment()).into());
             result + group.merge_evaluations(evaluations, xp)
         })
     }

@@ -240,11 +240,10 @@ impl<B: StarkField> AirContext<B> {
     /// Returns the a tuple containing the main and auxiliary transition constraint degrees.
     pub fn transition_constraint_degrees(
         &self,
-    ) -> (&[TransitionConstraintDegree], &[TransitionConstraintDegree]) {
-        (
-            &self.main_transition_constraint_degrees,
-            &self.aux_transition_constraint_degrees,
-        )
+    ) -> Vec<TransitionConstraintDegree>{
+        
+            [self.main_transition_constraint_degrees.clone(),self.aux_transition_constraint_degrees.clone()].concat()
+        
     }
 
     // DATA MUTATORS

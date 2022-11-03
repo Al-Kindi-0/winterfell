@@ -260,15 +260,15 @@ impl<E: FieldElement> TransitionConstraintGroup<E> {
     ///
     /// The linear combination is computed as follows:
     /// $$
-    /// \sum_{i=0}^{k-1}{C_i(x) \cdot (\alpha_i + \beta_i \cdot x^d)}
+    /// \sum_{i=0}^{k-1}{C_i(x) \cdot (\alpha_i + \beta_i \cdot xp)}
     /// $$
     /// where:
     /// * $C_i(x)$ is the evaluation of the $i$th constraint at `x` (same as `evaluations[i]`).
+    /// * $xp = x^d$ where $d$ is the degree adjustment factor computed as $D + (n - 1) - deg(C_i(x))$,
+    ///   where $D$ is the degree of the composition polynomial, $n$ is the length of the execution
+    ///   trace, and $deg(C_i(x))$ is the evaluation degree of the $i$th constraint.
     /// * $\alpha$ and $\beta$ are random field elements. In the interactive version of the
     ///   protocol, these are provided by the verifier.
-    /// * $d$ is the degree adjustment factor computed as $D + (n - 1) - deg(C_i(x))$, where
-    ///   $D$ is the degree of the composition polynomial, $n$ is the length of the execution
-    ///   trace, and $deg(C_i(x))$ is the evaluation degree of the $i$th constraint.
     ///
     /// There are two things to note here. First, the degree adjustment factor $d$ is the same
     /// for all constraints in the group (since all constraints have the same degree). Second,
@@ -284,8 +284,8 @@ impl<E: FieldElement> TransitionConstraintGroup<E> {
         F: FieldElement<BaseField = B::BaseField> + ExtensionOf<B>,
         E: FieldElement<BaseField = B::BaseField> + ExtensionOf<B> + ExtensionOf<F>,
     {
-        // compute linear combination of evaluations as D(x) * (cc_0 + cc_1 * x^p), where D(x)
-        // is an evaluation of a particular constraint, and x^p is the degree adjustment factor
+        // compute linear combination of evaluations as D(x) * (cc_0 + cc_1 * xp), where D(x)
+        // is an evaluation of a particular constraint, and xp is the degree adjustment factor
         let mut result = E::ZERO;
         for (&constraint_idx, coefficients) in self.indexes.iter().zip(self.coefficients.iter()) {
             let evaluation = evaluations[constraint_idx];
