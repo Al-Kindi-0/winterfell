@@ -287,8 +287,8 @@ impl<'a, A: Air, E: FieldElement<BaseField = A::BaseField>> ConstraintEvaluator<
         // merge transition constraint evaluations into a single value and return it;
         // we can do this here because all transition constraints have the same divisor.
         self.transition_constraints.main_constraints().iter().fold(E::ZERO, |result, group| {
-            //let xp = domain.get_ce_x_power_at::<A>(step, group.degree_adjustment());
-            let xp = domain.offset().exp((group.degree_adjustment()).into())*domain.ce_domain_generator().exp(((step as u32) * group.degree_adjustment()).into());
+            let xp = domain.get_ce_x_power_at::<A>(step, group.degree_adjustment());
+            //let xp = domain.offset().exp((group.degree_adjustment()).into())*domain.ce_domain_generator().exp(((step as u32) * group.degree_adjustment()).into());
             result + group.merge_evaluations(evaluations, xp)
         })
     }
