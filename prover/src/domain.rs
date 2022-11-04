@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use air::{Air, ConstraintDivisor};
 use math::{fft, get_power_series, log2, StarkField};
-use utils::collections::{BTreeMap, Vec};
+use utils::collections::Vec;
 
 // TYPES AND INTERFACES
 // ================================================================================================
