@@ -7,7 +7,7 @@ use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion
 use math::fields::f128;
 use rand_utils::rand_value;
 use winter_crypto::{
-    hashers::{Blake3_256, Rp62_248, Rp64_256, Sha3_256},
+    hashers::{Blake3_256, Rp62_248, Rp64_256, Sha3_256, Rpoo},
     Hasher,
 };
 
@@ -19,6 +19,7 @@ type Sha3Digest = <Sha3 as Hasher>::Digest;
 
 type Rp62_248Digest = <Rp62_248 as Hasher>::Digest;
 type Rp64_256Digest = <Rp64_256 as Hasher>::Digest;
+type RpooDigest = <Rpoo as Hasher>::Digest;
 
 fn blake3(c: &mut Criterion) {
     let v: [Blake3Digest; 2] = [Blake3::hash(&[1u8]), Blake3::hash(&[2u8])];
@@ -100,5 +101,25 @@ fn rescue256(c: &mut Criterion) {
     });
 }
 
-criterion_group!(hash_group, blake3, sha3, rescue248, rescue256);
+fn rpoo(c: &mut Criterion) {
+    let v: [RpooDigest; 2] = [Rpoo::hash(&[1u8]), Rpoo::hash(&[2u8])];
+    c.bench_function("hash_rpoo (cached)", |bench| {
+        bench.iter(|| Rpoo::merge(black_box(&v)))
+    });
+
+    c.bench_function("hash_rpoo (random)", |b| {
+        b.iter_batched(
+            || {
+                [
+                    Rpoo::hash(&rand_value::<u64>().to_le_bytes()),
+                    Rpoo::hash(&rand_value::<u64>().to_le_bytes()),
+                ]
+            },
+            |state| Rpoo::merge(&state),
+            BatchSize::SmallInput,
+        )
+    });
+}
+
+criterion_group!(hash_group, blake3, sha3, rescue248, rescue256, rpoo);
 criterion_main!(hash_group);
