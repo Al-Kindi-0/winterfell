@@ -301,9 +301,9 @@ impl Rpoo {
         Self::apply_first_half_round(state, 0);
         Self::apply_round(state, 1);
         
-        Self::apply_ext_sbox_round(state);
-        Self::apply_ext_sbox_round(state);
-        Self::apply_ext_sbox_round(state);
+        Self::apply_ext_sbox_round(state, 2);
+        Self::apply_ext_sbox_round(state, 3);
+        Self::apply_ext_sbox_round(state, 4);
 
         Self::apply_round(state, 5);
         Self::apply_first_half_round(state, 6);
@@ -337,7 +337,7 @@ impl Rpoo {
 
     /// Rescue-XLIX (F) round function.
     #[inline]
-    pub fn apply_ext_sbox_round(state: &mut [BaseElement; STATE_WIDTH]) {
+    pub fn apply_ext_sbox_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
             let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = *state;
             let ext0 = exp7(ExtElement::new(s0, s4, s8));
             let ext1 = exp7(ExtElement::new(s1, s5, s9));
@@ -346,6 +346,8 @@ impl Rpoo {
 
             let arr_ext = vec![ext0, ext1, ext2, ext3];
             *state = ExtElement::as_base_elements(&arr_ext).try_into().expect("shouldn't fail");
+            Self::apply_mds(state);
+            Self::add_constants(state, &ARK1[round]);
 
     }
 
