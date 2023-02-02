@@ -299,30 +299,44 @@ impl Rpoo {
     pub fn apply_permutation(state: &mut [BaseElement; STATE_WIDTH]) {
 
         Self::apply_first_half_round(state, 0);
-        Self::apply_round(state, 1);
+        Self::apply_4_inv_sbox_then_ext_sbox_round(state, 1);
+
+        Self::apply_first_half_round(state, 2);
+        Self::apply_4_inv_sbox_then_ext_sbox_round(state, 3);
         
-        Self::apply_ext_sbox_round(state, 2);
-        Self::apply_ext_sbox_round(state, 3);
-        Self::apply_ext_sbox_round(state, 4);
-
-        Self::apply_round(state, 5);
-        Self::apply_first_half_round(state, 6);
-
+        Self::apply_first_half_round(state, 4);
+        Self::apply_4_inv_sbox_then_ext_sbox_round(state, 5);
+        
     }
 
-    /// Rescue-XLIX (FB) round function.
-    #[inline(always)]
-    pub fn apply_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
-        // apply first half of Rescue round
-        Self::apply_sbox(state);
-        Self::apply_mds(state);
-        Self::add_constants(state, &ARK1[round]);
+    ///// Applies new permutation to the provided state.
+    //pub fn apply_permutation(state: &mut [BaseElement; STATE_WIDTH]) {
 
-        // apply second half of Rescue round
-        Self::apply_inv_sbox(state);
-        Self::apply_mds(state);
-        Self::add_constants(state, &ARK2[round]);
-    }
+        //Self::apply_first_half_round(state, 0);
+        //Self::apply_round(state, 1);
+        
+        //Self::apply_ext_sbox_round(state, 2);
+        //Self::apply_ext_sbox_round(state, 3);
+        //Self::apply_ext_sbox_round(state, 4);
+
+        //Self::apply_round(state, 5);
+        //Self::apply_first_half_round(state, 6);
+
+    //}
+
+    ///// Rescue-XLIX (FB) round function.
+    //#[inline(always)]
+    //pub fn apply_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        //// apply first half of Rescue round
+        //Self::apply_sbox(state);
+        //Self::apply_mds(state);
+        //Self::add_constants(state, &ARK1[round]);
+
+        //// apply second half of Rescue round
+        //Self::apply_inv_sbox(state);
+        //Self::apply_mds(state);
+        //Self::add_constants(state, &ARK2[round]);
+    //}
 
     /// Rescue-XLIX (F) round function.
     #[inline(always)]
@@ -334,11 +348,29 @@ impl Rpoo {
 
     }
     
+    //#[inline]
+    //pub fn apply_ext_sbox_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+            //let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = *state;
+            //let ext0 = exp7(ExtElement::new(s0, s4, s8));
+            //let ext1 = exp7(ExtElement::new(s1, s5, s9));
+            //let ext2 = exp7(ExtElement::new(s2, s6, s10));
+            //let ext3 = exp7(ExtElement::new(s3, s7, s11));
 
-    /// Rescue-XLIX (F) round function.
+            //let arr_ext = vec![ext0, ext1, ext2, ext3];
+            //*state = ExtElement::as_base_elements(&arr_ext).try_into().expect("shouldn't fail");
+            //Self::apply_mds(state);
+            //Self::add_constants(state, &ARK1[round]);
+
+    //}
+
     #[inline]
-    pub fn apply_ext_sbox_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+    pub fn apply_4_inv_sbox_then_ext_sbox_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
             let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = *state;
+
+            let mut partial_state = [s4, s5, s6, s7];
+            Self::apply_4_inv_sbox(& mut partial_state);
+
+            let [s4, s5, s6, s7] = partial_state;
             let ext0 = exp7(ExtElement::new(s0, s4, s8));
             let ext1 = exp7(ExtElement::new(s1, s5, s9));
             let ext2 = exp7(ExtElement::new(s2, s6, s10));
@@ -406,6 +438,42 @@ impl Rpoo {
         state[11] = state[11].exp7();
     }
 
+        #[inline(always)]
+    fn apply_4_inv_sbox(state: &mut [BaseElement; 4]) {
+        // compute base^10540996611094048183 using 72 multiplications per array element
+        // 10540996611094048183 = b1001001001001001001001001001000110110110110110110110110110110111
+
+        // compute base^10
+        let mut t1 = *state;
+        t1.iter_mut().for_each(|t| *t = t.square());
+
+        // compute base^100
+        let mut t2 = t1;
+        t2.iter_mut().for_each(|t| *t = t.square());
+
+        // compute base^100100
+        let t3 = exp_acc::<BaseElement, 4, 3>(t2, t2);
+
+        // compute base^100100100100
+        let t4 = exp_acc::<BaseElement, 4, 6>(t3, t3);
+
+        // compute base^100100100100100100100100
+        let t5 = exp_acc::<BaseElement, 4, 12>(t4, t4);
+
+        // compute base^100100100100100100100100100100
+        let t6 = exp_acc::<BaseElement, 4, 6>(t5, t3);
+
+        // compute base^1001001001001001001001001001000100100100100100100100100100100
+        let t7 = exp_acc::<BaseElement, 4, 31>(t6, t6);
+
+        // compute base^1001001001001001001001001001000110110110110110110110110110110111
+        for (i, s) in state.iter_mut().enumerate() {
+            let a = (t7[i].square() * t6[i]).square().square();
+            let b = t1[i] * t2[i] * *s;
+            *s = a * b;
+        }
+    }
+
     #[inline(always)]
     fn apply_inv_sbox(state: &mut [BaseElement; STATE_WIDTH]) {
         // compute base^10540996611094048183 using 72 multiplications per array element
@@ -448,10 +516,33 @@ impl Rpoo {
 /// Computes an exponentiation to the power 7 in cubic extension field
 #[inline(always)]
 pub fn exp7(x: CubeExtension<BaseElement>) ->  CubeExtension<BaseElement>{
-    let x2 = x.square();
-    let x4 = x2.square();
+    //let x2 = x.square();
+    //let x4 = x2.square();
+    //let x3 = x2 * x;
+    //x3 * x4
+    let x2 = square_new(x);
+    let x4 = square_new(x2);
     let x3 = x2 * x;
     x3 * x4
+}
+
+#[inline(always)]
+pub fn square_new(x: ExtElement) -> ExtElement {
+    let a: [BaseElement; 3] = ExtElement::to_base(x);
+    let a0 = a[0];
+    let a1 = a[1];
+    let a2 = a[2];
+
+    let a2_sq = a2.square();
+
+    let out0 = a0.square() + (a1 * a2).double();
+    let out1 = (a0 * a1 + a1 * a2).double() + a2_sq;
+    let out2 = a0 * a2 * BaseElement::new(2) + a1.square() + a2_sq;
+
+    let output = ExtElement::new(out0, out1, out2);
+
+    output
+
 }
 
 // MDS

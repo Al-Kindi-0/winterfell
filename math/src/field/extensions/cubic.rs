@@ -53,6 +53,10 @@ impl<B: ExtensibleField<3>> CubeExtension<B> {
         let cap = v.capacity() / 3;
         unsafe { Vec::from_raw_parts(p as *mut Self, len, cap) }
     }
+
+    pub fn to_base(a: Self) -> [B; 3] {
+        [a.0, a.1, a.2]
+    }
 }
 
 impl<B: ExtensibleField<3>> FieldElement for CubeExtension<B> {
