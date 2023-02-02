@@ -537,9 +537,10 @@ pub fn square_new(x: ExtElement) -> ExtElement {
 
     let out0 = a0.square() + (a1 * a2).double();
     let out1 = (a0 * a1 + a1 * a2).double() + a2_sq;
-    let out2 = a0 * a2 * BaseElement::new(2) + a1.square() + a2_sq;
+    let out2 = (a0 * a2).double() + a1.square() + a2_sq;
 
     let output = ExtElement::new(out0, out1, out2);
+    //assert!(output == x.square());
 
     output
 

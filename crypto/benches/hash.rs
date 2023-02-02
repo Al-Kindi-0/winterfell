@@ -121,5 +121,6 @@ fn rpoo(c: &mut Criterion) {
     });
 }
 
-criterion_group!(hash_group, blake3, sha3, rescue248, rescue256, rpoo);
+//criterion_group!(hash_group, blake3, sha3, rescue248, rescue256, rpoo);
+criterion_group!(hash_group, rpoo);
 criterion_main!(hash_group);
