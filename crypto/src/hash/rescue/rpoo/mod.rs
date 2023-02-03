@@ -376,7 +376,7 @@ impl Rpoo {
             let ext2 = exp7(ExtElement::new(s2, s6, s10));
             let ext3 = exp7(ExtElement::new(s3, s7, s11));
 
-            let arr_ext = vec![ext0, ext1, ext2, ext3];
+            let arr_ext = [ext0, ext1, ext2, ext3];
             *state = ExtElement::as_base_elements(&arr_ext).try_into().expect("shouldn't fail");
             Self::apply_mds(state);
             Self::add_constants(state, &ARK1[round]);
