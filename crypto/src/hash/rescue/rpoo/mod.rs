@@ -534,9 +534,11 @@ pub fn square_new(x: ExtElement) -> ExtElement {
     let a2 = a[2];
 
     let a2_sq = a2.square();
+    let a1_a2 = a1 * a2;
 
-    let out0 = a0.square() + (a1 * a2).double();
-    let out1 = (a0 * a1 + a1 * a2).double() + a2_sq;
+    let out0 = a0.square() + (a1_a2).double();
+    let out1 = (a0 * a1 + a1_a2).double() + a2_sq;
+    //let out1 = (a1 * (a0 + a2)).double() + a2_sq;
     let out2 = (a0 * a2).double() + a1.square() + a2_sq;
 
     let output = ExtElement::new(out0, out1, out2);
