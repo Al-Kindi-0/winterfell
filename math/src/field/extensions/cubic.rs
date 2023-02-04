@@ -25,7 +25,7 @@ use utils::{
 /// field elements.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
-pub struct CubeExtension<B: ExtensibleField<3>>(B, B, B);
+pub struct CubeExtension<B: ExtensibleField<3>>(pub B, pub B, pub B);
 
 impl<B: ExtensibleField<3>> CubeExtension<B> {
     /// Returns a new extension element instantiated from the provided base elements.

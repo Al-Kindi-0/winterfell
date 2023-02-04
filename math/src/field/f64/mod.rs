@@ -81,6 +81,19 @@ impl BaseElement {
         let x3 = x2 * self;
         x3 * x4
     }
+
+    /// Multiplies an element that is less than 2^32 by a field element. This implementation
+    /// is faster as it avoids the use of Montgomery reduction.
+    #[inline(always)]
+    pub fn mul_small(self, rhs: u32) -> Self {
+        let s = (self.inner() as u128) * (rhs as u128);
+        let s_hi = (s >> 64) as u64;
+        let s_lo = s as u64;
+        let z = (s_hi << 32) - s_hi;
+        let (res, over) = s_lo.overflowing_add(z);
+
+        BaseElement::from_mont(res.wrapping_add(0u32.wrapping_sub(over as u32) as u64))
+    }
 }
 
 impl FieldElement for BaseElement {

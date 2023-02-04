@@ -4,9 +4,12 @@
 // LICENSE file in the root directory of this source tree.
 
 use super::{exp_acc, Digest, ElementHasher, Hasher};
-use core::convert::TryInto;
 use core::ops::Range;
-use math::{fields::{f64::BaseElement, CubeExtension}, FieldElement, StarkField};
+use core::{convert::TryInto, ops::Mul};
+use math::{
+    fields::{f64::BaseElement, CubeExtension},
+    FieldElement, StarkField,
+};
 
 mod digest;
 pub use digest::ElementDigest;
@@ -297,45 +300,43 @@ impl Rpoo {
 
     /// Applies new permutation to the provided state.
     pub fn apply_permutation(state: &mut [BaseElement; STATE_WIDTH]) {
-
         Self::apply_first_half_round(state, 0);
         Self::apply_4_inv_sbox_then_ext_sbox_round(state, 1);
 
         Self::apply_first_half_round(state, 2);
         Self::apply_4_inv_sbox_then_ext_sbox_round(state, 3);
-        
+
         Self::apply_first_half_round(state, 4);
         Self::apply_4_inv_sbox_then_ext_sbox_round(state, 5);
-        
     }
 
     ///// Applies new permutation to the provided state.
     //pub fn apply_permutation(state: &mut [BaseElement; STATE_WIDTH]) {
 
-        //Self::apply_first_half_round(state, 0);
-        //Self::apply_round(state, 1);
-        
-        //Self::apply_ext_sbox_round(state, 2);
-        //Self::apply_ext_sbox_round(state, 3);
-        //Self::apply_ext_sbox_round(state, 4);
+    //Self::apply_first_half_round(state, 0);
+    //Self::apply_round(state, 1);
 
-        //Self::apply_round(state, 5);
-        //Self::apply_first_half_round(state, 6);
+    //Self::apply_ext_sbox_round(state, 2);
+    //Self::apply_ext_sbox_round(state, 3);
+    //Self::apply_ext_sbox_round(state, 4);
+
+    //Self::apply_round(state, 5);
+    //Self::apply_first_half_round(state, 6);
 
     //}
 
     ///// Rescue-XLIX (FB) round function.
     //#[inline(always)]
     //pub fn apply_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
-        //// apply first half of Rescue round
-        //Self::apply_sbox(state);
-        //Self::apply_mds(state);
-        //Self::add_constants(state, &ARK1[round]);
+    //// apply first half of Rescue round
+    //Self::apply_sbox(state);
+    //Self::apply_mds(state);
+    //Self::add_constants(state, &ARK1[round]);
 
-        //// apply second half of Rescue round
-        //Self::apply_inv_sbox(state);
-        //Self::apply_mds(state);
-        //Self::add_constants(state, &ARK2[round]);
+    //// apply second half of Rescue round
+    //Self::apply_inv_sbox(state);
+    //Self::apply_mds(state);
+    //Self::add_constants(state, &ARK2[round]);
     //}
 
     /// Rescue-XLIX (F) round function.
@@ -345,42 +346,45 @@ impl Rpoo {
         Self::apply_sbox(state);
         Self::apply_mds(state);
         Self::add_constants(state, &ARK1[round]);
-
     }
-    
+
     //#[inline]
     //pub fn apply_ext_sbox_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
-            //let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = *state;
-            //let ext0 = exp7(ExtElement::new(s0, s4, s8));
-            //let ext1 = exp7(ExtElement::new(s1, s5, s9));
-            //let ext2 = exp7(ExtElement::new(s2, s6, s10));
-            //let ext3 = exp7(ExtElement::new(s3, s7, s11));
+    //let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = *state;
+    //let ext0 = exp7(ExtElement::new(s0, s4, s8));
+    //let ext1 = exp7(ExtElement::new(s1, s5, s9));
+    //let ext2 = exp7(ExtElement::new(s2, s6, s10));
+    //let ext3 = exp7(ExtElement::new(s3, s7, s11));
 
-            //let arr_ext = vec![ext0, ext1, ext2, ext3];
-            //*state = ExtElement::as_base_elements(&arr_ext).try_into().expect("shouldn't fail");
-            //Self::apply_mds(state);
-            //Self::add_constants(state, &ARK1[round]);
+    //let arr_ext = vec![ext0, ext1, ext2, ext3];
+    //*state = ExtElement::as_base_elements(&arr_ext).try_into().expect("shouldn't fail");
+    //Self::apply_mds(state);
+    //Self::add_constants(state, &ARK1[round]);
 
     //}
 
     #[inline]
-    pub fn apply_4_inv_sbox_then_ext_sbox_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
-            let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = *state;
+    pub fn apply_4_inv_sbox_then_ext_sbox_round(
+        state: &mut [BaseElement; STATE_WIDTH],
+        round: usize,
+    ) {
+        let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = *state;
 
-            let mut partial_state = [s4, s5, s6, s7];
-            Self::apply_4_inv_sbox(& mut partial_state);
+        let mut partial_state = [s4, s5, s6, s7];
+        Self::apply_4_inv_sbox(&mut partial_state);
 
-            let [s4, s5, s6, s7] = partial_state;
-            let ext0 = exp7(ExtElement::new(s0, s4, s8));
-            let ext1 = exp7(ExtElement::new(s1, s5, s9));
-            let ext2 = exp7(ExtElement::new(s2, s6, s10));
-            let ext3 = exp7(ExtElement::new(s3, s7, s11));
+        let [s4, s5, s6, s7] = partial_state;
+        let ext0 = exp7(ExtElement::new(s0, s4, s8));
+        let ext1 = exp7(ExtElement::new(s1, s5, s9));
+        let ext2 = exp7(ExtElement::new(s2, s6, s10));
+        let ext3 = exp7(ExtElement::new(s3, s7, s11));
 
-            let arr_ext = [ext0, ext1, ext2, ext3];
-            *state = ExtElement::as_base_elements(&arr_ext).try_into().expect("shouldn't fail");
-            Self::apply_mds(state);
-            Self::add_constants(state, &ARK1[round]);
-
+        let arr_ext = [ext0, ext1, ext2, ext3];
+        *state = ExtElement::as_base_elements(&arr_ext)
+            .try_into()
+            .expect("shouldn't fail");
+        Self::apply_mds(state);
+        Self::add_constants(state, &ARK1[round]);
     }
 
     // HELPER FUNCTIONS
@@ -438,7 +442,7 @@ impl Rpoo {
         state[11] = state[11].exp7();
     }
 
-        #[inline(always)]
+    #[inline(always)]
     fn apply_4_inv_sbox(state: &mut [BaseElement; 4]) {
         // compute base^10540996611094048183 using 72 multiplications per array element
         // 10540996611094048183 = b1001001001001001001001001001000110110110110110110110110110110111
@@ -515,7 +519,7 @@ impl Rpoo {
 
 /// Computes an exponentiation to the power 7 in cubic extension field
 #[inline(always)]
-pub fn exp7(x: CubeExtension<BaseElement>) ->  CubeExtension<BaseElement>{
+pub fn exp7(x: CubeExtension<BaseElement>) -> CubeExtension<BaseElement> {
     //let x2 = x.square();
     //let x4 = x2.square();
     //let x3 = x2 * x;
@@ -524,6 +528,163 @@ pub fn exp7(x: CubeExtension<BaseElement>) ->  CubeExtension<BaseElement>{
     let x4 = square_new(x2);
     let x3 = x2 * x;
     x3 * x4
+}
+
+#[inline(always)]
+pub fn exp7_new(x: CubeExtension<BaseElement>) -> CubeExtension<BaseElement> {
+    let [x0, x1, x2] = [x.0, x.1, x.2];
+    let x0_2 = x0.square();
+    let x1_2 = x1.square();
+    let x2_2 = x2.square();
+
+    let x0_3 = x0_2 * x0;
+    let x1_3 = x1_2 * x1;
+    let x2_3 = x2_2 * x2;
+
+    let x0_4 = x0_2.square();
+    let x1_4 = x1_2.square();
+    let x2_4 = x2_2.square();
+
+    let x0_5 = x0_4 * x0;
+    let x1_5 = x1_4 * x1;
+    let x2_5 = x2_4 * x2;
+
+    let x0_6 = x0_3.square();
+    let x1_6 = x1_3.square();
+    let x2_6 = x2_3.square();
+
+    let x0_7 = x0_6 * x0;
+    let x1_7 = x1_6 * x1;
+    let x2_7 = x2_6 * x2;
+
+    let x0_4_x1_3_35 = (x0_4 * x1_3).mul_small(35); //2
+
+    let x0_2_x1_5_21 = (x0_2 * x1_5).mul_small(21); //3
+
+    let x0_x1_6_7 = (x0 * x1_6).mul_small(7); //2
+    let x0_x1_6_14 = x0_x1_6_7.double(); //1
+
+    let x0_5_x1_x2_42 = (x0_5 * x1 * x2).mul_small(42); //2
+
+    let x0_3_x1_3_x2_140 = (x0_3 * x1_3 * x2).mul_small(140); //3
+
+    let x0_2_x1_4_x2_105 = (x0_2 * x1_4 * x2).mul_small(105); //2
+    let x0_2_x1_4_x2_210 = x0_2_x1_4_x2_105.double(); //1
+
+    let x0_x1_5_x2_42 = (x0 * x1_5 * x2).mul_small(42); //1
+    let x0_x1_5_x2_84 = x0_x1_5_x2_42.double(); //2
+
+    let x1_6_x2 = x1_6 * x2;
+    let x1_6_x2_14 = x1_6_x2.mul_small(14); //2
+    let x1_6_x2_21 = x1_6_x2.mul_small(21); //1
+
+    let x0_4_x1_x2_2_105 = (x0_4 * x1 * x2_2).mul_small(105); //3
+
+    let x0_3_x1_2_x2_2_210 = (x0_3 * x1_2 * x2_2).mul_small(210); //2
+    let x0_3_x1_2_x2_2_420 = x0_3_x1_2_x2_2_210.double(); //1
+
+    let x0_2_x1_3_x2_2_210 = (x0_2 * x1_3 * x2_2).mul_small(210); //1
+    let x0_2_x1_3_x2_2_420 = x0_2_x1_3_x2_2_210.double(); //2
+
+    let x0_x1_4_x2_2 = x0 * x1_4 * x2_2;
+    let x0_x1_4_x2_2_210 = x0_x1_4_x2_2.mul_small(210); //2
+    let x0_x1_4_x2_2_315 = x0_x1_4_x2_2.mul_small(315); //1
+
+    let x1_5_x2_2 = x1_5 * x2_2;
+    let x1_5_x2_2_42 = x1_5_x2_2.mul_small(42); //1
+    let x1_5_x2_2_84 = x1_5_x2_2_42.double(); //1
+    let x1_5_x2_2_63 = x1_5_x2_2.mul_small(63); //1
+
+    let x0_4_x2_3_35 = (x0_4 * x2_3).mul_small(35); //2
+    let x0_4_x2_3_70 = x0_4_x2_3_35.double(); //1
+
+    let x0_3_x1_x2_3_140 = (x0_3 * x1 * x2_3).mul_small(140); //1
+    let x0_3_x1_x2_3_280 = x0_3_x1_x2_3_140.double(); //2
+
+    let x0_2_x1_2_x2_3 = x0_2 * x1_2 * x2_3;
+    let x0_2_x1_2_x2_3_420 = x0_2_x1_2_x2_3.mul_small(420); //2
+    let x0_2_x1_2_x2_3_630 = x0_2_x1_2_x2_3.mul_small(630); //1
+
+    let x0_x1_3_x2_3 = x0 * x1_3 * x2_3;
+    let x0_x1_3_x2_3_280 = x0_x1_3_x2_3.mul_small(280); //1
+    let x0_x1_3_x2_3_560 = x0_x1_3_x2_3_280.double(); //1
+    let x0_x1_3_x2_3_420 = x0_x1_3_x2_3.mul_small(420); //1
+
+    let x1_4_x2_3 = x1_4 * x2_3;
+    let x1_4_x2_3_105 = x1_4_x2_3.mul_small(105);
+    let x1_4_x2_3_175 = x1_4_x2_3.mul_small(175);
+    let x1_4_x2_3_140 = x1_4_x2_3.mul_small(140);
+
+    let x0_3_x2_4 = x0_3 * x2_4;
+    let x0_3_x2_4_70 = x0_3_x2_4.mul_small(70); //2
+    let x0_3_x2_4_105 = x0_3_x2_4.mul_small(105); //1
+
+    let x0_2_x1_x2_4 = x0_2 * x1 * x2_4;
+    let x0_2_x1_x2_4_210 = x0_2_x1_x2_4.mul_small(210);
+    let x0_2_x1_x2_4_420 = x0_2_x1_x2_4_210.double();
+    let x0_2_x1_x2_4_315 = x0_2_x1_x2_4.mul_small(315);
+
+    let x0_x1_2_x2_4 = x0 * x1_2 * x2_4;
+    let x0_x1_2_x2_4_315 = x0_x1_2_x2_4.mul_small(315);
+    let x0_x1_2_x2_4_420 = x0_x1_2_x2_4.mul_small(420);
+    let x0_x1_2_x2_4_525 = x0_x1_2_x2_4.mul_small(525);
+
+    let x1_3_x2_4 = x1_3 * x2_4;
+    let x1_3_x2_4_140 = x1_3_x2_4.mul_small(140);
+    let x1_3_x2_4_175 = x1_3_x2_4.mul_small(175);
+    let x1_3_x2_4_245 = x1_3_x2_4.mul_small(245);
+
+    let x0_2_x2_5 = x0_2 * x2_5;
+    let x0_2_x2_5_63 = x0_2_x2_5.mul_small(63);
+    let x0_2_x2_5_105 = x0_2_x2_5.mul_small(105);
+    let x0_2_x2_5_84 = x0_2_x2_5.mul_small(84);
+
+    let x0_x1_x2_5 = x0 * x1 * x2_5;
+    let x0_x1_x2_5_168 = x0_x1_x2_5.mul_small(168);
+    let x0_x1_x2_5_210 = x0_x1_x2_5.mul_small(210);
+    let x0_x1_x2_5_294 = x0_x1_x2_5.mul_small(294);
+
+    let x1_2_x2_5 = x1_2 * x2_5;
+    let x1_2_x2_5_105 = x1_2_x2_5.mul_small(105);
+    let x1_2_x2_5_147 = x1_2_x2_5.mul_small(147);
+    let x1_2_x2_5_189 = x1_2_x2_5.mul_small(189);
+
+    let x0_x2_6 = x0 * x2_6;
+    let x0_x2_6_35 = x0_x2_6.mul_small(35);
+    let x0_x2_6_49 = x0_x2_6.mul_small(49);
+    let x0_x2_6_63 = x0_x2_6.mul_small(63);
+
+    let x1_x2_6 = x1 * x2_6;
+    let x1_x2_6_49 = x1_x2_6.mul_small(49);
+    let x1_x2_6_84 = x1_x2_6.mul_small(84);
+    let x1_x2_6_63 = x1_x2_6.mul_small(63);
+
+    let x0_3_x1_4_35 = (x0_3 * x1_4).mul_small(35);
+
+    let x0_4_x1_2_x2_105 = (x0_4 * x1_2 * x2).mul_small(105);
+
+    let x0_5_x2_2_21 = (x0_5 * x2_2).mul_small(21);
+
+    let x1_7_2 = x1_7.double();
+
+
+    let out0 = x0_7 + x0_4_x1_3_35 + x0_2_x1_5_21 + x0_x1_6_7 + x1_7 + x0_5_x1_x2_42 + x0_3_x1_3_x2_140 + x0_2_x1_4_x2_105+ x0_x1_5_x2_42 + x1_6_x2_14 + x0_4_x1_x2_2_105 +
+        x0_3_x1_2_x2_2_210 + x0_2_x1_3_x2_2_210 + x0_x1_4_x2_2_210 + x1_5_x2_2_42 + x0_4_x2_3_35 +  x0_3_x1_x2_3_140 + x0_2_x1_2_x2_3_420 + x0_x1_3_x2_3_280 + x1_4_x2_3_105 +
+        x0_3_x2_4_70 + x0_2_x1_x2_4_210 + x0_x1_2_x2_4_315 + x1_3_x2_4_140 + x0_2_x2_5_63 + x0_x1_x2_5_168 + x1_2_x2_5_105 + x0_x2_6_35 + x1_x2_6_49 + x2_7.mul_small(9);
+
+    let out1 = (x0_6 * x1).mul_small(7) + x0_4_x1_3_35 + x0_3_x1_4_35 + x0_2_x1_5_21 + x0_x1_6_14 + x1_7_2 + x0_5_x1_x2_42 + x0_4_x1_2_x2_105 + x0_3_x1_3_x2_140 + x0_2_x1_4_x2_210 + 
+    x0_x1_5_x2_84 + x1_6_x2_21 + 
+    x0_5_x2_2_21 + x0_4_x1_x2_2_105 + x0_3_x1_2_x2_2_420 + x0_2_x1_3_x2_2_420 + x0_x1_4_x2_2_315 + x1_5_x2_2_84 + x0_4_x2_3_70 + x0_3_x1_x2_3_280 + x0_2_x1_2_x2_3_630 + x0_x1_3_x2_3_560 + x1_4_x2_3_175 + x0_3_x2_4_105 + x0_2_x1_x2_4_420 + x0_x1_2_x2_4_525 + x1_3_x2_4_245 + x0_2_x2_5_105 + x0_x1_x2_5_294 + x1_2_x2_5_189 + x0_x2_6_63 
+    + x1_x2_6_84 + x2_7.mul_small(16);
+
+    let out2 = (x0_5 * x1_2).mul_small(21) + x0_3_x1_4_35 + x0_2_x1_5_21 + x0_x1_6_7 + x1_7_2 + (x0_6 * x2).mul_small(7) + x0_4_x1_2_x2_105 + x0_3_x1_3_x2_140 +
+     x0_2_x1_4_x2_105 +x0_x1_5_x2_84 + x1_6_x2_14 + x0_5_x2_2_21 + 
+    x0_4_x1_x2_2_105 + x0_3_x1_2_x2_2_210 + x0_2_x1_3_x2_2_420 + x0_x1_4_x2_2_210 + x1_5_x2_2_63 + x0_4_x2_3_35 + x0_3_x1_x2_3_280 + 
+    x0_2_x1_2_x2_3_420 + x0_x1_3_x2_3_420 + x1_4_x2_3_140 + x0_3_x2_4_70 + x0_2_x1_x2_4_315 + x0_x1_2_x2_4_420+ x1_3_x2_4_175+ 
+    x0_2_x2_5_84+ x0_x1_x2_5_210+ x1_2_x2_5_147+ x0_x2_6_49 + x1_x2_6_63+ x2_7.mul_small(12);
+
+    CubeExtension(out0, out1, out2)
+
 }
 
 #[inline(always)]
@@ -545,7 +706,6 @@ pub fn square_new(x: ExtElement) -> ExtElement {
     //assert!(output == x.square());
 
     output
-
 }
 
 // MDS
