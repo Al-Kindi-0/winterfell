@@ -387,6 +387,54 @@ impl Rpoo {
         Self::add_constants(state, &ARK1[round]);
     }
 
+    #[inline]
+    pub fn apply_8_inv_sbox_then_ext_sbox_round(
+        state: &mut [BaseElement; STATE_WIDTH],
+        round: usize,
+    ) {
+        let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = *state;
+
+        let mut partial_state = [s0, s1, s4, s5, s6, s7, s10, s11];
+        Self::apply_8_inv_sbox(&mut partial_state);
+
+        let [s0, s1, s4, s5, s6, s7, s10, s11] = partial_state;
+        let ext0 = exp7(ExtElement::new(s0, s4, s8));
+        let ext1 = exp7(ExtElement::new(s1, s5, s9));
+        let ext2 = exp7(ExtElement::new(s2, s6, s10));
+        let ext3 = exp7(ExtElement::new(s3, s7, s11));
+
+        let arr_ext = [ext0, ext1, ext2, ext3];
+        *state = ExtElement::as_base_elements(&arr_ext)
+            .try_into()
+            .expect("shouldn't fail");
+        Self::apply_mds(state);
+        Self::add_constants(state, &ARK1[round]);
+    }
+
+    #[inline]
+    pub fn apply_12_inv_sbox_then_ext_sbox_round(
+        state: &mut [BaseElement; STATE_WIDTH],
+        round: usize,
+    ) {
+        let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = *state;
+
+        let mut partial_state = [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11];
+        Self::apply_inv_sbox(&mut partial_state);
+
+        let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = partial_state;
+        let ext0 = exp7(ExtElement::new(s0, s4, s8));
+        let ext1 = exp7(ExtElement::new(s1, s5, s9));
+        let ext2 = exp7(ExtElement::new(s2, s6, s10));
+        let ext3 = exp7(ExtElement::new(s3, s7, s11));
+
+        let arr_ext = [ext0, ext1, ext2, ext3];
+        *state = ExtElement::as_base_elements(&arr_ext)
+            .try_into()
+            .expect("shouldn't fail");
+        Self::apply_mds(state);
+        Self::add_constants(state, &ARK1[round]);
+    }
+
     // HELPER FUNCTIONS
     // --------------------------------------------------------------------------------------------
 
@@ -469,6 +517,42 @@ impl Rpoo {
 
         // compute base^1001001001001001001001001001000100100100100100100100100100100
         let t7 = exp_acc::<BaseElement, 4, 31>(t6, t6);
+
+        // compute base^1001001001001001001001001001000110110110110110110110110110110111
+        for (i, s) in state.iter_mut().enumerate() {
+            let a = (t7[i].square() * t6[i]).square().square();
+            let b = t1[i] * t2[i] * *s;
+            *s = a * b;
+        }
+    }
+
+    #[inline(always)]
+    fn apply_8_inv_sbox(state: &mut [BaseElement; 8]) {
+        // compute base^10540996611094048183 using 72 multiplications per array element
+        // 10540996611094048183 = b1001001001001001001001001001000110110110110110110110110110110111
+
+        // compute base^10
+        let mut t1 = *state;
+        t1.iter_mut().for_each(|t| *t = t.square());
+
+        // compute base^100
+        let mut t2 = t1;
+        t2.iter_mut().for_each(|t| *t = t.square());
+
+        // compute base^100100
+        let t3 = exp_acc::<BaseElement, 8, 3>(t2, t2);
+
+        // compute base^100100100100
+        let t4 = exp_acc::<BaseElement, 8, 6>(t3, t3);
+
+        // compute base^100100100100100100100100
+        let t5 = exp_acc::<BaseElement, 8, 12>(t4, t4);
+
+        // compute base^100100100100100100100100100100
+        let t6 = exp_acc::<BaseElement, 8, 6>(t5, t3);
+
+        // compute base^1001001001001001001001001001000100100100100100100100100100100
+        let t7 = exp_acc::<BaseElement, 8, 31>(t6, t6);
 
         // compute base^1001001001001001001001001001000110110110110110110110110110110111
         for (i, s) in state.iter_mut().enumerate() {

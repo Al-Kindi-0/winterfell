@@ -372,8 +372,119 @@ impl Rp64_256 {
         state[11] = state[11].exp7();
     }
 
+    //#[inline(always)]
+    //fn apply_inv_sbox(state: &mut [BaseElement; STATE_WIDTH]) {
+        //// compute base^10540996611094048183 using 72 multiplications per array element
+        //// 10540996611094048183 = b1001001001001001001001001001000110110110110110110110110110110111
+
+        //// compute base^10
+        //let mut t1 = *state;
+        //t1.iter_mut().for_each(|t| *t = t.square());
+
+        //// compute base^100
+        //let mut t2 = t1;
+        //t2.iter_mut().for_each(|t| *t = t.square());
+
+        //// compute base^100100
+        //let t3 = exp_acc::<BaseElement, STATE_WIDTH, 3>(t2, t2);
+
+        //// compute base^100100100100
+        //let t4 = exp_acc::<BaseElement, STATE_WIDTH, 6>(t3, t3);
+
+        //// compute base^100100100100100100100100
+        //let t5 = exp_acc::<BaseElement, STATE_WIDTH, 12>(t4, t4);
+
+        //// compute base^100100100100100100100100100100
+        //let t6 = exp_acc::<BaseElement, STATE_WIDTH, 6>(t5, t3);
+
+        //// compute base^1001001001001001001001001001000100100100100100100100100100100
+        //let t7 = exp_acc::<BaseElement, STATE_WIDTH, 31>(t6, t6);
+
+        //// compute base^1001001001001001001001001001000110110110110110110110110110110111
+        //for (i, s) in state.iter_mut().enumerate() {
+            //let a = (t7[i].square() * t6[i]).square().square();
+            //let b = t1[i] * t2[i] * *s;
+            //*s = a * b;
+        //}
+    //}
+
     #[inline(always)]
     fn apply_inv_sbox(state: &mut [BaseElement; STATE_WIDTH]) {
+
+        //let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = *state;
+
+        //Self::apply_1_inv_sbox(&mut [state[0]]);
+        //Self::apply_1_inv_sbox(&mut [state[1]]);
+        //Self::apply_1_inv_sbox(&mut [state[2]]);
+        //Self::apply_1_inv_sbox(&mut [state[3]]);
+        //Self::apply_1_inv_sbox(&mut [state[4]]);
+        //Self::apply_1_inv_sbox(&mut [state[5]]);
+        //Self::apply_1_inv_sbox(&mut [state[6]]);
+        //Self::apply_1_inv_sbox(&mut [state[7]]);
+        //Self::apply_1_inv_sbox(&mut [state[8]]);
+        //Self::apply_1_inv_sbox(&mut [state[9]]);
+        //Self::apply_1_inv_sbox(&mut [state[10]]);
+        //Self::apply_1_inv_sbox(&mut [state[11]]);
+
+        //let mut partial_state = [s0, s3, s6, s9];
+        //Self::apply_4_inv_sbox(&mut partial_state);
+        //state[0] = partial_state[0];
+        //state[3] = partial_state[1];
+        //state[6] = partial_state[2];
+        //state[9] = partial_state[3];
+
+
+        //let mut partial_state = [s0, s1, s3, s6, s9];
+        //Self::apply_5_inv_sbox(&mut partial_state);
+        //state[0] = partial_state[0];
+        //state[1] = partial_state[1];
+        //state[3] = partial_state[2];
+        //state[6] = partial_state[3];
+        //state[9] = partial_state[4];
+
+        //let mut partial_state = [s0, s2, s4, s6, s8, s10];
+        //Self::apply_6_inv_sbox(&mut partial_state);
+        //state[0] = partial_state[0];
+        //state[2] = partial_state[1];
+        //state[4] = partial_state[2];
+        //state[6] = partial_state[3];
+        //state[8] = partial_state[4];
+        //state[10] = partial_state[5];
+
+        //// compute base^10540996611094048183 using 72 multiplications per array element
+        //// 10540996611094048183 = b1001001001001001001001001001000110110110110110110110110110110111
+        //// compute base^10
+        //let mut t1 = *state;
+        //t1.iter_mut().for_each(|t| *t = t.square());
+
+        //// compute base^100
+        //let mut t2 = t1;
+        //t2.iter_mut().for_each(|t| *t = t.square());
+
+        //// compute base^100100
+        //let t3 = exp_acc::<BaseElement, STATE_WIDTH, 3>(t2, t2);
+
+        //// compute base^100100100100
+        //let t4 = exp_acc::<BaseElement, STATE_WIDTH, 6>(t3, t3);
+
+        //// compute base^100100100100100100100100
+        //let t5 = exp_acc::<BaseElement, STATE_WIDTH, 12>(t4, t4);
+
+        //// compute base^100100100100100100100100100100
+        //let t6 = exp_acc::<BaseElement, STATE_WIDTH, 6>(t5, t3);
+
+        //// compute base^1001001001001001001001001001000100100100100100100100100100100
+        //let t7 = exp_acc::<BaseElement, STATE_WIDTH, 31>(t6, t6);
+
+        //// compute base^1001001001001001001001001001000110110110110110110110110110110111
+        //for (i, s) in state.iter_mut().enumerate() {
+            //let a = (t7[i].square() * t6[i]).square().square();
+            //let b = t1[i] * t2[i] * *s;
+            //*s = a * b;
+        //}
+    }
+    #[inline(always)]
+    fn apply_1_inv_sbox(state: &mut [BaseElement;1]) {
         // compute base^10540996611094048183 using 72 multiplications per array element
         // 10540996611094048183 = b1001001001001001001001001001000110110110110110110110110110110111
 
@@ -386,19 +497,127 @@ impl Rp64_256 {
         t2.iter_mut().for_each(|t| *t = t.square());
 
         // compute base^100100
-        let t3 = exp_acc::<BaseElement, STATE_WIDTH, 3>(t2, t2);
+        let t3 = exp_acc::<BaseElement, 1, 3>(t2, t2);
 
         // compute base^100100100100
-        let t4 = exp_acc::<BaseElement, STATE_WIDTH, 6>(t3, t3);
+        let t4 = exp_acc::<BaseElement, 1, 6>(t3, t3);
 
         // compute base^100100100100100100100100
-        let t5 = exp_acc::<BaseElement, STATE_WIDTH, 12>(t4, t4);
+        let t5 = exp_acc::<BaseElement, 1, 12>(t4, t4);
 
         // compute base^100100100100100100100100100100
-        let t6 = exp_acc::<BaseElement, STATE_WIDTH, 6>(t5, t3);
+        let t6 = exp_acc::<BaseElement, 1, 6>(t5, t3);
 
         // compute base^1001001001001001001001001001000100100100100100100100100100100
-        let t7 = exp_acc::<BaseElement, STATE_WIDTH, 31>(t6, t6);
+        let t7 = exp_acc::<BaseElement, 1, 31>(t6, t6);
+
+        // compute base^1001001001001001001001001001000110110110110110110110110110110111
+        for (i, s) in state.iter_mut().enumerate() {
+            let a = (t7[i].square() * t6[i]).square().square();
+            let b = t1[i] * t2[i] * *s;
+            *s = a * b;
+        }
+    }
+
+    #[inline(always)]
+    fn apply_4_inv_sbox(state: &mut [BaseElement; 4]) {
+        // compute base^10540996611094048183 using 72 multiplications per array element
+        // 10540996611094048183 = b1001001001001001001001001001000110110110110110110110110110110111
+
+        // compute base^10
+        let mut t1 = *state;
+        t1.iter_mut().for_each(|t| *t = t.square());
+
+        // compute base^100
+        let mut t2 = t1;
+        t2.iter_mut().for_each(|t| *t = t.square());
+
+        // compute base^100100
+        let t3 = exp_acc::<BaseElement, 4, 3>(t2, t2);
+
+        // compute base^100100100100
+        let t4 = exp_acc::<BaseElement, 4, 6>(t3, t3);
+
+        // compute base^100100100100100100100100
+        let t5 = exp_acc::<BaseElement, 4, 12>(t4, t4);
+
+        // compute base^100100100100100100100100100100
+        let t6 = exp_acc::<BaseElement, 4, 6>(t5, t3);
+
+        // compute base^1001001001001001001001001001000100100100100100100100100100100
+        let t7 = exp_acc::<BaseElement, 4, 31>(t6, t6);
+
+        // compute base^1001001001001001001001001001000110110110110110110110110110110111
+        for (i, s) in state.iter_mut().enumerate() {
+            let a = (t7[i].square() * t6[i]).square().square();
+            let b = t1[i] * t2[i] * *s;
+            *s = a * b;
+        }
+    }
+
+    #[inline(always)]
+    fn apply_5_inv_sbox(state: &mut [BaseElement; 5]) {
+        // compute base^10540996611094048183 using 72 multiplications per array element
+        // 10540996611094048183 = b1001001001001001001001001001000110110110110110110110110110110111
+
+        // compute base^10
+        let mut t1 = *state;
+        t1.iter_mut().for_each(|t| *t = t.square());
+
+        // compute base^100
+        let mut t2 = t1;
+        t2.iter_mut().for_each(|t| *t = t.square());
+
+        // compute base^100100
+        let t3 = exp_acc::<BaseElement, 5, 3>(t2, t2);
+
+        // compute base^100100100100
+        let t4 = exp_acc::<BaseElement, 5, 6>(t3, t3);
+
+        // compute base^100100100100100100100100
+        let t5 = exp_acc::<BaseElement, 5, 12>(t4, t4);
+
+        // compute base^100100100100100100100100100100
+        let t6 = exp_acc::<BaseElement, 5, 6>(t5, t3);
+
+        // compute base^1001001001001001001001001001000100100100100100100100100100100
+        let t7 = exp_acc::<BaseElement, 5, 31>(t6, t6);
+
+        // compute base^1001001001001001001001001001000110110110110110110110110110110111
+        for (i, s) in state.iter_mut().enumerate() {
+            let a = (t7[i].square() * t6[i]).square().square();
+            let b = t1[i] * t2[i] * *s;
+            *s = a * b;
+        }
+    }
+
+    #[inline(always)]
+    fn apply_6_inv_sbox(state: &mut [BaseElement; 6]) {
+        // compute base^10540996611094048183 using 72 multiplications per array element
+        // 10540996611094048183 = b1001001001001001001001001001000110110110110110110110110110110111
+
+        // compute base^10
+        let mut t1 = *state;
+        t1.iter_mut().for_each(|t| *t = t.square());
+
+        // compute base^100
+        let mut t2 = t1;
+        t2.iter_mut().for_each(|t| *t = t.square());
+
+        // compute base^100100
+        let t3 = exp_acc::<BaseElement, 6, 3>(t2, t2);
+
+        // compute base^100100100100
+        let t4 = exp_acc::<BaseElement, 6, 6>(t3, t3);
+
+        // compute base^100100100100100100100100
+        let t5 = exp_acc::<BaseElement, 6, 12>(t4, t4);
+
+        // compute base^100100100100100100100100100100
+        let t6 = exp_acc::<BaseElement, 6, 6>(t5, t3);
+
+        // compute base^1001001001001001001001001001000100100100100100100100100100100
+        let t7 = exp_acc::<BaseElement, 6, 31>(t6, t6);
 
         // compute base^1001001001001001001001001001000110110110110110110110110110110111
         for (i, s) in state.iter_mut().enumerate() {
