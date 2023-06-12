@@ -11,8 +11,8 @@ pub use rp62_248::Rp62_248;
 mod rp64_256;
 pub use rp64_256::Rp64_256;
 
-mod rpoo;
-pub use rpoo::Rpoo;
+mod xhash;
+pub use xhash::Xhash;
 // HELPER FUNCTIONS
 // ================================================================================================
 

@@ -4,8 +4,8 @@
 // LICENSE file in the root directory of this source tree.
 
 use super::{exp_acc, Digest, ElementHasher, Hasher};
+use core::convert::TryInto;
 use core::ops::Range;
-use core::{convert::TryInto, ops::Mul};
 use math::{
     fields::{f64::BaseElement, CubeExtension},
     FieldElement, StarkField,
@@ -62,31 +62,8 @@ const INV_ALPHA: u64 = 10540996611094048183;
 // HASHER IMPLEMENTATION
 // ================================================================================================
 
-/// Implementation of [Hasher] trait for Rescue Prime hash function with 256-bit output.
+/// Implementation of [Hasher] trait for XHash hash function with 256-bit output.
 ///
-/// The hash function is implemented according to the Rescue Prime
-/// [specifications](https://eprint.iacr.org/2020/1143.pdf) with the following exception:
-/// * We set the number of rounds to 7, which implies a 40% security margin instead of the 50%
-///   margin used in the specifications (a 50% margin rounds up to 8 rounds). The primary
-///   motivation for this is that having the number of rounds be one less than a power of two
-///   simplifies AIR design for computations involving the hash function.
-/// * When hashing a sequence of elements, we do not append Fp(1) followed by Fp(0) elements
-///   to the end of the sequence as padding. Instead, we initialize the first capacity element
-///   to the number of elements to be hashed, and pad the sequence with Fp(0) elements only. This
-///   ensures consistency of hash outputs between different hashing methods (see section below).
-///   However, it also means that our instantiation of Rescue Prime cannot be used in a stream
-///   mode as the number of elements to be hashed must be known upfront.
-/// * We use the first 4 elements of the state (rather than the last 4 elements of the state) for
-///   capacity and the remaining 8 elements for rate. The output of the hash function comes from
-///   the first four elements of the rate portion of the state (elements 4, 5, 6, and 7). This
-///   effectively applies a fixed bit permutation before and after XLIX permutation. We assert
-///   without proof that this does not affect security of the construction.
-/// * Instead of using Vandermonde matrices as a standard way of generating an MDS matrix as
-///   described in Rescue Prime paper, we use a methodology developed by Polygon Zero to find an
-///   MDS matrix with coefficients which are small powers of two in frequency domain. This allows
-///   us to dramatically reduce MDS matrix multiplication time. Using a different MDS matrix does
-///   not affect security of the hash function as any MDS matrix satisfies Rescue Prime
-///   construction (as described in section 4.2 of the paper).
 ///
 /// The parameters used to instantiate the function are:
 /// * Field: 64-bit prime field with modulus 2^64 - 2^32 + 1.
@@ -99,29 +76,29 @@ const INV_ALPHA: u64 = 10540996611094048183;
 /// and it can be serialized into 32 bytes (256 bits).
 ///
 /// ## Hash output consistency
-/// Functions [hash_elements()](Rpoo::hash_elements), [merge()](Rpoo::merge), and
-/// [merge_with_int()](Rpoo::merge_with_int) are internally consistent. That is, computing
+/// Functions [hash_elements()](Xhash::hash_elements), [merge()](Xhash::merge), and
+/// [merge_with_int()](Xhash::merge_with_int) are internally consistent. That is, computing
 /// a hash for the same set of elements using these functions will always produce the same
-/// result. For example, merging two digests using [merge()](Rpoo::merge) will produce the
+/// result. For example, merging two digests using [merge()](Xhash::merge) will produce the
 /// same result as hashing 8 elements which make up these digests using
-/// [hash_elements()](Rpoo::hash_elements) function.
+/// [hash_elements()](Xhash::hash_elements) function.
 ///
-/// However, [hash()](Rpoo::hash) function is not consistent with functions mentioned above.
+/// However, [hash()](Xhash::hash) function is not consistent with functions mentioned above.
 /// For example, if we take two field elements, serialize them to bytes and hash them using
-/// [hash()](Rpoo::hash), the result will differ from the result obtained by hashing these
-/// elements directly using [hash_elements()](Rpoo::hash_elements) function. The reason for
-/// this difference is that [hash()](Rpoo::hash) function needs to be able to handle
+/// [hash()](Xhash::hash), the result will differ from the result obtained by hashing these
+/// elements directly using [hash_elements()](Xhash::hash_elements) function. The reason for
+/// this difference is that [hash()](Xhash::hash) function needs to be able to handle
 /// arbitrary binary strings, which may or may not encode valid field elements - and thus,
 /// deserialization procedure used by this function is different from the procedure used to
 /// deserialize valid field elements.
 ///
 /// Thus, if the underlying data consists of valid field elements, it might make more sense
 /// to deserialize them into field elements and then hash them using
-/// [hash_elements()](Rpoo::hash_elements) function rather then hashing the serialized bytes
-/// using [hash()](Rpoo::hash) function.
-pub struct Rpoo();
+/// [hash_elements()](Xhash::hash_elements) function rather then hashing the serialized bytes
+/// using [hash()](Xhash::hash) function.
+pub struct Xhash();
 
-impl Hasher for Rpoo {
+impl Hasher for Xhash {
     type Digest = ElementDigest;
 
     const COLLISION_RESISTANCE: u32 = 128;
@@ -221,7 +198,7 @@ impl Hasher for Rpoo {
     }
 }
 
-impl ElementHasher for Rpoo {
+impl ElementHasher for Xhash {
     type BaseField = BaseElement;
 
     fn hash_elements<E: FieldElement<BaseField = Self::BaseField>>(elements: &[E]) -> Self::Digest {
@@ -263,7 +240,7 @@ impl ElementHasher for Rpoo {
 // HASH FUNCTION IMPLEMENTATION
 // ================================================================================================
 
-impl Rpoo {
+impl Xhash {
     // CONSTANTS
     // --------------------------------------------------------------------------------------------
 
@@ -295,94 +272,26 @@ impl Rpoo {
     /// Round constants added to the hasher state in the second half of the Rescue Prime round.
     pub const ARK2: [[BaseElement; STATE_WIDTH]; NUM_ROUNDS] = ARK2;
 
-    // RESCUE PERMUTATION
+    // XHASH PERMUTATION
     // --------------------------------------------------------------------------------------------
 
     /// Applies new permutation to the provided state.
     pub fn apply_permutation(state: &mut [BaseElement; STATE_WIDTH]) {
         Self::apply_first_half_round(state, 0);
-        Self::apply_4_inv_sbox_then_ext_sbox_round(state, 1);
+        Self::apply_8_inv_sbox_then_ext_sbox_round(state, 1);
 
         Self::apply_first_half_round(state, 2);
-        Self::apply_4_inv_sbox_then_ext_sbox_round(state, 3);
+        Self::apply_8_inv_sbox_then_ext_sbox_round(state, 3);
 
         Self::apply_first_half_round(state, 4);
-        Self::apply_4_inv_sbox_then_ext_sbox_round(state, 5);
+        Self::apply_8_inv_sbox_then_ext_sbox_round(state, 5);
     }
 
-    ///// Applies new permutation to the provided state.
-    //pub fn apply_permutation(state: &mut [BaseElement; STATE_WIDTH]) {
-
-    //Self::apply_first_half_round(state, 0);
-    //Self::apply_round(state, 1);
-
-    //Self::apply_ext_sbox_round(state, 2);
-    //Self::apply_ext_sbox_round(state, 3);
-    //Self::apply_ext_sbox_round(state, 4);
-
-    //Self::apply_round(state, 5);
-    //Self::apply_first_half_round(state, 6);
-
-    //}
-
-    ///// Rescue-XLIX (FB) round function.
-    //#[inline(always)]
-    //pub fn apply_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
-    //// apply first half of Rescue round
-    //Self::apply_sbox(state);
-    //Self::apply_mds(state);
-    //Self::add_constants(state, &ARK1[round]);
-
-    //// apply second half of Rescue round
-    //Self::apply_inv_sbox(state);
-    //Self::apply_mds(state);
-    //Self::add_constants(state, &ARK2[round]);
-    //}
-
-    /// Rescue-XLIX (F) round function.
     #[inline(always)]
     pub fn apply_first_half_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
-        // apply first half of Rescue round
+        // Apply first half of Rescue round.
+        // This is the (F) round
         Self::apply_sbox(state);
-        Self::apply_mds(state);
-        Self::add_constants(state, &ARK1[round]);
-    }
-
-    //#[inline]
-    //pub fn apply_ext_sbox_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
-    //let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = *state;
-    //let ext0 = exp7(ExtElement::new(s0, s4, s8));
-    //let ext1 = exp7(ExtElement::new(s1, s5, s9));
-    //let ext2 = exp7(ExtElement::new(s2, s6, s10));
-    //let ext3 = exp7(ExtElement::new(s3, s7, s11));
-
-    //let arr_ext = vec![ext0, ext1, ext2, ext3];
-    //*state = ExtElement::as_base_elements(&arr_ext).try_into().expect("shouldn't fail");
-    //Self::apply_mds(state);
-    //Self::add_constants(state, &ARK1[round]);
-
-    //}
-
-    #[inline]
-    pub fn apply_4_inv_sbox_then_ext_sbox_round(
-        state: &mut [BaseElement; STATE_WIDTH],
-        round: usize,
-    ) {
-        let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = *state;
-
-        let mut partial_state = [s4, s5, s6, s7];
-        Self::apply_4_inv_sbox(&mut partial_state);
-
-        let [s4, s5, s6, s7] = partial_state;
-        let ext0 = exp7(ExtElement::new(s0, s4, s8));
-        let ext1 = exp7(ExtElement::new(s1, s5, s9));
-        let ext2 = exp7(ExtElement::new(s2, s6, s10));
-        let ext3 = exp7(ExtElement::new(s3, s7, s11));
-
-        let arr_ext = [ext0, ext1, ext2, ext3];
-        *state = ExtElement::as_base_elements(&arr_ext)
-            .try_into()
-            .expect("shouldn't fail");
         Self::apply_mds(state);
         Self::add_constants(state, &ARK1[round]);
     }
@@ -392,41 +301,22 @@ impl Rpoo {
         state: &mut [BaseElement; STATE_WIDTH],
         round: usize,
     ) {
-        let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = *state;
+        let [s0, _, s2, s3, _, s5, s6, _, s8, s9, _, s11] = *state;
 
-        let mut partial_state = [s0, s1, s4, s5, s6, s7, s10, s11];
+        // Apply  8 inverse S-boxes
+        // This is the (B') round
+        let mut partial_state = [s0, s2, s3, s5, s6, s8, s9, s11];
         Self::apply_8_inv_sbox(&mut partial_state);
 
+        // Apply (.)^7 in Ext3
+        // This is the (P3) round
         let [s0, s1, s4, s5, s6, s7, s10, s11] = partial_state;
         let ext0 = exp7(ExtElement::new(s0, s4, s8));
         let ext1 = exp7(ExtElement::new(s1, s5, s9));
         let ext2 = exp7(ExtElement::new(s2, s6, s10));
         let ext3 = exp7(ExtElement::new(s3, s7, s11));
 
-        let arr_ext = [ext0, ext1, ext2, ext3];
-        *state = ExtElement::as_base_elements(&arr_ext)
-            .try_into()
-            .expect("shouldn't fail");
-        Self::apply_mds(state);
-        Self::add_constants(state, &ARK1[round]);
-    }
-
-    #[inline]
-    pub fn apply_12_inv_sbox_then_ext_sbox_round(
-        state: &mut [BaseElement; STATE_WIDTH],
-        round: usize,
-    ) {
-        let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = *state;
-
-        let mut partial_state = [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11];
-        Self::apply_inv_sbox(&mut partial_state);
-
-        let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = partial_state;
-        let ext0 = exp7(ExtElement::new(s0, s4, s8));
-        let ext1 = exp7(ExtElement::new(s1, s5, s9));
-        let ext2 = exp7(ExtElement::new(s2, s6, s10));
-        let ext3 = exp7(ExtElement::new(s3, s7, s11));
-
+        // Decompose the state back into 12 base field elements
         let arr_ext = [ext0, ext1, ext2, ext3];
         *state = ExtElement::as_base_elements(&arr_ext)
             .try_into()
@@ -491,42 +381,6 @@ impl Rpoo {
     }
 
     #[inline(always)]
-    fn apply_4_inv_sbox(state: &mut [BaseElement; 4]) {
-        // compute base^10540996611094048183 using 72 multiplications per array element
-        // 10540996611094048183 = b1001001001001001001001001001000110110110110110110110110110110111
-
-        // compute base^10
-        let mut t1 = *state;
-        t1.iter_mut().for_each(|t| *t = t.square());
-
-        // compute base^100
-        let mut t2 = t1;
-        t2.iter_mut().for_each(|t| *t = t.square());
-
-        // compute base^100100
-        let t3 = exp_acc::<BaseElement, 4, 3>(t2, t2);
-
-        // compute base^100100100100
-        let t4 = exp_acc::<BaseElement, 4, 6>(t3, t3);
-
-        // compute base^100100100100100100100100
-        let t5 = exp_acc::<BaseElement, 4, 12>(t4, t4);
-
-        // compute base^100100100100100100100100100100
-        let t6 = exp_acc::<BaseElement, 4, 6>(t5, t3);
-
-        // compute base^1001001001001001001001001001000100100100100100100100100100100
-        let t7 = exp_acc::<BaseElement, 4, 31>(t6, t6);
-
-        // compute base^1001001001001001001001001001000110110110110110110110110110110111
-        for (i, s) in state.iter_mut().enumerate() {
-            let a = (t7[i].square() * t6[i]).square().square();
-            let b = t1[i] * t2[i] * *s;
-            *s = a * b;
-        }
-    }
-
-    #[inline(always)]
     fn apply_8_inv_sbox(state: &mut [BaseElement; 8]) {
         // compute base^10540996611094048183 using 72 multiplications per array element
         // 10540996611094048183 = b1001001001001001001001001001000110110110110110110110110110110111
@@ -561,42 +415,6 @@ impl Rpoo {
             *s = a * b;
         }
     }
-
-    #[inline(always)]
-    fn apply_inv_sbox(state: &mut [BaseElement; STATE_WIDTH]) {
-        // compute base^10540996611094048183 using 72 multiplications per array element
-        // 10540996611094048183 = b1001001001001001001001001001000110110110110110110110110110110111
-
-        // compute base^10
-        let mut t1 = *state;
-        t1.iter_mut().for_each(|t| *t = t.square());
-
-        // compute base^100
-        let mut t2 = t1;
-        t2.iter_mut().for_each(|t| *t = t.square());
-
-        // compute base^100100
-        let t3 = exp_acc::<BaseElement, STATE_WIDTH, 3>(t2, t2);
-
-        // compute base^100100100100
-        let t4 = exp_acc::<BaseElement, STATE_WIDTH, 6>(t3, t3);
-
-        // compute base^100100100100100100100100
-        let t5 = exp_acc::<BaseElement, STATE_WIDTH, 12>(t4, t4);
-
-        // compute base^100100100100100100100100100100
-        let t6 = exp_acc::<BaseElement, STATE_WIDTH, 6>(t5, t3);
-
-        // compute base^1001001001001001001001001001000100100100100100100100100100100
-        let t7 = exp_acc::<BaseElement, STATE_WIDTH, 31>(t6, t6);
-
-        // compute base^1001001001001001001001001001000110110110110110110110110110110111
-        for (i, s) in state.iter_mut().enumerate() {
-            let a = (t7[i].square() * t6[i]).square().square();
-            let b = t1[i] * t2[i] * *s;
-            *s = a * b;
-        }
-    }
 }
 
 // Helper function
@@ -615,163 +433,6 @@ pub fn exp7(x: CubeExtension<BaseElement>) -> CubeExtension<BaseElement> {
 }
 
 #[inline(always)]
-pub fn exp7_new(x: CubeExtension<BaseElement>) -> CubeExtension<BaseElement> {
-    let [x0, x1, x2] = [x.0, x.1, x.2];
-    let x0_2 = x0.square();
-    let x1_2 = x1.square();
-    let x2_2 = x2.square();
-
-    let x0_3 = x0_2 * x0;
-    let x1_3 = x1_2 * x1;
-    let x2_3 = x2_2 * x2;
-
-    let x0_4 = x0_2.square();
-    let x1_4 = x1_2.square();
-    let x2_4 = x2_2.square();
-
-    let x0_5 = x0_4 * x0;
-    let x1_5 = x1_4 * x1;
-    let x2_5 = x2_4 * x2;
-
-    let x0_6 = x0_3.square();
-    let x1_6 = x1_3.square();
-    let x2_6 = x2_3.square();
-
-    let x0_7 = x0_6 * x0;
-    let x1_7 = x1_6 * x1;
-    let x2_7 = x2_6 * x2;
-
-    let x0_4_x1_3_35 = (x0_4 * x1_3).mul_small(35); //2
-
-    let x0_2_x1_5_21 = (x0_2 * x1_5).mul_small(21); //3
-
-    let x0_x1_6_7 = (x0 * x1_6).mul_small(7); //2
-    let x0_x1_6_14 = x0_x1_6_7.double(); //1
-
-    let x0_5_x1_x2_42 = (x0_5 * x1 * x2).mul_small(42); //2
-
-    let x0_3_x1_3_x2_140 = (x0_3 * x1_3 * x2).mul_small(140); //3
-
-    let x0_2_x1_4_x2_105 = (x0_2 * x1_4 * x2).mul_small(105); //2
-    let x0_2_x1_4_x2_210 = x0_2_x1_4_x2_105.double(); //1
-
-    let x0_x1_5_x2_42 = (x0 * x1_5 * x2).mul_small(42); //1
-    let x0_x1_5_x2_84 = x0_x1_5_x2_42.double(); //2
-
-    let x1_6_x2 = x1_6 * x2;
-    let x1_6_x2_14 = x1_6_x2.mul_small(14); //2
-    let x1_6_x2_21 = x1_6_x2.mul_small(21); //1
-
-    let x0_4_x1_x2_2_105 = (x0_4 * x1 * x2_2).mul_small(105); //3
-
-    let x0_3_x1_2_x2_2_210 = (x0_3 * x1_2 * x2_2).mul_small(210); //2
-    let x0_3_x1_2_x2_2_420 = x0_3_x1_2_x2_2_210.double(); //1
-
-    let x0_2_x1_3_x2_2_210 = (x0_2 * x1_3 * x2_2).mul_small(210); //1
-    let x0_2_x1_3_x2_2_420 = x0_2_x1_3_x2_2_210.double(); //2
-
-    let x0_x1_4_x2_2 = x0 * x1_4 * x2_2;
-    let x0_x1_4_x2_2_210 = x0_x1_4_x2_2.mul_small(210); //2
-    let x0_x1_4_x2_2_315 = x0_x1_4_x2_2.mul_small(315); //1
-
-    let x1_5_x2_2 = x1_5 * x2_2;
-    let x1_5_x2_2_42 = x1_5_x2_2.mul_small(42); //1
-    let x1_5_x2_2_84 = x1_5_x2_2_42.double(); //1
-    let x1_5_x2_2_63 = x1_5_x2_2.mul_small(63); //1
-
-    let x0_4_x2_3_35 = (x0_4 * x2_3).mul_small(35); //2
-    let x0_4_x2_3_70 = x0_4_x2_3_35.double(); //1
-
-    let x0_3_x1_x2_3_140 = (x0_3 * x1 * x2_3).mul_small(140); //1
-    let x0_3_x1_x2_3_280 = x0_3_x1_x2_3_140.double(); //2
-
-    let x0_2_x1_2_x2_3 = x0_2 * x1_2 * x2_3;
-    let x0_2_x1_2_x2_3_420 = x0_2_x1_2_x2_3.mul_small(420); //2
-    let x0_2_x1_2_x2_3_630 = x0_2_x1_2_x2_3.mul_small(630); //1
-
-    let x0_x1_3_x2_3 = x0 * x1_3 * x2_3;
-    let x0_x1_3_x2_3_280 = x0_x1_3_x2_3.mul_small(280); //1
-    let x0_x1_3_x2_3_560 = x0_x1_3_x2_3_280.double(); //1
-    let x0_x1_3_x2_3_420 = x0_x1_3_x2_3.mul_small(420); //1
-
-    let x1_4_x2_3 = x1_4 * x2_3;
-    let x1_4_x2_3_105 = x1_4_x2_3.mul_small(105);
-    let x1_4_x2_3_175 = x1_4_x2_3.mul_small(175);
-    let x1_4_x2_3_140 = x1_4_x2_3.mul_small(140);
-
-    let x0_3_x2_4 = x0_3 * x2_4;
-    let x0_3_x2_4_70 = x0_3_x2_4.mul_small(70); //2
-    let x0_3_x2_4_105 = x0_3_x2_4.mul_small(105); //1
-
-    let x0_2_x1_x2_4 = x0_2 * x1 * x2_4;
-    let x0_2_x1_x2_4_210 = x0_2_x1_x2_4.mul_small(210);
-    let x0_2_x1_x2_4_420 = x0_2_x1_x2_4_210.double();
-    let x0_2_x1_x2_4_315 = x0_2_x1_x2_4.mul_small(315);
-
-    let x0_x1_2_x2_4 = x0 * x1_2 * x2_4;
-    let x0_x1_2_x2_4_315 = x0_x1_2_x2_4.mul_small(315);
-    let x0_x1_2_x2_4_420 = x0_x1_2_x2_4.mul_small(420);
-    let x0_x1_2_x2_4_525 = x0_x1_2_x2_4.mul_small(525);
-
-    let x1_3_x2_4 = x1_3 * x2_4;
-    let x1_3_x2_4_140 = x1_3_x2_4.mul_small(140);
-    let x1_3_x2_4_175 = x1_3_x2_4.mul_small(175);
-    let x1_3_x2_4_245 = x1_3_x2_4.mul_small(245);
-
-    let x0_2_x2_5 = x0_2 * x2_5;
-    let x0_2_x2_5_63 = x0_2_x2_5.mul_small(63);
-    let x0_2_x2_5_105 = x0_2_x2_5.mul_small(105);
-    let x0_2_x2_5_84 = x0_2_x2_5.mul_small(84);
-
-    let x0_x1_x2_5 = x0 * x1 * x2_5;
-    let x0_x1_x2_5_168 = x0_x1_x2_5.mul_small(168);
-    let x0_x1_x2_5_210 = x0_x1_x2_5.mul_small(210);
-    let x0_x1_x2_5_294 = x0_x1_x2_5.mul_small(294);
-
-    let x1_2_x2_5 = x1_2 * x2_5;
-    let x1_2_x2_5_105 = x1_2_x2_5.mul_small(105);
-    let x1_2_x2_5_147 = x1_2_x2_5.mul_small(147);
-    let x1_2_x2_5_189 = x1_2_x2_5.mul_small(189);
-
-    let x0_x2_6 = x0 * x2_6;
-    let x0_x2_6_35 = x0_x2_6.mul_small(35);
-    let x0_x2_6_49 = x0_x2_6.mul_small(49);
-    let x0_x2_6_63 = x0_x2_6.mul_small(63);
-
-    let x1_x2_6 = x1 * x2_6;
-    let x1_x2_6_49 = x1_x2_6.mul_small(49);
-    let x1_x2_6_84 = x1_x2_6.mul_small(84);
-    let x1_x2_6_63 = x1_x2_6.mul_small(63);
-
-    let x0_3_x1_4_35 = (x0_3 * x1_4).mul_small(35);
-
-    let x0_4_x1_2_x2_105 = (x0_4 * x1_2 * x2).mul_small(105);
-
-    let x0_5_x2_2_21 = (x0_5 * x2_2).mul_small(21);
-
-    let x1_7_2 = x1_7.double();
-
-
-    let out0 = x0_7 + x0_4_x1_3_35 + x0_2_x1_5_21 + x0_x1_6_7 + x1_7 + x0_5_x1_x2_42 + x0_3_x1_3_x2_140 + x0_2_x1_4_x2_105+ x0_x1_5_x2_42 + x1_6_x2_14 + x0_4_x1_x2_2_105 +
-        x0_3_x1_2_x2_2_210 + x0_2_x1_3_x2_2_210 + x0_x1_4_x2_2_210 + x1_5_x2_2_42 + x0_4_x2_3_35 +  x0_3_x1_x2_3_140 + x0_2_x1_2_x2_3_420 + x0_x1_3_x2_3_280 + x1_4_x2_3_105 +
-        x0_3_x2_4_70 + x0_2_x1_x2_4_210 + x0_x1_2_x2_4_315 + x1_3_x2_4_140 + x0_2_x2_5_63 + x0_x1_x2_5_168 + x1_2_x2_5_105 + x0_x2_6_35 + x1_x2_6_49 + x2_7.mul_small(9);
-
-    let out1 = (x0_6 * x1).mul_small(7) + x0_4_x1_3_35 + x0_3_x1_4_35 + x0_2_x1_5_21 + x0_x1_6_14 + x1_7_2 + x0_5_x1_x2_42 + x0_4_x1_2_x2_105 + x0_3_x1_3_x2_140 + x0_2_x1_4_x2_210 + 
-    x0_x1_5_x2_84 + x1_6_x2_21 + 
-    x0_5_x2_2_21 + x0_4_x1_x2_2_105 + x0_3_x1_2_x2_2_420 + x0_2_x1_3_x2_2_420 + x0_x1_4_x2_2_315 + x1_5_x2_2_84 + x0_4_x2_3_70 + x0_3_x1_x2_3_280 + x0_2_x1_2_x2_3_630 + x0_x1_3_x2_3_560 + x1_4_x2_3_175 + x0_3_x2_4_105 + x0_2_x1_x2_4_420 + x0_x1_2_x2_4_525 + x1_3_x2_4_245 + x0_2_x2_5_105 + x0_x1_x2_5_294 + x1_2_x2_5_189 + x0_x2_6_63 
-    + x1_x2_6_84 + x2_7.mul_small(16);
-
-    let out2 = (x0_5 * x1_2).mul_small(21) + x0_3_x1_4_35 + x0_2_x1_5_21 + x0_x1_6_7 + x1_7_2 + (x0_6 * x2).mul_small(7) + x0_4_x1_2_x2_105 + x0_3_x1_3_x2_140 +
-     x0_2_x1_4_x2_105 +x0_x1_5_x2_84 + x1_6_x2_14 + x0_5_x2_2_21 + 
-    x0_4_x1_x2_2_105 + x0_3_x1_2_x2_2_210 + x0_2_x1_3_x2_2_420 + x0_x1_4_x2_2_210 + x1_5_x2_2_63 + x0_4_x2_3_35 + x0_3_x1_x2_3_280 + 
-    x0_2_x1_2_x2_3_420 + x0_x1_3_x2_3_420 + x1_4_x2_3_140 + x0_3_x2_4_70 + x0_2_x1_x2_4_315 + x0_x1_2_x2_4_420+ x1_3_x2_4_175+ 
-    x0_2_x2_5_84+ x0_x1_x2_5_210+ x1_2_x2_5_147+ x0_x2_6_49 + x1_x2_6_63+ x2_7.mul_small(12);
-
-    CubeExtension(out0, out1, out2)
-
-}
-
-#[inline(always)]
 pub fn square_new(x: ExtElement) -> ExtElement {
     let a: [BaseElement; 3] = ExtElement::to_base(x);
     let a0 = a[0];
@@ -786,10 +447,7 @@ pub fn square_new(x: ExtElement) -> ExtElement {
     //let out1 = (a1 * (a0 + a2)).double() + a2_sq;
     let out2 = (a0 * a2).double() + a1.square() + a2_sq;
 
-    let output = ExtElement::new(out0, out1, out2);
-    //assert!(output == x.square());
-
-    output
+    ExtElement::new(out0, out1, out2)
 }
 
 // MDS
