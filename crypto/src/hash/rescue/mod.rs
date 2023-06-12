@@ -11,8 +11,11 @@ pub use rp62_248::Rp62_248;
 mod rp64_256;
 pub use rp64_256::Rp64_256;
 
-mod xhash;
-pub use xhash::Xhash;
+mod xhash8;
+pub use xhash8::Xhash8;
+
+mod xhash12;
+pub use xhash12::Xhash12;
 // HELPER FUNCTIONS
 // ================================================================================================
 

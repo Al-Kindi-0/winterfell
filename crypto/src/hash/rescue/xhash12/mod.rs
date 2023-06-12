@@ -96,9 +96,9 @@ const INV_ALPHA: u64 = 10540996611094048183;
 /// to deserialize them into field elements and then hash them using
 /// [hash_elements()](Xhash::hash_elements) function rather then hashing the serialized bytes
 /// using [hash()](Xhash::hash) function.
-pub struct Xhash();
+pub struct Xhash12();
 
-impl Hasher for Xhash {
+impl Hasher for Xhash12 {
     type Digest = ElementDigest;
 
     const COLLISION_RESISTANCE: u32 = 128;
@@ -198,7 +198,7 @@ impl Hasher for Xhash {
     }
 }
 
-impl ElementHasher for Xhash {
+impl ElementHasher for Xhash12 {
     type BaseField = BaseElement;
 
     fn hash_elements<E: FieldElement<BaseField = Self::BaseField>>(elements: &[E]) -> Self::Digest {
@@ -240,7 +240,7 @@ impl ElementHasher for Xhash {
 // HASH FUNCTION IMPLEMENTATION
 // ================================================================================================
 
-impl Xhash {
+impl Xhash12 {
     // CONSTANTS
     // --------------------------------------------------------------------------------------------
 
@@ -301,20 +301,18 @@ impl Xhash {
         state: &mut [BaseElement; STATE_WIDTH],
         round: usize,
     ) {
-        let [s0, _, s2, s3, _, s5, s6, _, s8, s9, _, s11] = *state;
-
-        // Apply  8 inverse S-boxes
+        // Apply  12 inverse S-boxes
         // This is the (B') round
-        let mut partial_state = [s0, s2, s3, s5, s6, s8, s9, s11];
-        Self::apply_8_inv_sbox(&mut partial_state);
+        Self::apply_12_inv_sbox(state);
+        Self::add_constants(state, &ARK1[round]);
 
         // Apply (.)^7 in Ext3
         // This is the (P3) round
-        let [s0, s1, s4, s5, s6, s7, s10, s11] = partial_state;
-        let ext0 = exp7(ExtElement::new(s0, s4, s8));
-        let ext1 = exp7(ExtElement::new(s1, s5, s9));
-        let ext2 = exp7(ExtElement::new(s2, s6, s10));
-        let ext3 = exp7(ExtElement::new(s3, s7, s11));
+        let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = *state;
+        let ext0 = exp7(ExtElement::new(s0, s1, s2));
+        let ext1 = exp7(ExtElement::new(s3, s4, s5));
+        let ext2 = exp7(ExtElement::new(s6, s7, s8));
+        let ext3 = exp7(ExtElement::new(s9, s10, s11));
 
         // Decompose the state back into 12 base field elements
         let arr_ext = [ext0, ext1, ext2, ext3];
@@ -322,7 +320,7 @@ impl Xhash {
             .try_into()
             .expect("shouldn't fail");
         Self::apply_mds(state);
-        Self::add_constants(state, &ARK1[round]);
+        Self::add_constants(state, &ARK2[round]);
     }
 
     // HELPER FUNCTIONS
@@ -381,7 +379,7 @@ impl Xhash {
     }
 
     #[inline(always)]
-    fn apply_8_inv_sbox(state: &mut [BaseElement; 8]) {
+    fn apply_12_inv_sbox(state: &mut [BaseElement; STATE_WIDTH]) {
         // compute base^10540996611094048183 using 72 multiplications per array element
         // 10540996611094048183 = b1001001001001001001001001001000110110110110110110110110110110111
 
@@ -394,19 +392,19 @@ impl Xhash {
         t2.iter_mut().for_each(|t| *t = t.square());
 
         // compute base^100100
-        let t3 = exp_acc::<BaseElement, 8, 3>(t2, t2);
+        let t3 = exp_acc::<BaseElement, STATE_WIDTH, 3>(t2, t2);
 
         // compute base^100100100100
-        let t4 = exp_acc::<BaseElement, 8, 6>(t3, t3);
+        let t4 = exp_acc::<BaseElement, STATE_WIDTH, 6>(t3, t3);
 
         // compute base^100100100100100100100100
-        let t5 = exp_acc::<BaseElement, 8, 12>(t4, t4);
+        let t5 = exp_acc::<BaseElement, STATE_WIDTH, 12>(t4, t4);
 
         // compute base^100100100100100100100100100100
-        let t6 = exp_acc::<BaseElement, 8, 6>(t5, t3);
+        let t6 = exp_acc::<BaseElement, STATE_WIDTH, 6>(t5, t3);
 
         // compute base^1001001001001001001001001001000100100100100100100100100100100
-        let t7 = exp_acc::<BaseElement, 8, 31>(t6, t6);
+        let t7 = exp_acc::<BaseElement, STATE_WIDTH, 31>(t6, t6);
 
         // compute base^1001001001001001001001001001000110110110110110110110110110110111
         for (i, s) in state.iter_mut().enumerate() {

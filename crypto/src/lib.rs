@@ -32,7 +32,8 @@ pub mod hashers {
     pub use super::hash::Rp62_248;
     pub use super::hash::Rp64_256;
     pub use super::hash::Sha3_256;
-    pub use super::hash::Xhash;
+    pub use super::hash::Xhash12;
+    pub use super::hash::Xhash8;
 }
 
 mod merkle;

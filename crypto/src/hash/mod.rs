@@ -14,7 +14,7 @@ mod sha;
 pub use sha::Sha3_256;
 
 mod rescue;
-pub use rescue::{Rp62_248, Rp64_256, Xhash};
+pub use rescue::{Rp62_248, Rp64_256, Xhash12, Xhash8};
 
 // HASHER TRAITS
 // ================================================================================================
