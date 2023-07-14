@@ -105,6 +105,28 @@ fn apply_permutation() {
 }
 
 #[test]
+fn apply_permutation_tmp() {
+    let mut state: [BaseElement; STATE_WIDTH] = [
+        BaseElement::new(0),
+        BaseElement::new(0),
+        BaseElement::new(0),
+        BaseElement::new(0),
+        BaseElement::new(1790929379104207327),
+        BaseElement::new(5192317540055101872),
+        BaseElement::new(14821066841763321506),
+        BaseElement::new(11676924139549202619),
+        BaseElement::new(3130240524851451292),
+        BaseElement::new(4),
+        BaseElement::new(4),
+        BaseElement::new(4),
+    ];
+
+    Rp64_256::apply_permutation(&mut state);
+
+    //println!("state is {:?}", state.iter().map(|a| a.as_int()).collect::<Vec<u64>>());
+}
+
+#[test]
 fn hash_elements_vs_merge() {
     let elements: [BaseElement; 8] = rand_array();
 
