@@ -7,13 +7,14 @@ use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion
 
 use rand_utils::rand_value;
 use winter_crypto::{
-    hashers::{Rp64_256, Xhash12, Xhash8},
+    hashers::{Rp64_256, Xhash12, Xhash12X, Xhash8},
     Hasher,
 };
 
 type Rp64_256Digest = <Rp64_256 as Hasher>::Digest;
 type XhashDigest8 = <Xhash8 as Hasher>::Digest;
 type XhashDigest12 = <Xhash12 as Hasher>::Digest;
+type XhashDigest12X = <Xhash12X as Hasher>::Digest;
 
 //type Blake3 = Blake3_256<f128::BaseElement>;
 //type Blake3Digest = <Blake3 as Hasher>::Digest;
@@ -119,5 +120,25 @@ fn xhash12(c: &mut Criterion) {
         )
     });
 }
-criterion_group!(hash_group, rescue256, xhash8, xhash12);
+
+fn xhash12_x(c: &mut Criterion) {
+    let v: [XhashDigest12X; 2] = [Xhash12X::hash(&[1u8]), Xhash12X::hash(&[2u8])];
+    c.bench_function("hash_xhash12X (cached)", |bench| {
+        bench.iter(|| Xhash12X::merge(black_box(&v)))
+    });
+
+    c.bench_function("hash_Xhash12X (random)", |b| {
+        b.iter_batched(
+            || {
+                [
+                    Xhash12X::hash(&rand_value::<u64>().to_le_bytes()),
+                    Xhash12X::hash(&rand_value::<u64>().to_le_bytes()),
+                ]
+            },
+            |state| Xhash12X::merge(&state),
+            BatchSize::SmallInput,
+        )
+    });
+}
+criterion_group!(hash_group, rescue256, xhash12_x, xhash8, xhash12,);
 criterion_main!(hash_group);

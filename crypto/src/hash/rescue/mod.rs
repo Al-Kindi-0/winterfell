@@ -16,6 +16,8 @@ pub use xhash8::Xhash8;
 
 mod xhash12;
 pub use xhash12::Xhash12;
+mod xhash12_new;
+pub use xhash12_new::Xhash12X;
 // HELPER FUNCTIONS
 // ================================================================================================
 

@@ -6,10 +6,14 @@
 use super::{exp_acc, Digest, ElementHasher, Hasher};
 use core::convert::TryInto;
 use core::ops::Range;
-use math::{fields::f64::BaseElement, FieldElement, StarkField};
+use math::{
+    fields::{f64::BaseElement, CubeExtension},
+    FieldElement, StarkField,
+};
 
 mod digest;
 pub use digest::ElementDigest;
+pub type ExtElement = CubeExtension<BaseElement>;
 
 #[cfg(test)]
 mod tests;
@@ -58,31 +62,8 @@ const INV_ALPHA: u64 = 10540996611094048183;
 // HASHER IMPLEMENTATION
 // ================================================================================================
 
-/// Implementation of [Hasher] trait for Rescue Prime hash function with 256-bit output.
+/// Implementation of [Hasher] trait for XHash hash function with 256-bit output.
 ///
-/// The hash function is implemented according to the Rescue Prime
-/// [specifications](https://eprint.iacr.org/2020/1143.pdf) with the following exception:
-/// * We set the number of rounds to 7, which implies a 40% security margin instead of the 50%
-///   margin used in the specifications (a 50% margin rounds up to 8 rounds). The primary
-///   motivation for this is that having the number of rounds be one less than a power of two
-///   simplifies AIR design for computations involving the hash function.
-/// * When hashing a sequence of elements, we do not append Fp(1) followed by Fp(0) elements
-///   to the end of the sequence as padding. Instead, we initialize the first capacity element
-///   to the number of elements to be hashed, and pad the sequence with Fp(0) elements only. This
-///   ensures consistency of hash outputs between different hashing methods (see section below).
-///   However, it also means that our instantiation of Rescue Prime cannot be used in a stream
-///   mode as the number of elements to be hashed must be known upfront.
-/// * We use the first 4 elements of the state (rather than the last 4 elements of the state) for
-///   capacity and the remaining 8 elements for rate. The output of the hash function comes from
-///   the first four elements of the rate portion of the state (elements 4, 5, 6, and 7). This
-///   effectively applies a fixed bit permutation before and after XLIX permutation. We assert
-///   without proof that this does not affect security of the construction.
-/// * Instead of using Vandermonde matrices as a standard way of generating an MDS matrix as
-///   described in Rescue Prime paper, we use a methodology developed by Polygon Zero to find an
-///   MDS matrix with coefficients which are small powers of two in frequency domain. This allows
-///   us to dramatically reduce MDS matrix multiplication time. Using a different MDS matrix does
-///   not affect security of the hash function as any MDS matrix satisfies Rescue Prime
-///   construction (as described in section 4.2 of the paper).
 ///
 /// The parameters used to instantiate the function are:
 /// * Field: 64-bit prime field with modulus 2^64 - 2^32 + 1.
@@ -95,29 +76,29 @@ const INV_ALPHA: u64 = 10540996611094048183;
 /// and it can be serialized into 32 bytes (256 bits).
 ///
 /// ## Hash output consistency
-/// Functions [hash_elements()](Rp64_256::hash_elements), [merge()](Rp64_256::merge), and
-/// [merge_with_int()](Rp64_256::merge_with_int) are internally consistent. That is, computing
+/// Functions [hash_elements()](Xhash::hash_elements), [merge()](Xhash::merge), and
+/// [merge_with_int()](Xhash::merge_with_int) are internally consistent. That is, computing
 /// a hash for the same set of elements using these functions will always produce the same
-/// result. For example, merging two digests using [merge()](Rp64_256::merge) will produce the
+/// result. For example, merging two digests using [merge()](Xhash::merge) will produce the
 /// same result as hashing 8 elements which make up these digests using
-/// [hash_elements()](Rp64_256::hash_elements) function.
+/// [hash_elements()](Xhash::hash_elements) function.
 ///
-/// However, [hash()](Rp64_256::hash) function is not consistent with functions mentioned above.
+/// However, [hash()](Xhash::hash) function is not consistent with functions mentioned above.
 /// For example, if we take two field elements, serialize them to bytes and hash them using
-/// [hash()](Rp64_256::hash), the result will differ from the result obtained by hashing these
-/// elements directly using [hash_elements()](Rp64_256::hash_elements) function. The reason for
-/// this difference is that [hash()](Rp64_256::hash) function needs to be able to handle
+/// [hash()](Xhash::hash), the result will differ from the result obtained by hashing these
+/// elements directly using [hash_elements()](Xhash::hash_elements) function. The reason for
+/// this difference is that [hash()](Xhash::hash) function needs to be able to handle
 /// arbitrary binary strings, which may or may not encode valid field elements - and thus,
 /// deserialization procedure used by this function is different from the procedure used to
 /// deserialize valid field elements.
 ///
 /// Thus, if the underlying data consists of valid field elements, it might make more sense
 /// to deserialize them into field elements and then hash them using
-/// [hash_elements()](Rp64_256::hash_elements) function rather then hashing the serialized bytes
-/// using [hash()](Rp64_256::hash) function.
-pub struct Rp64_256();
+/// [hash_elements()](Xhash::hash_elements) function rather then hashing the serialized bytes
+/// using [hash()](Xhash::hash) function.
+pub struct Xhash12X();
 
-impl Hasher for Rp64_256 {
+impl Hasher for Xhash12X {
     type Digest = ElementDigest;
 
     const COLLISION_RESISTANCE: u32 = 128;
@@ -217,7 +198,7 @@ impl Hasher for Rp64_256 {
     }
 }
 
-impl ElementHasher for Rp64_256 {
+impl ElementHasher for Xhash12X {
     type BaseField = BaseElement;
 
     fn hash_elements<E: FieldElement<BaseField = Self::BaseField>>(elements: &[E]) -> Self::Digest {
@@ -259,7 +240,7 @@ impl ElementHasher for Rp64_256 {
 // HASH FUNCTION IMPLEMENTATION
 // ================================================================================================
 
-impl Rp64_256 {
+impl Xhash12X {
     // CONSTANTS
     // --------------------------------------------------------------------------------------------
 
@@ -291,31 +272,64 @@ impl Rp64_256 {
     /// Round constants added to the hasher state in the second half of the Rescue Prime round.
     pub const ARK2: [[BaseElement; STATE_WIDTH]; NUM_ROUNDS] = ARK2;
 
-    // RESCUE PERMUTATION
+    // XHASH PERMUTATION
     // --------------------------------------------------------------------------------------------
 
-    /// Applies Rescue-XLIX permutation to the provided state.
+    /// Applies new permutation to the provided state.
     pub fn apply_permutation(state: &mut [BaseElement; STATE_WIDTH]) {
-        // implementation is based on algorithm 3 from <https://eprint.iacr.org/2020/1143.pdf>
-        // apply round function 7 times; this provides 128-bit security with 40% security margin
-        for i in 0..NUM_ROUNDS {
-            Self::apply_round(state, i);
-        }
+        Self::apply_first_half_round(state, 0);
+        Self::apply_second_half_round(state, 1);
+
+        Self::apply_first_half_round(state, 2);
+        Self::apply_second_half_round(state, 3);
+
+        Self::apply_first_half_round(state, 4);
+        Self::apply_second_half_round(state, 5);
+
+        Self::apply_last_round(state, 6)
     }
 
-    /// Rescue-XLIX round function.
     #[inline(always)]
-    pub fn apply_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
-        // apply first half of Rescue round
-        Self::apply_sbox(state);
-        Self::apply_mds(state);
+    pub fn apply_first_half_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        // Apply first half of Rescue round.
+        // This is the (F) round
         Self::add_constants(state, &ARK1[round]);
-
-        // apply second half of Rescue round
-        Self::apply_inv_sbox(state);
         Self::apply_mds(state);
-        Self::add_constants(state, &ARK2[round]);              
+        Self::apply_sbox(state);
+        Self::add_constants(state, &ARK2[round]);
+        Self::apply_mds(state);
+    }
 
+    #[inline]
+    pub fn apply_second_half_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        // Apply  12 inverse S-boxes
+        // This is the (B') round
+        Self::apply_12_inv_sbox(state);
+        Self::add_constants(state, &ARK1[round]);
+        Self::apply_mds(state);
+
+        // Apply (.)^7 in Ext3
+        // This is the (P3) round
+        let [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11] = *state;
+        let ext0 = exp7(ExtElement::new(s0, s1, s2));
+        let ext1 = exp7(ExtElement::new(s3, s4, s5));
+        let ext2 = exp7(ExtElement::new(s6, s7, s8));
+        let ext3 = exp7(ExtElement::new(s9, s10, s11));
+
+        // Decompose the state back into 12 base field elements
+        let arr_ext = [ext0, ext1, ext2, ext3];
+        *state = ExtElement::as_base_elements(&arr_ext)
+            .try_into()
+            .expect("shouldn't fail");
+    }
+
+    #[inline]
+    pub fn apply_last_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
+        // Apply  12 inverse S-boxes
+        // This is the (B') round
+        Self::add_constants(state, &ARK1[round]);
+        Self::apply_mds(state);
+        Self::apply_12_inv_sbox(state);
     }
 
     // HELPER FUNCTIONS
@@ -374,7 +388,7 @@ impl Rp64_256 {
     }
 
     #[inline(always)]
-    fn apply_inv_sbox(state: &mut [BaseElement; STATE_WIDTH]) {
+    fn apply_12_inv_sbox(state: &mut [BaseElement; STATE_WIDTH]) {
         // compute base^10540996611094048183 using 72 multiplications per array element
         // 10540996611094048183 = b1001001001001001001001001001000110110110110110110110110110110111
 
@@ -408,6 +422,39 @@ impl Rp64_256 {
             *s = a * b;
         }
     }
+}
+
+// Helper function
+
+/// Computes an exponentiation to the power 7 in cubic extension field
+#[inline(always)]
+pub fn exp7(x: CubeExtension<BaseElement>) -> CubeExtension<BaseElement> {
+    //let x2 = x.square();
+    //let x4 = x2.square();
+    //let x3 = x2 * x;
+    //x3 * x4
+    let x2 = square_new(x);
+    let x4 = square_new(x2);
+    let x3 = x2 * x;
+    x3 * x4
+}
+
+#[inline(always)]
+pub fn square_new(x: ExtElement) -> ExtElement {
+    let a: [BaseElement; 3] = ExtElement::to_base(x);
+    let a0 = a[0];
+    let a1 = a[1];
+    let a2 = a[2];
+
+    let a2_sq = a2.square();
+    let a1_a2 = a1 * a2;
+
+    let out0 = a0.square() + (a1_a2).double();
+    let out1 = (a0 * a1 + a1_a2).double() + a2_sq;
+    //let out1 = (a1 * (a0 + a2)).double() + a2_sq;
+    let out2 = (a0 * a2).double() + a1.square() + a2_sq;
+
+    ExtElement::new(out0, out1, out2)
 }
 
 // MDS

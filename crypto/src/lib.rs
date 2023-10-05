@@ -33,6 +33,7 @@ pub mod hashers {
     pub use super::hash::Rp64_256;
     pub use super::hash::Sha3_256;
     pub use super::hash::Xhash12;
+    pub use super::hash::Xhash12X;
     pub use super::hash::Xhash8;
 }
 
