@@ -21,6 +21,10 @@ pub mod rescue_raps;
 pub mod utils;
 pub mod vdf;
 
+mod signature;
+mod rpo_signature;
+pub use signature::{KeyPair, PublicKey, SecretKey};
+
 #[cfg(test)]
 mod tests;
 

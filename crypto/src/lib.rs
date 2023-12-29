@@ -24,6 +24,7 @@ extern crate alloc;
 
 mod hash;
 pub use hash::{Digest, ElementHasher, Hasher};
+pub use hash::{MDS, ARK1, ARK2};
 pub mod hashers {
     //! Contains implementations of currently supported hash functions.
 

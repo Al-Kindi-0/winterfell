@@ -285,13 +285,6 @@ impl<B: StarkField> AirContext<B> {
     ///   composition polynomial.
     pub fn set_num_transition_exemptions(mut self, n: usize) -> Self {
         assert!(n > 0, "number of transition exemptions must be greater than zero");
-        // exemptions which are for more than half the trace plus one are probably a mistake
-        assert!(
-            n <= self.trace_len() / 2 + 1,
-            "number of transition exemptions cannot exceed {}, but was {}",
-            self.trace_len() / 2 + 1,
-            n
-        );
         // make sure the composition polynomial can be computed correctly with the specified
         // number of exemptions.
         // The `ce_blowup` factor puts a ceiling on the maximal degree of a constraint composition
@@ -317,3 +310,4 @@ impl<B: StarkField> AirContext<B> {
         self
     }
 }
+

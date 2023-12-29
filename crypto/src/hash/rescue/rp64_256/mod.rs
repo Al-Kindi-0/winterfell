@@ -384,7 +384,7 @@ impl Rp64_256 {
 // MDS
 // ================================================================================================
 /// Rescue MDS matrix
-const MDS: [[BaseElement; STATE_WIDTH]; STATE_WIDTH] = [
+pub const MDS: [[BaseElement; STATE_WIDTH]; STATE_WIDTH] = [
     [
         BaseElement::new(7),
         BaseElement::new(23),
@@ -735,7 +735,7 @@ const INV_MDS: [[BaseElement; STATE_WIDTH]; STATE_WIDTH] = [
 ///
 /// The constants are broken up into two arrays ARK1 and ARK2; ARK1 contains the constants for the
 /// first half of Rescue round, and ARK2 contains constants for the second half of Rescue round.
-const ARK1: [[BaseElement; STATE_WIDTH]; NUM_ROUNDS] = [
+pub const ARK1: [[BaseElement; STATE_WIDTH]; NUM_ROUNDS] = [
     [
         BaseElement::new(13917550007135091859),
         BaseElement::new(16002276252647722320),
@@ -836,7 +836,7 @@ const ARK1: [[BaseElement; STATE_WIDTH]; NUM_ROUNDS] = [
     ],
 ];
 
-const ARK2: [[BaseElement; STATE_WIDTH]; NUM_ROUNDS] = [
+pub const ARK2: [[BaseElement; STATE_WIDTH]; NUM_ROUNDS] = [
     [
         BaseElement::new(7989257206380839449),
         BaseElement::new(8639509123020237648),
