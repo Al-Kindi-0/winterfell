@@ -12,9 +12,11 @@
 //! `n` is the domain size.
 
 use crate::{
+    batch_inversion,
     fft::fft_inputs::FftInputs,
-    field::{FieldElement, StarkField},
+    field::{f64::BaseElement, FieldElement, QuadExtension, StarkField},
     utils::get_power_series,
+    ExtensionOf,
 };
 
 pub mod fft_inputs;
@@ -24,10 +26,13 @@ mod serial;
 #[cfg(feature = "concurrent")]
 mod concurrent;
 
+use rand_utils::rand_value;
 use utils::collections::Vec;
 
 #[cfg(test)]
 mod tests;
+
+type QuadExt = QuadExtension<BaseElement>;
 
 // CONSTANTS
 // ================================================================================================
@@ -591,4 +596,147 @@ fn permute<E: FieldElement>(v: &mut [E]) {
     } else {
         FftInputs::permute(v);
     }
+}
+
+#[test]
+fn root() {
+    use crate::field::f64::BaseElement;
+
+    let nu = 20;
+    let n: u32 = 1 << nu;
+    let root = BaseElement::get_root_of_unity(nu);
+
+    //==== Generate a random problem instance
+
+    // IOP OOD evaluation point
+    let z: QuadExt = rand_value();
+
+    // Generate z, z.g, z.g^2, ... , z.g^(2^(nu - 1))
+    let mut x_i: Vec<QuadExt> =
+        (0..nu).into_iter().map(|i| z.mul_base(root.exp((1 << i) as u64))).collect();
+    x_i.insert(0, z);
+
+    // Generate the coefficient of the p_k polynomial
+    let coeff: Vec<QuadExt> = rand_utils::rand_vector(x_i.len());
+
+    // Generate the evaluations p_k(z), p_k(z.g), p_k(z.g^2), ... , p_k( z.g^(2^(nu - 1)) )
+    let mut y_i = vec![];
+    for point in x_i.iter() {
+        let evaluation = eval_horner(&coeff, *point);
+        y_i.push(evaluation);
+    }
+
+    //==== Test that the evaluations correspond to the coefficients
+
+    // Generate the barycentric weights for z, z.g, z.g^2, ... , z.g^(2^(nu - 1))
+    let bar_weights = barycentric_weights(&x_i);
+
+    // Draw a random challenge for the probabilistic test
+    let zeta: QuadExt = rand_utils::rand_value();
+
+    // Evaluate at the random challenge using the barycentric formulas and evaluations
+    let ev0 = evaluate_barycentric_2nd_form(&x_i, &y_i, zeta, &bar_weights);
+    let ev1 = evaluate_barycentric(&x_i, &y_i, zeta, &bar_weights);
+
+    // Evaluate at the random challenge using the coefficients
+    let ev2 = eval_horner(&coeff, zeta);
+
+    assert_eq!(ev0, ev1);
+    assert_eq!(ev0, ev2);
+
+    //==== Test that the evaluations correspond to the coefficients with z-independent barycentric weights
+
+    // Generate the reduced evaluations points  1, g, g^2, ... , g^(2^(nu - 1))
+    let mut x_i_prime: Vec<QuadExt> = (0..n.ilog2())
+        .into_iter()
+        .map(|i| QuadExt::from(root.exp((1 << i) as u64)))
+        .collect();
+    x_i_prime.insert(0, QuadExt::ONE);
+
+    // Generate the barycentric weights for  1, g, g^2, ... , g^(2^(nu - 1))
+    let bar_weights = barycentric_weights(&x_i_prime);
+
+    // Scale the challenge by the OOD point z
+    let zeta_shifted = zeta * z.inv();
+
+    // Evaluate at the scaled random challenge using the barycentric formulas and evaluations
+    let ev0 = evaluate_barycentric_2nd_form(&x_i_prime, &y_i, zeta_shifted, &bar_weights);
+    let ev1 = evaluate_barycentric(&x_i_prime, &y_i, zeta_shifted, &bar_weights);
+
+    // Evaluate at the random challenge using the coefficients
+    let ev2 = eval_horner(&coeff, zeta);
+
+    assert_eq!(ev0, ev1);
+    assert_eq!(ev0, ev2);
+}
+
+pub fn barycentric_weights<E: FieldElement>(points: &[E]) -> Vec<E> {
+    let tmp = (0..points.len())
+        .map(|i| {
+            (0..points.len())
+                .filter(|&j| j != i)
+                .fold(E::ONE, |acc, j| acc * (points[i] - points[j]))
+        })
+        .collect::<Vec<_>>();
+    batch_inversion(&tmp)
+}
+
+pub fn evaluate_barycentric<E: FieldElement>(
+    points: &[E],
+    evaluations: &[E],
+    x: E,
+    barycentric_weights: &[E],
+) -> E {
+    // If interpolating within the set, return the corresponding evaluation
+    for (x_i, y_i) in points.iter().zip(evaluations.iter()) {
+        if *x_i == x {
+            return *y_i;
+        }
+    }
+
+    let l_x: E = points.iter().fold(E::ONE, |acc, x_i| acc * (x - *x_i));
+
+    let sum = (0..points.len()).fold(E::ZERO, |acc, i| {
+        let x_i = points[i];
+        let y_i = evaluations[i];
+        let w_i = barycentric_weights[i];
+        acc + (w_i / (x - x_i) * y_i)
+    });
+
+    l_x * sum
+}
+
+pub fn evaluate_barycentric_2nd_form<E: FieldElement>(
+    points: &[E],
+    evaluations: &[E],
+    x: E,
+    barycentric_weights: &[E],
+) -> E {
+    // If interpolating within the set, return the corresponding evaluation
+    for (x_i, y_i) in points.iter().zip(evaluations.iter()) {
+        if *x_i == x {
+            return *y_i;
+        }
+    }
+
+    let weights = points.iter().enumerate().map(|(i, point)| {
+        let x_i = point;
+        let w_i = barycentric_weights[i];
+        w_i / (x - *x_i)
+    });
+    let result = weights
+        .zip(evaluations.iter())
+        .fold((E::ZERO, E::ZERO), |acc, (weight, evaluation)| {
+            (acc.0 + *evaluation * weight, acc.1 + weight)
+        });
+
+    result.0 / result.1
+}
+
+pub fn eval_horner<E>(p: &[E], x: E) -> E
+where
+    E: FieldElement,
+{
+    // Horner evaluation
+    p.iter().rev().fold(E::ZERO, |acc, &coeff| acc * x + coeff)
 }
