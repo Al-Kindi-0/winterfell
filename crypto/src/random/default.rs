@@ -3,6 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
+use crate::{errors::RandomCoinError, Digest, ElementHasher, MerkleTree, RandomCoin};
 use alloc::vec::Vec;
 
 use math::{FieldElement, StarkField};
@@ -78,6 +79,7 @@ impl<H: ElementHasher> DefaultRandomCoin<H> {
 impl<B: StarkField, H: ElementHasher<BaseField = B>> RandomCoin for DefaultRandomCoin<H> {
     type BaseField = B;
     type Hasher = H;
+    type VC = MerkleTree<H>;
 
     // CONSTRUCTOR
     // --------------------------------------------------------------------------------------------

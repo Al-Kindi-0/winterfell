@@ -3,6 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
+use crate::{errors::RandomCoinError, ElementHasher, VectorCommitment};
 use alloc::vec::Vec;
 
 use math::{FieldElement, StarkField};
@@ -28,6 +29,7 @@ pub trait RandomCoin: Sync {
 
     /// Hash function which is used by the random coin to generate random field elements.
     type Hasher: ElementHasher<BaseField = Self::BaseField>;
+    type VC: VectorCommitment;
 
     // REQUIRED METHODS
     // --------------------------------------------------------------------------------------------
@@ -36,7 +38,7 @@ pub trait RandomCoin: Sync {
     fn new(seed: &[Self::BaseField]) -> Self;
 
     /// Reseeds the coin with the specified data by setting the new seed to hash(`seed` || `data`).
-    fn reseed(&mut self, data: <Self::Hasher as Hasher>::Digest);
+    fn reseed(&mut self, data: <Self::VC as VectorCommitment>::Commitment);
 
     /// Computes hash(`seed` || `value`) and returns the number of leading zeros in the resulting
     /// value if it is interpreted as an integer in big-endian byte order.
