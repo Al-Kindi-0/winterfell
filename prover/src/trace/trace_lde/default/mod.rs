@@ -4,21 +4,16 @@
 // LICENSE file in the root directory of this source tree.
 
 use alloc::vec::Vec;
+use core::marker::PhantomData;
 
-use air::LagrangeKernelEvaluationFrame;
-use crypto::MerkleTree;
+use air::{proof::Queries, LagrangeKernelEvaluationFrame, TraceInfo};
+use crypto::VectorCommitment;
 use tracing::info_span;
 
 use super::{
-    ColMatrix, ElementHasher, EvaluationFrame, FieldElement, Queries, StarkDomain, TraceInfo,
-    TraceLde, TracePolyTable,
+    ColMatrix, ElementHasher, EvaluationFrame, FieldElement, StarkDomain, TraceLde, TracePolyTable,
 };
 use crate::{RowMatrix, DEFAULT_SEGMENT_WIDTH};
-use air::LagrangeKernelEvaluationFrame;
-use alloc::vec::Vec;
-use core::marker::PhantomData;
-use crypto::VectorCommitment;
-use tracing::info_span;
 
 #[cfg(test)]
 mod tests;

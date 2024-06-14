@@ -4,6 +4,8 @@
 // LICENSE file in the root directory of this source tree.
 
 use alloc::vec::Vec;
+
+use air::{proof::Queries, LagrangeKernelEvaluationFrame, TraceInfo};
 use crypto::{ElementHasher, VectorCommitment};
 
 use super::{ColMatrix, EvaluationFrame, FieldElement, TracePolyTable};

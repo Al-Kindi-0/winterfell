@@ -6,7 +6,7 @@
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 
-use crypto::{ElementHasher, Hasher, MerkleTree};
+use crypto::{ElementHasher, Hasher, VectorCommitment};
 use math::{fft, FieldElement, StarkField};
 use utils::{flatten_vector_elements, group_slice_elements, transpose_slice};
 
@@ -16,11 +16,6 @@ use crate::{
     utils::hash_values,
     FriOptions,
 };
-use alloc::vec::Vec;
-use core::marker::PhantomData;
-use crypto::{ElementHasher, Hasher, VectorCommitment};
-use math::{fft, FieldElement, StarkField};
-use utils::{flatten_vector_elements, group_slice_elements, transpose_slice};
 
 mod channel;
 pub use channel::{DefaultProverChannel, ProverChannel};

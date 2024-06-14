@@ -5,7 +5,7 @@
 
 use alloc::vec::Vec;
 
-use crypto::{hashers::Blake3_256, DefaultRandomCoin, Hasher, RandomCoin};
+use crypto::{hashers::Blake3_256, DefaultRandomCoin, Hasher, MerkleTree, RandomCoin};
 use math::{fft, fields::f128::BaseElement, FieldElement};
 use utils::{Deserializable, Serializable, SliceReader};
 
@@ -14,10 +14,6 @@ use crate::{
     verifier::{DefaultVerifierChannel, FriVerifier},
     FriOptions, FriProof, VerifierError,
 };
-use alloc::vec::Vec;
-use crypto::{hashers::Blake3_256, DefaultRandomCoin, Hasher, MerkleTree, RandomCoin};
-use math::{fft, fields::f128::BaseElement, FieldElement};
-use utils::{Deserializable, Serializable, SliceReader};
 
 type Blake3 = Blake3_256<BaseElement>;
 

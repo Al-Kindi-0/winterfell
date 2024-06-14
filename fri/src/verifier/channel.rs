@@ -3,10 +3,9 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
+use alloc::vec::Vec;
 use core::marker::PhantomData;
 
-use crate::{FriProof, VerifierError};
-use alloc::vec::Vec;
 use crypto::{ElementHasher, VectorCommitment};
 use math::FieldElement;
 use utils::{group_slice_elements, DeserializationError};
@@ -92,7 +91,7 @@ pub trait VerifierChannel<E: FieldElement> {
     ) -> Result<Vec<[E; N]>, VerifierError> {
         let layer_proof = self.take_next_fri_layer_proof();
         let layer_queries = self.take_next_fri_layer_queries();
-        let leaf_values = group_vector_elements(layer_queries);
+        let leaf_values = group_slice_elements(&layer_queries);
         let hashed_values: Vec<
             <<Self as VerifierChannel<E>>::VectorCommitment as VectorCommitment>::Item,
         > = leaf_values
@@ -108,7 +107,7 @@ pub trait VerifierChannel<E: FieldElement> {
         )
         .map_err(|_| VerifierError::LayerCommitmentMismatch)?;
 
-        Ok(leaf_values)
+        Ok(leaf_values.to_vec())
     }
 
     /// Returns FRI remainder polynomial read from this channel.

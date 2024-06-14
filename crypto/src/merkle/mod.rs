@@ -3,14 +3,13 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use crate::{errors::MerkleTreeError, hash::Hasher, VectorCommitment};
 use alloc::{
     collections::{BTreeMap, BTreeSet},
     vec::Vec,
 };
 use core::slice;
 
-use crate::{errors::MerkleTreeError, hash::Hasher};
+use crate::{errors::MerkleTreeError, hash::Hasher, VectorCommitment};
 
 mod proofs;
 pub use proofs::BatchMerkleProof;
@@ -269,13 +268,7 @@ impl<H: Hasher> MerkleTree<H> {
             }
         }
 
-        Ok((
-            leaves,
-            BatchMerkleProof {
-                depth: self.depth() as u8,
-                nodes,
-            },
-        ))
+        Ok((leaves, BatchMerkleProof { depth: self.depth() as u8, nodes }))
     }
 
     // VERIFICATION METHODS

@@ -3,12 +3,11 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use crate::{errors::RandomCoinError, ElementHasher, VectorCommitment};
 use alloc::vec::Vec;
 
 use math::{FieldElement, StarkField};
 
-use crate::{errors::RandomCoinError, ElementHasher, Hasher};
+use crate::{errors::RandomCoinError, ElementHasher, VectorCommitment};
 
 mod default;
 pub use default::DefaultRandomCoin;

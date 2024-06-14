@@ -10,8 +10,6 @@ use air::{
     proof::{Commitments, Context, OodFrame, Proof, Queries, TraceOodFrame},
     Air, ConstraintCompositionCoefficients, DeepCompositionCoefficients,
 };
-use alloc::vec::Vec;
-use core::marker::PhantomData;
 use crypto::{ElementHasher, RandomCoin, VectorCommitment};
 use fri::FriProof;
 use math::{FieldElement, ToElements};

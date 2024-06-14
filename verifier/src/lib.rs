@@ -40,7 +40,7 @@ pub use air::{
 };
 use air::{AuxRandElements, GkrVerifier};
 pub use crypto;
-use crypto::{ElementHasher, Hasher, RandomCoin};
+use crypto::{ElementHasher, Hasher, RandomCoin, VectorCommitment};
 use fri::FriVerifier;
 pub use math;
 use math::{
@@ -50,11 +50,6 @@ use math::{
 pub use utils::{
     ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable, SliceReader,
 };
-
-pub use crypto;
-use crypto::{ElementHasher, Hasher, RandomCoin, VectorCommitment};
-
-use fri::FriVerifier;
 
 mod channel;
 use channel::VerifierChannel;
@@ -118,7 +113,7 @@ where
                 channel,
                 public_coin,
             )
-        }
+        },
         FieldExtension::Quadratic => {
             if !<QuadExtension<AIR::BaseField>>::is_supported() {
                 return Err(VerifierError::UnsupportedFieldExtension(2));
