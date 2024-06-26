@@ -111,7 +111,13 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
         let mut i = 0;
 
         // --- merge polynomials of the main trace segment ----------------------------------------
-        for poly in trace_polys.main_trace_polys() {
+        for (_, poly) in trace_polys.main_trace_polys().enumerate().take_while(|(j, _)| {
+            if let Some(idx) = self.randomizer_idx {
+                *j != idx
+            } else {
+                true
+            }
+        }) {
             // compute T'(x) = T(x) - T(z), multiply it by a pseudo-random coefficient,
             // and add the result into composition polynomial
             acc_trace_poly::<E::BaseField, E>(
@@ -161,6 +167,13 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
         // is a single trace polynomial T(x) and deg(T(x)) = trace_length - 2.
         let mut trace_poly =
             merge_trace_compositions(vec![t1_composition, t2_composition], vec![self.z, next_z]);
+
+        if self.randomizer_idx.is_some() {
+            let main_trace_polys = trace_polys.main_trace_polys();
+            let randomizer =
+                main_trace_polys.last().expect("there should at least be one main trace poly");
+            iter_mut!(trace_poly).zip(randomizer).for_each(|(a, &b)| *a += b.into());
+        }
 
         // finally compose the final term associated to the Lagrange kernel trace polynomial if
         // there is one present.
