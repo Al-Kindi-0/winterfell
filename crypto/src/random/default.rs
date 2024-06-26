@@ -78,7 +78,6 @@ impl<H: ElementHasher> DefaultRandomCoin<H> {
 impl<B: StarkField, H: ElementHasher<BaseField = B>> RandomCoin for DefaultRandomCoin<H> {
     type BaseField = B;
     type Hasher = H;
-    type VC = MerkleTree<H>;
 
     // CONSTRUCTOR
     // --------------------------------------------------------------------------------------------
