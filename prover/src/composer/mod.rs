@@ -111,13 +111,7 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
         let mut i = 0;
 
         // --- merge polynomials of the main trace segment ----------------------------------------
-        for (_, poly) in trace_polys.main_trace_polys().enumerate().take_while(|(j, _)| {
-            if let Some(idx) = self.randomizer_idx {
-                *j != idx
-            } else {
-                true
-            }
-        }) {
+        for poly in trace_polys.main_trace_polys() {
             // compute T'(x) = T(x) - T(z), multiply it by a pseudo-random coefficient,
             // and add the result into composition polynomial
             acc_trace_poly::<E::BaseField, E>(
@@ -167,13 +161,6 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
         // is a single trace polynomial T(x) and deg(T(x)) = trace_length - 2.
         let mut trace_poly =
             merge_trace_compositions(vec![t1_composition, t2_composition], vec![self.z, next_z]);
-
-        if self.randomizer_idx.is_some() {
-            let main_trace_polys = trace_polys.main_trace_polys();
-            let randomizer =
-                main_trace_polys.last().expect("there should at least be one main trace poly");
-            iter_mut!(trace_poly).zip(randomizer).for_each(|(a, &b)| *a += b.into());
-        }
 
         // finally compose the final term associated to the Lagrange kernel trace polynomial if
         // there is one present.
@@ -242,18 +229,28 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
         let z = self.z;
 
         let mut column_polys = composition_poly.into_columns();
+        let num_cols = ood_evaluations.len();
 
         // Divide out the OOD point z from column polynomials
-        iter_mut!(column_polys).zip(ood_evaluations).for_each(|(poly, value_at_z)| {
-            // compute H'_i(x) = (H_i(x) - H_i(z)) / (x - z)
-            poly[0] -= value_at_z;
-            polynom::syn_div_in_place(poly, 1, z);
-        });
+        iter_mut!(column_polys).take(num_cols).zip(ood_evaluations).for_each(
+            |(poly, value_at_z)| {
+                // compute H'_i(x) = (H_i(x) - H_i(z)) / (x - z)
+                poly[0] -= value_at_z;
+                polynom::syn_div_in_place(poly, 1, z);
+            },
+        );
 
         // add H'_i(x) * cc_i for all i into the DEEP composition polynomial
-        for (i, poly) in column_polys.into_iter().enumerate() {
-            mul_acc::<E, E>(&mut self.coefficients, &poly, self.cc.constraints[i]);
+        for (i, poly) in column_polys.iter().enumerate().take(num_cols) {
+            mul_acc::<E, E>(&mut self.coefficients, poly, self.cc.constraints[i]);
         }
+
+        if self.randomizer_idx.is_some() {
+            iter_mut!(self.coefficients)
+                .zip(&column_polys[column_polys.len() - 1])
+                .for_each(|(a, b)| *a += *b);
+        }
+
         //assert_eq!(self.poly_size() - 2, self.degree());
     }
 

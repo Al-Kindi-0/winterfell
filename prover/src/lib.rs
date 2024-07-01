@@ -401,7 +401,8 @@ pub trait Prover {
                 composition_poly_trace,
                 &domain,
                 &mut channel,
-                air.zk_witness_randomizer_degree::<E>()
+                air.zk_witness_randomizer_degree::<E>(),
+                air.trace_length()
             ));
 
         // 4 ----- build DEEP composition polynomial ----------------------------------------------
@@ -422,10 +423,10 @@ pub trait Prover {
             // auxiliary column is present, we also evaluate that column over the points: z, z * g,
             // z * g^2, z * g^4, ..., z * g^(2^(v-1)), where v = log(trace_len).
             let ood_trace_states =
-                trace_polys.get_ood_frame(z, air.context().trace_info().length(), air.is_zk());
+                trace_polys.get_ood_frame(z, air.context().trace_info().length());
             channel.send_ood_trace_states(&ood_trace_states);
 
-            let ood_evaluations = composition_poly.evaluate_at(z);
+            let ood_evaluations = composition_poly.evaluate_at(z, air.is_zk());
             channel.send_ood_constraint_evaluations(&ood_evaluations);
 
             // draw random coefficients to use during DEEP polynomial composition, and use them to
@@ -539,6 +540,7 @@ pub trait Prover {
         num_constraint_composition_columns: usize,
         domain: &StarkDomain<Self::BaseField>,
         is_zk: Option<u32>,
+        original_trace_len: usize,
     ) -> (ConstraintCommitment<E, Self::HashFn, Self::VC>, CompositionPoly<E>)
     where
         E: FieldElement<BaseField = Self::BaseField>,
@@ -557,6 +559,7 @@ pub trait Prover {
                 domain,
                 num_constraint_composition_columns,
                 is_zk,
+                original_trace_len,
             )
         });
         //assert_eq!(composition_poly.num_columns(), num_constraint_composition_columns);
@@ -620,6 +623,7 @@ pub trait Prover {
         domain: &StarkDomain<Self::BaseField>,
         channel: &mut ProverChannel<'_, Self::Air, E, Self::HashFn, Self::RandomCoin, Self::VC>,
         is_zk: Option<u32>,
+        original_trace_len: usize,
     ) -> (ConstraintCommitment<E, Self::HashFn, Self::VC>, CompositionPoly<E>)
     where
         E: FieldElement<BaseField = Self::BaseField>,
@@ -631,7 +635,8 @@ pub trait Prover {
                 composition_poly_trace,
                 air.context().num_constraint_composition_columns(),
                 domain,
-                is_zk
+                is_zk,
+                original_trace_len
             ));
 
         // then, commit to the evaluations of constraints by writing the commitment string of

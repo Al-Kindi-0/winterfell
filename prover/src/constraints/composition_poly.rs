@@ -6,6 +6,7 @@
 use alloc::vec::Vec;
 
 use math::{fft, FieldElement};
+use rand_utils::rand_vector;
 
 use super::{ColMatrix, StarkDomain};
 
@@ -57,7 +58,8 @@ impl<E: FieldElement> CompositionPoly<E> {
         composition_trace: CompositionPolyTrace<E>,
         domain: &StarkDomain<E::BaseField>,
         num_cols: usize,
-        _is_zk: Option<u32>,
+        is_zk: Option<u32>,
+        original_trace_len: usize,
     ) -> Self {
         assert!(
             domain.trace_length() < composition_trace.num_rows(),
@@ -71,7 +73,21 @@ impl<E: FieldElement> CompositionPoly<E> {
         let inv_twiddles = fft::get_inv_twiddles::<E::BaseField>(trace.len());
         fft::interpolate_poly_with_offset(&mut trace, &inv_twiddles, domain.offset());
 
-        let polys = segment(trace, domain.trace_length(), num_cols);
+        let mut polys = segment(trace, domain.trace_length(), num_cols);
+
+        if is_zk.is_some() {
+            let extended_len = (original_trace_len + is_zk.unwrap() as usize).next_power_of_two();
+            let pad_len = extended_len - original_trace_len;
+            let zk_col = rand_vector(original_trace_len);
+            let mut res_col = zk_col.to_vec();
+            let added = vec![E::ZERO; pad_len];
+            res_col.extend_from_slice(&added);
+            polys.push(res_col)
+
+            //randomized_cols.push(res_col)
+            //let randomizer = rand_vector(polys[0].len());
+            //polys.push(randomizer)
+        }
 
         CompositionPoly { data: ColMatrix::new(polys) }
     }
@@ -97,8 +113,8 @@ impl<E: FieldElement> CompositionPoly<E> {
     }
 
     /// Returns evaluations of all composition polynomial columns at point z.
-    pub fn evaluate_at(&self, z: E) -> Vec<E> {
-        self.data.evaluate_columns_at(z, false)
+    pub fn evaluate_at(&self, z: E, is_zk: bool) -> Vec<E> {
+        self.data.evaluate_columns_at(z, is_zk)
     }
 
     /// Returns a reference to the matrix of individual column polynomials.

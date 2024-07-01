@@ -8,7 +8,7 @@ use core::{iter::FusedIterator, slice};
 
 use crypto::{ElementHasher, VectorCommitment};
 use math::{fft, polynom, FieldElement};
-use rand_utils::{rand_value, rand_vector};
+use rand_utils::rand_value;
 #[cfg(feature = "concurrent")]
 use utils::iterators::*;
 use utils::{batch_iter_mut, iter, iter_mut, uninit_vector};
@@ -298,13 +298,13 @@ impl<E: FieldElement> ColMatrix<E> {
         self.columns
     }
 
-    pub(crate) fn randomize(&self, is_zk: u32, add_zk_col: bool) -> Self {
+    pub(crate) fn randomize(&self, is_zk: u32) -> Self {
         // Assumes that k = 1 where |H| + h =< |H|.2^k
         let cur_len = self.num_rows();
         let extended_len = (cur_len + is_zk as usize).next_power_of_two();
         let pad_len = extended_len - cur_len;
 
-        let mut randomized_cols: Vec<Vec<E>> = self
+        let randomized_cols: Vec<Vec<E>> = self
             .columns()
             .map(|col| {
                 let mut added = vec![E::ZERO; pad_len];
@@ -320,15 +320,6 @@ impl<E: FieldElement> ColMatrix<E> {
                 res_col
             })
             .collect();
-
-        if add_zk_col {
-            let zk_col = rand_vector(cur_len);
-            let mut res_col = zk_col.to_vec();
-            let added = vec![E::ZERO; pad_len];
-            res_col.extend_from_slice(&added);
-
-            randomized_cols.push(res_col)
-        }
 
         Self { columns: randomized_cols }
     }

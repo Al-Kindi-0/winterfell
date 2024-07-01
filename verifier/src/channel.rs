@@ -98,6 +98,7 @@ where
             constraint_queries,
             air,
             num_unique_queries as usize,
+            air.is_zk(),
         )?;
 
         // --- parse FRI proofs -------------------------------------------------------------------
@@ -314,7 +315,8 @@ where
 
         // parse main trace segment queries
         // In the case zero-knowledge is enabled, we parse the randomizer polynomial as well
-        let main_segment_width = air.trace_info().main_trace_width() + air.is_zk() as usize;
+        let main_segment_width = air.trace_info().main_trace_width();
+        //let main_segment_width = air.trace_info().main_trace_width() + air.is_zk() as usize;
         let main_segment_queries = queries.remove(0);
         let (main_segment_query_proofs, main_segment_states) = main_segment_queries
             .parse::<E::BaseField, H, V>(air.lde_domain_size(), num_queries, main_segment_width)
@@ -387,8 +389,10 @@ where
         queries: Queries,
         air: &A,
         num_queries: usize,
+        is_zk: bool,
     ) -> Result<Self, VerifierError> {
-        let constraint_frame_width = air.context().num_constraint_composition_columns();
+        let constraint_frame_width =
+            air.context().num_constraint_composition_columns() + is_zk as usize;
 
         let (query_proofs, evaluations) = queries
             .parse::<E, H, V>(air.lde_domain_size(), num_queries, constraint_frame_width)

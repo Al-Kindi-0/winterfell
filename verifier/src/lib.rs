@@ -328,10 +328,12 @@ where
         ood_main_trace_frame,
         ood_aux_trace_frame,
         ood_lagrange_kernel_frame,
+    );
+    let c_composition = composer.compose_constraint_evaluations(
+        queried_constraint_evaluations,
+        ood_constraint_evaluations,
         air.is_zk(),
     );
-    let c_composition = composer
-        .compose_constraint_evaluations(queried_constraint_evaluations, ood_constraint_evaluations);
     let deep_evaluations = composer.combine_compositions(t_composition, c_composition);
 
     // 7 ----- Verify low-degree proof -------------------------------------------------------------

@@ -82,11 +82,11 @@ impl<E: FieldElement> TracePolyTable<E> {
     /// Additionally, if the Lagrange kernel auxiliary column is present, we also evaluate that
     /// column over the points: z, z * g, z * g^2, z * g^4, ..., z * g^(2^(v-1)), where v =
     /// log(trace_len).
-    pub fn get_ood_frame(&self, z: E, trace_len: usize, is_zk: bool) -> TraceOodFrame<E> {
+    pub fn get_ood_frame(&self, z: E, trace_len: usize) -> TraceOodFrame<E> {
         let log_trace_len = trace_len.ilog2();
         let g = E::from(E::BaseField::get_root_of_unity(log_trace_len));
-        let current_row = self.evaluate_at(z, is_zk);
-        let next_row = self.evaluate_at(z * g, is_zk);
+        let current_row = self.evaluate_at(z, false);
+        let next_row = self.evaluate_at(z * g, false);
 
         let lagrange_kernel_frame =
             self.lagrange_kernel_poly.as_ref().map(|lagrange_kernel_col_poly| {

@@ -274,7 +274,6 @@ fn build_trace_commitment<E, F, H, V>(
     trace: &ColMatrix<F>,
     domain: &StarkDomain<E::BaseField>,
     is_zk: Option<u32>,
-    add_zk_col: bool,
 ) -> (RowMatrix<F>, V, ColMatrix<F>)
 where
     E: FieldElement,
@@ -292,7 +291,7 @@ where
         .entered();
         let trace_polys = trace.interpolate_columns();
         let trace_polys = if let Some(h) = is_zk {
-            trace_polys.randomize(h, add_zk_col)
+            trace_polys.randomize(h)
         } else {
             trace_polys
         };
