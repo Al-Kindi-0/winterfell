@@ -17,7 +17,7 @@ pub use sha::Sha3_256;
 mod mds;
 
 mod rescue;
-pub use rescue::{Rp62_248, Rp64_256, RpJive64_256};
+pub use rescue::{Rp62_248, Rp64_256, RpJive64_256, MDS, ARK1, ARK2};
 
 // HASHER TRAITS
 // ================================================================================================

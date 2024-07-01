@@ -3,4 +3,21 @@ name = "stark-signature"
 version = "0.1.0"
 edition = "2021"
 
+
 [dependencies]
+air = { version = "0.9", path = "../air", package = "winter-air", default-features = false }
+crypto = { version = "0.9", path = "../crypto", package = "winter-crypto", default-features = false }
+math = { version = "0.9", path = "../math", package = "winter-math", default-features = false }
+utils = { version = "0.9", path = "../utils/core", package = "winter-utils", default-features = false }
+
+rand-utils = { version = "0.9", path = "../utils/rand", package = "winter-rand-utils" }
+prover = { version = "0.9", path = "../prover", package = "winter-prover", default-features = false }
+verifier = { version = "0.9", path = "../verifier", package = "winter-verifier", default-features = false }
+serde = { version = "1.0", features = [ "derive" ], optional = true, default-features = false }
+
+libc-print = "0.1.23"
+rand =  { version = "0.8" }
+
+[dev-dependencies]
+criterion = "0.5"
+rand-utils = { version = "0.9", path = "../utils/rand", package = "winter-rand-utils" }
