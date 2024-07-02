@@ -8,7 +8,7 @@ use alloc::{collections::BTreeMap, vec::Vec};
 use crypto::{RandomCoin, RandomCoinError};
 use math::{fft, ExtensibleField, ExtensionOf, FieldElement, StarkField, ToElements};
 
-use crate::ProofOptions;
+use crate::{ProofOptions, CONJECTURED};
 
 mod aux;
 pub use aux::{AuxRandElements, GkrVerifier};

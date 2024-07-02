@@ -76,7 +76,7 @@ impl Signature {
 }
 
 fn get_proof_options() -> ProofOptions {
-    ProofOptions::new(33, 8, 16, ::air::FieldExtension::Quadratic, 8, 255, true)
+    ProofOptions::new(80, 8, 16, ::air::FieldExtension::Cubic, 8, 255, true)
 }
 
 // SERIALIZATION / DESERIALIZATION
@@ -132,7 +132,7 @@ fn test_signature() {
     let message = rand_array();
     let signature = sk.sign(message);
     println!("signature size is {:?} bytes", signature.to_bytes().len());
-    println!("security level {:?} bits", signature.proof.security_level::<Rp64_256>(true));
+    println!("security level {:?} bits", signature.proof.security_level::<Rp64_256>(false));
 
     let pk = sk.compute_public_key();
     assert!(pk.verify(message, &signature))

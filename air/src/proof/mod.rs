@@ -237,7 +237,6 @@ pub(crate) fn get_security(
     }
 
 }
-
 /// Computes conjectured security level for the specified proof parameters.
 pub(crate) fn get_conjectured_security(
     base_field_bits: u32,
@@ -265,7 +264,7 @@ pub(crate) fn get_conjectured_security(
 }
 
 /// Estimates proven security level for the specified proof parameters.
-fn get_proven_security(
+pub(crate) fn get_proven_security(
     base_field_bits: u32,
     extension_degree: u32,
     blowup_factor: usize,
