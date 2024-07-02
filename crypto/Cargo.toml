@@ -37,8 +37,6 @@ utils = { version = "0.9", path = "../utils/core", package = "winter-utils", def
 rand =  { version = "0.8" }
 libc-print = "0.1.23"
 
-libc-print = "0.1.23"
-
 [dev-dependencies]
 criterion = "0.5"
 proptest = "1.4"

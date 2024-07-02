@@ -49,7 +49,7 @@ impl SecretKey {
     }
 
     pub fn sign(&self, message: [BaseElement; 4]) -> Signature {
-        let options = ProofOptions::new(28, 8, 0, ::air::FieldExtension::Quadratic, 4, 31, true);
+        let options = get_proof_options();
         let signature: RpoSignature<Rp64_256> = RpoSignature::new(options);
         let proof = signature.sign(self.sk, message);
         Signature { proof }
@@ -68,11 +68,15 @@ impl Signature {
     /// Returns true if this signature is a valid signature for the specified message generated
     /// against the secret key matching the specified public key commitment.
     pub fn verify(&self, message: [BaseElement; 4], pk: [BaseElement; 4]) -> bool {
-        let options = ProofOptions::new(28, 8, 0, ::air::FieldExtension::Quadratic, 4, 31, true);
+        let options = get_proof_options();
         let signature: RpoSignature<Rp64_256> = RpoSignature::new(options);
 
         signature.verify(pk, message, self.proof.clone()).is_ok()
     }
+}
+
+fn get_proof_options() -> ProofOptions {
+    ProofOptions::new(33, 8, 16, ::air::FieldExtension::Quadratic, 8, 255, true)
 }
 
 // SERIALIZATION / DESERIALIZATION
@@ -115,4 +119,21 @@ impl Deserializable for Signature {
         let proof = Proof::read_from(source)?;
         Ok(Self { proof })
     }
+}
+
+#[test]
+fn test_signature() {
+    use rand::thread_rng;
+    use rand_utils::rand_array;
+
+    let mut rng = thread_rng();
+    let sk = SecretKey::generate_secret_key(&mut rng);
+
+    let message = rand_array();
+    let signature = sk.sign(message);
+    println!("signature size is {:?} bytes", signature.to_bytes().len());
+    println!("security level {:?} bits", signature.proof.security_level::<Rp64_256>(true));
+
+    let pk = sk.compute_public_key();
+    assert!(pk.verify(message, &signature))
 }

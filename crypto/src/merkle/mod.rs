@@ -507,7 +507,7 @@ where
 
     /// Returns the root of the tree.
     pub fn root(&self) -> &H::Digest {
-        &self.tree.root()
+        self.tree.root()
     }
 
     pub fn depth(&self) -> usize {

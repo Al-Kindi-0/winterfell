@@ -5,9 +5,10 @@ use ::prover::{Proof, Prover};
 use air::{
     apply_round, PublicInputs, RescueAir, DIGEST_RANGE, DIGEST_SIZE, NUM_ROUNDS, STATE_WIDTH,
 };
-use crypto::{DefaultRandomCoin, ElementHasher, MerkleTree};
+use crypto::{DefaultRandomCoin, ElementHasher, Hasher, SaltedMerkleTree};
 use math::{fields::f64::BaseElement, FieldElement};
-use prover::RescueProver;
+use prover::RpoSignatureProver;
+use rand::distributions::{Distribution, Standard};
 use verifier::{verify, AcceptableOptions, VerifierError};
 
 mod air;
@@ -18,20 +19,23 @@ pub struct RpoSignature<H: ElementHasher> {
     _h: PhantomData<H>,
 }
 
-impl<H: ElementHasher<BaseField = BaseElement> + Sync> RpoSignature<H> {
+impl<H: ElementHasher<BaseField = BaseElement> + Sync> RpoSignature<H>
+where
+    Standard: Distribution<<H as Hasher>::Digest>,
+{
     pub fn new(options: ProofOptions) -> Self {
         RpoSignature { options, _h: PhantomData }
     }
 
     pub fn sign(&self, sk: [BaseElement; DIGEST_SIZE], msg: [BaseElement; DIGEST_SIZE]) -> Proof {
         // create a prover
-        let prover = RescueProver::<H>::new(self.options.clone());
+        let prover = RpoSignatureProver::<H>::new(self.options.clone());
 
         // generate execution trace
         let trace = prover.build_trace(sk, msg);
 
         // generate the proof
-        prover.prove(trace).unwrap()
+        prover.prove(trace).expect("failed to generate the signature")
     }
 
     pub fn verify(
@@ -42,7 +46,7 @@ impl<H: ElementHasher<BaseField = BaseElement> + Sync> RpoSignature<H> {
     ) -> Result<(), VerifierError> {
         let pub_inputs = PublicInputs { pub_key, msg };
         let acceptable_options = AcceptableOptions::OptionSet(vec![proof.options().clone()]);
-        verify::<RescueAir, H, DefaultRandomCoin<H>, MerkleTree<H>>(
+        verify::<RescueAir, H, DefaultRandomCoin<H>, SaltedMerkleTree<H>>(
             proof,
             pub_inputs,
             &acceptable_options,
@@ -68,7 +72,7 @@ fn test() {
     let msg = [BaseElement::ZERO; DIGEST_SIZE];
 
     let pk = hash(sk);
-    let options = ProofOptions::new(28, 8, 0, ::air::FieldExtension::Quadratic, 4, 31, true);
+    let options = ProofOptions::new(4, 16, 0, ::air::FieldExtension::Quadratic, 4, 31, true);
     let signature: RpoSignature<crypto::hashers::Rp64_256> = RpoSignature::new(options);
 
     let s = signature.sign(sk, msg);

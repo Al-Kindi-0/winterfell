@@ -36,7 +36,7 @@ pub struct PublicInputs {
 impl ToElements<BaseElement> for PublicInputs {
     fn to_elements(&self) -> Vec<BaseElement> {
         let mut res = self.pub_key.to_vec();
-        res.extend_from_slice(&self.msg.to_vec());
+        res.extend_from_slice(self.msg.as_ref());
         res
     }
 }

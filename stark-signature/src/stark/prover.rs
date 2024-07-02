@@ -1,12 +1,13 @@
 use std::marker::PhantomData;
 
 use air::{AuxRandElements, ConstraintCompositionCoefficients, ProofOptions, TraceInfo};
-use crypto::{DefaultRandomCoin, ElementHasher, MerkleTree};
+use crypto::{DefaultRandomCoin, ElementHasher, Hasher, SaltedMerkleTree};
 use math::{fields::f64::BaseElement, FieldElement};
 use prover::{
     matrix::ColMatrix, DefaultConstraintEvaluator, DefaultTraceLde, Prover, StarkDomain, Trace,
     TracePolyTable, TraceTable,
 };
+use rand::distributions::{Distribution, Standard};
 use utils::{Deserializable, Serializable};
 
 use super::air::{apply_round, PublicInputs, RescueAir, DIGEST_SIZE, HASH_CYCLE_LEN};
@@ -14,7 +15,7 @@ use super::air::{apply_round, PublicInputs, RescueAir, DIGEST_SIZE, HASH_CYCLE_L
 // RESCUE PROVER
 // ================================================================================================
 
-pub struct RescueProver<H: ElementHasher>
+pub struct RpoSignatureProver<H: ElementHasher>
 where
     H: Sync,
 {
@@ -22,7 +23,7 @@ where
     _hasher: PhantomData<H>,
 }
 
-impl<H: ElementHasher + Sync> RescueProver<H> {
+impl<H: ElementHasher + Sync> RpoSignatureProver<H> {
     pub fn new(options: ProofOptions) -> Self {
         Self { options, _hasher: PhantomData }
     }
@@ -61,15 +62,16 @@ impl<H: ElementHasher + Sync> RescueProver<H> {
     }
 }
 
-impl<H: ElementHasher> Prover for RescueProver<H>
+impl<H: ElementHasher> Prover for RpoSignatureProver<H>
 where
     H: ElementHasher<BaseField = BaseElement> + Sync,
+    Standard: Distribution<<H as Hasher>::Digest>,
 {
     type BaseField = BaseElement;
     type Air = RescueAir;
     type Trace = TraceTable<BaseElement>;
     type HashFn = H;
-    type VC = MerkleTree<H>;
+    type VC = SaltedMerkleTree<H>;
     type RandomCoin = DefaultRandomCoin<Self::HashFn>;
     type TraceLde<E: FieldElement<BaseField = Self::BaseField>> =
         DefaultTraceLde<E, Self::HashFn, Self::VC>;

@@ -272,7 +272,7 @@ impl<B: StarkField> TraceTable<B> {
     pub fn read_row_into(&self, step: usize, target: &mut [B]) {
         self.trace.read_row_into(step, target);
     }
-    
+
     /// Returns the trace meta data.
     pub fn meta_data(&self) -> &[u8] {
         self.info.meta()
