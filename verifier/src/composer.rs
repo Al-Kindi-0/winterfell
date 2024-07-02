@@ -237,6 +237,7 @@ impl<E: FieldElement> DeepComposer<E> {
         let mut result_den = Vec::<E>::with_capacity(n);
 
         let z = self.z[0];
+        let z_m = z.exp_vartime((num_cols as u32).into());
 
         // combine composition polynomial columns separately for numerators and denominators;
         // this way we can use batch inversion in the end.
@@ -249,10 +250,10 @@ impl<E: FieldElement> DeepComposer<E> {
             }
             if is_zk {
                 let randmizer_at_x = query_values[num_cols];
-                composition_num += randmizer_at_x * (x - z);
+                composition_num += randmizer_at_x * (x - z_m);
             }
             result_num.push(composition_num);
-            result_den.push(x - z);
+            result_den.push(x - z_m);
         }
 
         result_den = batch_inversion(&result_den);

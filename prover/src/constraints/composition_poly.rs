@@ -121,9 +121,11 @@ impl<E: FieldElement> CompositionPoly<E> {
         self.column_len() - 1
     }
 
-    /// Returns evaluations of all composition polynomial columns at point z.
+    /// Returns evaluations of all composition polynomial columns at point z^m, where m is
+    /// the number of column polynomials.
     pub fn evaluate_at(&self, z: E, is_zk: bool) -> Vec<E> {
-        self.data.evaluate_columns_at(z, is_zk)
+        let z_m = z.exp((self.num_columns() as u32 - is_zk as u32).into());
+        self.data.evaluate_columns_at(z_m, is_zk)
     }
 
     /// Returns a reference to the matrix of individual column polynomials.
@@ -185,20 +187,25 @@ fn complement_to<R: RngCore, E: FieldElement>(
 
 /// Splits polynomial coefficients into the specified number of columns. The coefficients are split
 /// in such a way that each resulting column has the same degree. For example, a polynomial
-/// a * x^3 + b * x^2 + c * x + d, can be rewritten as: (c * x + d) + x^2 * (a * x + b), and then
-/// the two columns will be: (c * x + d) and (a * x + b).
-fn segment<E: FieldElement>(
-    coefficients: Vec<E>,
-    trace_len: usize,
-    num_cols: usize,
-) -> Vec<Vec<E>> {
-    // assert_eq!(degree_of(&coefficients), trace_len * num_cols);
+/// a * x^3 + b * x^2 + c * x + d, can be rewritten as: (b * x^2 + d) + x * (a * x^2 + c), and then
+/// the two columns will be: (b * x^2 + d) and (a * x^2 + c).
+fn transpose<E: FieldElement>(coefficients: Vec<E>, num_columns: usize) -> Vec<Vec<E>> {
+    let column_len = coefficients.len() / num_columns;
 
-    coefficients
-        .chunks(trace_len)
-        .take(num_cols)
-        .map(|slice| slice.to_vec())
-        .collect()
+    let mut result = unsafe {
+        (0..num_columns)
+            .map(|_| uninit_vector(column_len))
+            .collect::<Vec<_>>()
+    };
+
+    // TODO: implement multi-threaded version
+    for (i, coeff) in coefficients.into_iter().enumerate() {
+        let row_idx = i / num_columns;
+        let col_idx = i % num_columns;
+        result[col_idx][row_idx] = coeff;
+    }
+
+    result
 }
 
 // TESTS
@@ -212,16 +219,16 @@ mod tests {
     use math::fields::f128::BaseElement;
 
     #[test]
-    fn segment() {
+    fn transpose() {
         let values = (0u128..16).map(BaseElement::new).collect::<Vec<_>>();
-        let actual = super::segment(values, 4, 4);
+        let actual = super::transpose(values, 4);
 
         #[rustfmt::skip]
         let expected = vec![
-            vec![BaseElement::new(0), BaseElement::new(1), BaseElement::new(2), BaseElement::new(3)],
-            vec![BaseElement::new(4), BaseElement::new(5), BaseElement::new(6), BaseElement::new(7)],
-            vec![BaseElement::new(8), BaseElement::new(9), BaseElement::new(10), BaseElement::new(11)],
-            vec![BaseElement::new(12), BaseElement::new(13), BaseElement::new(14), BaseElement::new(15)],
+            vec![BaseElement::new(0), BaseElement::new(4), BaseElement::new(8), BaseElement::new(12)],
+            vec![BaseElement::new(1), BaseElement::new(5), BaseElement::new(9), BaseElement::new(13)],
+            vec![BaseElement::new(2), BaseElement::new(6), BaseElement::new(10), BaseElement::new(14)],
+            vec![BaseElement::new(3), BaseElement::new(7), BaseElement::new(11), BaseElement::new(15)],
         ];
 
         assert_eq!(expected, actual)

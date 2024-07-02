@@ -224,7 +224,7 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
     /// into the DEEP composition polynomial. This method is intended to be called only after the
     /// add_trace_polys() method has been executed. The composition is done as follows:
     ///
-    /// - For each H_i(x), compute H'_i(x) = (H_i(x) - H(z)) / (x - z), where H_i(x) is the
+    /// - For each H_i(x), compute H'_i(x) = (H_i(x) - H(z)) / (x - z^m), where H_i(x) is the
     ///   ith composition polynomial column.
     /// - Then, combine all H_i(x) polynomials together by computing H(x) = sum(H_i(x) * cc_i) for
     ///   all i, where cc_i is the coefficient for the random linear combination drawn from the
@@ -246,9 +246,9 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
         // Divide out the OOD point z from column polynomials
         iter_mut!(column_polys).take(num_cols).zip(ood_evaluations).for_each(
             |(poly, value_at_z)| {
-                // compute H'_i(x) = (H_i(x) - H_i(z)) / (x - z)
+                // compute H'_i(x) = (H_i(x) - H_i(z)) / (x - z^m)
                 poly[0] -= value_at_z;
-                polynom::syn_div_in_place(poly, 1, z);
+                polynom::syn_div_in_place(poly, 1, z_m);
             },
         );
 
