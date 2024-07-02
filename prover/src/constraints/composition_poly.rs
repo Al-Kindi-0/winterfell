@@ -83,10 +83,6 @@ impl<E: FieldElement> CompositionPoly<E> {
             let added = vec![E::ZERO; pad_len];
             res_col.extend_from_slice(&added);
             polys.push(res_col)
-
-            //randomized_cols.push(res_col)
-            //let randomizer = rand_vector(polys[0].len());
-            //polys.push(randomizer)
         }
 
         CompositionPoly { data: ColMatrix::new(polys) }

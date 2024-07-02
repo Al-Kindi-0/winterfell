@@ -71,7 +71,6 @@ where
                 main_trace,
                 domain,
                 is_zk,
-                is_zk.is_some(),
             );
 
         let trace_poly_table = TracePolyTable::new(main_segment_polys);
@@ -146,7 +145,7 @@ where
     ) -> (ColMatrix<E>, H::Digest) {
         // extend the auxiliary trace segment and build a commitment to the extended trace
         let (aux_segment_lde, aux_segment_vector_com, aux_segment_polys) =
-            build_trace_commitment::<E, E, H, Self::VC>(aux_trace, domain, is_zk, false);
+            build_trace_commitment::<E, E, H, Self::VC>(aux_trace, domain, is_zk);
 
         // check errors
         assert!(
