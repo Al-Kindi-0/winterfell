@@ -266,8 +266,9 @@ fn zk_randomness_conjectured(
     );
     let mut n_q = num_queries;
     let mut h = h_init;
-    loop {
-        loop {
+    let mut new_security = 0;
+    for _ in 0..100 {
+        for _ in 0..100 {
             let ext_trace_domain_size = (trace_domain_size + h).next_power_of_two();
             let new_security = get_conjectured_security(
                 base_field_bits,
@@ -286,7 +287,7 @@ fn zk_randomness_conjectured(
         }
         h += n_q - num_queries;
         let ext_trace_domain_size = (trace_domain_size + h).next_power_of_two();
-        let new_security = get_conjectured_security(
+        new_security = get_conjectured_security(
             base_field_bits,
             extension_degree,
             blowup_factor,
@@ -299,6 +300,10 @@ fn zk_randomness_conjectured(
         if new_security >= initial_security {
             break;
         }
+    }
+
+    if new_security < initial_security {
+        panic!("initial security is too low")
     }
     h as u32
 }
