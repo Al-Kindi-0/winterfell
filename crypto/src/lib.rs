@@ -32,7 +32,7 @@ pub mod hashers {
 mod merkle;
 #[cfg(feature = "concurrent")]
 pub use merkle::concurrent;
-pub use merkle::{build_merkle_nodes, BatchMerkleProof, MerkleTree};
+pub use merkle::{build_merkle_nodes, BatchMerkleProof, MerkleTree, SaltedMerkleTree};
 
 mod random;
 pub use random::{DefaultRandomCoin, RandomCoin};
