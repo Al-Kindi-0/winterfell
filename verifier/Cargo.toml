@@ -26,6 +26,8 @@ fri = { version = "0.9", path = "../fri", package = "winter-fri", default-featur
 math = { version = "0.9", path = "../math", package = "winter-math", default-features = false }
 utils = { version = "0.9", path = "../utils/core", package = "winter-utils", default-features = false }
 
+libc-print = "0.1.23"
+
 # Allow math in docs
 [package.metadata.docs.rs]
 rustdoc-args = ["--html-in-header", ".cargo/katex-header.html"]

@@ -5,7 +5,7 @@
 
 use alloc::{string::ToString, vec::Vec};
 
-use math::{StarkField, ToElements};
+use math::{FieldElement, StarkField, ToElements};
 use utils::{ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable};
 
 use crate::{ProofOptions, TraceInfo};
@@ -54,8 +54,14 @@ impl Context {
     }
 
     /// Returns the size of the LDE domain for the computation described by this context.
-    pub fn lde_domain_size(&self) -> usize {
-        self.trace_info.length() * self.options.blowup_factor()
+    pub fn lde_domain_size<E: FieldElement>(&self) -> usize {
+        (self.trace_info.length()
+            + self
+                .options
+                .zk_witness_randomizer_degree::<E::BaseField>(self.trace_info.length())
+                .unwrap_or(0) as usize)
+            .next_power_of_two()
+            * self.options.blowup_factor()
     }
 
     /// Returns modulus of the field for the computation described by this context.
@@ -212,6 +218,7 @@ mod tests {
             field_extension,
             fri_folding_factor as usize,
             fri_remainder_max_degree as usize,
+            false,
         );
         let trace_info =
             TraceInfo::new_multi_segment(main_width, aux_width, aux_rands, trace_length, vec![]);

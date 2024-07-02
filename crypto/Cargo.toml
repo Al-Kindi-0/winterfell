@@ -35,6 +35,8 @@ math = { version = "0.9", path = "../math", package = "winter-math", default-fea
 sha3 = { version = "0.10", default-features = false }
 utils = { version = "0.9", path = "../utils/core", package = "winter-utils", default-features = false }
 
+libc-print = "0.1.23"
+
 [dev-dependencies]
 criterion = "0.5"
 proptest = "1.4"

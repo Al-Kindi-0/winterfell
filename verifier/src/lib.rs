@@ -259,7 +259,7 @@ where
             .iter()
             .enumerate()
             .fold(E::ZERO, |result, (i, &value)| {
-                result + z.exp_vartime(((i * (air.trace_length())) as u32).into()) * value
+                result + z.exp_vartime(((i * (air.trace_poly_degree() + 1)) as u32).into()) * value
             });
     public_coin.reseed(H::hash_elements(&ood_constraint_evaluations));
 
@@ -328,6 +328,7 @@ where
         ood_main_trace_frame,
         ood_aux_trace_frame,
         ood_lagrange_kernel_frame,
+        air.is_zk(),
     );
     let c_composition = composer
         .compose_constraint_evaluations(queried_constraint_evaluations, ood_constraint_evaluations);

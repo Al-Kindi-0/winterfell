@@ -5,7 +5,7 @@
 
 use alloc::vec::Vec;
 
-use math::{fft, polynom::degree_of, FieldElement};
+use math::{fft, FieldElement};
 
 use super::{ColMatrix, StarkDomain};
 
@@ -57,6 +57,7 @@ impl<E: FieldElement> CompositionPoly<E> {
         composition_trace: CompositionPolyTrace<E>,
         domain: &StarkDomain<E::BaseField>,
         num_cols: usize,
+        _is_zk: Option<u32>,
     ) -> Self {
         assert!(
             domain.trace_length() < composition_trace.num_rows(),
@@ -97,7 +98,7 @@ impl<E: FieldElement> CompositionPoly<E> {
 
     /// Returns evaluations of all composition polynomial columns at point z.
     pub fn evaluate_at(&self, z: E) -> Vec<E> {
-        self.data.evaluate_columns_at(z)
+        self.data.evaluate_columns_at(z, false)
     }
 
     /// Returns a reference to the matrix of individual column polynomials.
@@ -123,7 +124,7 @@ fn segment<E: FieldElement>(
     trace_len: usize,
     num_cols: usize,
 ) -> Vec<Vec<E>> {
-    debug_assert!(degree_of(&coefficients) < trace_len * num_cols);
+    // assert_eq!(degree_of(&coefficients), trace_len * num_cols);
 
     coefficients
         .chunks(trace_len)

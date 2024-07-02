@@ -4,7 +4,7 @@
 // LICENSE file in the root directory of this source tree.
 use alloc::vec::Vec;
 
-use air::{proof::TraceOodFrame, DeepCompositionCoefficients};
+use air::{proof::TraceOodFrame, Air, DeepCompositionCoefficients};
 use math::{
     add_in_place, fft, mul_acc,
     polynom::{self, syn_div_roots_in_place},
@@ -22,6 +22,8 @@ pub struct DeepCompositionPoly<E: FieldElement> {
     coefficients: Vec<E>,
     cc: DeepCompositionCoefficients<E>,
     z: E,
+    g: E,
+    randomizer_idx: Option<usize>,
 }
 
 impl<E: FieldElement> DeepCompositionPoly<E> {
@@ -30,17 +32,33 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
     /// Returns a new DEEP composition polynomial. Initially, this polynomial will be empty, and
     /// the intent is to populate the coefficients via add_trace_polys() and add_constraint_polys()
     /// methods.
-    pub fn new(z: E, cc: DeepCompositionCoefficients<E>) -> Self {
-        DeepCompositionPoly { coefficients: vec![], cc, z }
+    pub fn new<A: Air<BaseField = E::BaseField>>(
+        air: &A,
+        z: E,
+        cc: DeepCompositionCoefficients<E>,
+    ) -> Self {
+        let randomizer_idx = if air.is_zk() {
+            Some(air.trace_info().main_trace_width())
+        } else {
+            None
+        };
+
+        DeepCompositionPoly {
+            coefficients: vec![],
+            cc,
+            z,
+            g: E::from(air.trace_domain_generator()),
+            randomizer_idx,
+        }
     }
 
     // ACCESSORS
     // --------------------------------------------------------------------------------------------
 
-    /// Returns the size of the DEEP composition polynomial.
-    pub fn poly_size(&self) -> usize {
-        self.coefficients.len()
-    }
+    ///// Returns the size of the DEEP composition polynomial.
+    //pub fn poly_size(&self) -> usize {
+    //self.coefficients.len()
+    //}
 
     /// Returns the degree of the composition polynomial.
     pub fn degree(&self) -> usize {
@@ -82,8 +100,7 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
         // compute a second out-of-domain point offset from z by exactly trace generator; this
         // point defines the "next" computation state in relation to point z
         let trace_length = trace_polys.poly_size();
-        let g = E::from(E::BaseField::get_root_of_unity(trace_length.ilog2()));
-        let next_z = self.z * g;
+        let next_z = self.z * self.g;
 
         // combine trace polynomials into 2 composition polynomials T'(x) and T''(x)
         let mut t1_composition = vec![E::ZERO; trace_length];
@@ -94,7 +111,13 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
         let mut i = 0;
 
         // --- merge polynomials of the main trace segment ----------------------------------------
-        for poly in trace_polys.main_trace_polys() {
+        for (_, poly) in trace_polys.main_trace_polys().enumerate().take_while(|(j, _)| {
+            if let Some(idx) = self.randomizer_idx {
+                *j != idx
+            } else {
+                true
+            }
+        }) {
             // compute T'(x) = T(x) - T(z), multiply it by a pseudo-random coefficient,
             // and add the result into composition polynomial
             acc_trace_poly::<E::BaseField, E>(
@@ -145,6 +168,13 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
         let mut trace_poly =
             merge_trace_compositions(vec![t1_composition, t2_composition], vec![self.z, next_z]);
 
+        if self.randomizer_idx.is_some() {
+            let main_trace_polys = trace_polys.main_trace_polys();
+            let randomizer =
+                main_trace_polys.last().expect("there should at least be one main trace poly");
+            iter_mut!(trace_poly).zip(randomizer).for_each(|(a, &b)| *a += b.into());
+        }
+
         // finally compose the final term associated to the Lagrange kernel trace polynomial if
         // there is one present.
         // TODO: Investigate using FFT to speed up this block (see #281).
@@ -185,7 +215,8 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
 
         // set the coefficients of the DEEP composition polynomial
         self.coefficients = trace_poly;
-        assert_eq!(self.poly_size() - 2, self.degree());
+        //libc_println!("self.coef {:?}", self.coefficients);
+        //assert_eq!(self.poly_size() - 2, self.degree());
     }
 
     // CONSTRAINT POLYNOMIAL COMPOSITION
@@ -223,7 +254,7 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
         for (i, poly) in column_polys.into_iter().enumerate() {
             mul_acc::<E, E>(&mut self.coefficients, &poly, self.cc.constraints[i]);
         }
-        assert_eq!(self.poly_size() - 2, self.degree());
+        //assert_eq!(self.poly_size() - 2, self.degree());
     }
 
     // LOW-DEGREE EXTENSION

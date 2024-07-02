@@ -547,7 +547,7 @@ pub trait Air: Send + Sync {
 
         let lagrange = if self.context().has_lagrange_kernel_aux_column() {
             let mut lagrange_kernel_t_coefficients = Vec::new();
-            for _ in 0..self.context().trace_len().ilog2() {
+            for _ in 0..self.context().trace_info().length().ilog2() {
                 lagrange_kernel_t_coefficients.push(public_coin.draw()?);
             }
 
@@ -599,5 +599,19 @@ pub trait Air: Send + Sync {
             constraints: c_coefficients,
             lagrange: lagrange_cc,
         })
+    }
+
+    /// Returns whether zero-knowledge is enabled.
+    fn is_zk(&self) -> bool {
+        self.options().is_zk()
+    }
+
+    /// Computes a lower bound on the degree of the polynomial used for randomizing the witness
+    /// polynomials.
+    fn zk_witness_randomizer_degree<E>(&self) -> Option<u32>
+    where
+        E: FieldElement,
+    {
+        self.options().zk_witness_randomizer_degree::<E::BaseField>(self.trace_length())
     }
 }

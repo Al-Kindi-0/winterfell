@@ -139,7 +139,7 @@ where
     /// are removed from the returned vector.
     pub fn get_query_positions(&mut self) -> Vec<usize> {
         let num_queries = self.context.options().num_queries();
-        let lde_domain_size = self.context.lde_domain_size();
+        let lde_domain_size = self.context.lde_domain_size::<E>();
         let mut positions = self
             .public_coin
             .draw_integers(num_queries, lde_domain_size, self.pow_nonce)

@@ -371,8 +371,9 @@
 //!         trace_info: &TraceInfo,
 //!         main_trace: &ColMatrix<Self::BaseField>,
 //!         domain: &StarkDomain<Self::BaseField>,
+//!         is_zk: Option<u32>,
 //!     ) -> (Self::TraceLde<E>, TracePolyTable<E>) {
-//!         DefaultTraceLde::new(trace_info, main_trace, domain)
+//!         DefaultTraceLde::new(trace_info, main_trace, domain, is_zk)
 //!     }
 //!
 //!     fn new_evaluator<'a, E: FieldElement<BaseField = Self::BaseField>>(
@@ -514,8 +515,9 @@
 //! #        trace_info: &TraceInfo,
 //! #        main_trace: &ColMatrix<Self::BaseField>,
 //! #        domain: &StarkDomain<Self::BaseField>,
+//! #        is_zk: Option<u32>,
 //! #    ) -> (Self::TraceLde<E>, TracePolyTable<E>) {
-//! #        DefaultTraceLde::new(trace_info, main_trace, domain)
+//! #        DefaultTraceLde::new(trace_info, main_trace, domain, is_zk)
 //! #    }
 //! #
 //! #    fn new_evaluator<'a, E: FieldElement<BaseField = Self::BaseField>>(
@@ -546,6 +548,7 @@
 //!     FieldExtension::None,
 //!     8,  // FRI folding factor
 //!     31, // FRI max remainder polynomial degree
+//!     false, // Enable zero-knowledge
 //! );
 //!
 //! // Instantiate the prover and generate the proof.

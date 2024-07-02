@@ -26,6 +26,8 @@ pub struct AirContext<B: StarkField> {
     pub(super) trace_domain_generator: B,
     pub(super) lde_domain_generator: B,
     pub(super) num_transition_exemptions: usize,
+    pub(super) trace_length_ext: usize,
+    pub(super) is_zk: Option<u32>,
 }
 
 impl<B: StarkField> AirContext<B> {
@@ -133,18 +135,23 @@ impl<B: StarkField> AirContext<B> {
             );
         }
 
+        let h = options.zk_witness_randomizer_degree::<B>(trace_info.length()).unwrap_or(0);
+        let trace_length = trace_info.length();
+        let trace_length_ext = (trace_length + h as usize).next_power_of_two();
+        let lde_domain_size = trace_length_ext * options.blowup_factor();
+
         // determine minimum blowup factor needed to evaluate transition constraints by taking
         // the blowup factor of the highest degree constraint
         let mut ce_blowup_factor = 0;
         for degree in main_transition_constraint_degrees.iter() {
-            if degree.min_blowup_factor() > ce_blowup_factor {
-                ce_blowup_factor = degree.min_blowup_factor();
+            if degree.min_blowup_factor(trace_length, trace_length_ext) > ce_blowup_factor {
+                ce_blowup_factor = degree.min_blowup_factor(trace_length, trace_length_ext);
             }
         }
 
         for degree in aux_transition_constraint_degrees.iter() {
-            if degree.min_blowup_factor() > ce_blowup_factor {
-                ce_blowup_factor = degree.min_blowup_factor();
+            if degree.min_blowup_factor(trace_length, trace_length_ext) > ce_blowup_factor {
+                ce_blowup_factor = degree.min_blowup_factor(trace_length, trace_length_ext);
             }
         }
 
@@ -154,9 +161,6 @@ impl<B: StarkField> AirContext<B> {
             ce_blowup_factor,
             options.blowup_factor()
         );
-
-        let trace_length = trace_info.length();
-        let lde_domain_size = trace_length * options.blowup_factor();
 
         AirContext {
             options,
@@ -170,6 +174,8 @@ impl<B: StarkField> AirContext<B> {
             trace_domain_generator: B::get_root_of_unity(trace_length.ilog2()),
             lde_domain_generator: B::get_root_of_unity(lde_domain_size.ilog2()),
             num_transition_exemptions: 1,
+            trace_length_ext,
+            is_zk: Some(h),
         }
     }
 
@@ -188,25 +194,31 @@ impl<B: StarkField> AirContext<B> {
         self.trace_info.length()
     }
 
+    /// Returns length of the possibly extended execution trace. This is the same as the original
+    /// trace length when zero-knowledge is not enabled.
+    pub fn trace_length_ext(&self) -> usize {
+        self.trace_length_ext
+    }
+
     /// Returns degree of trace polynomials for an instance of a computation.
     ///
-    /// The degree is always `trace_length` - 1.
+    /// The degree is always `trace_length_ext` - 1.
     pub fn trace_poly_degree(&self) -> usize {
-        self.trace_info.length() - 1
+        self.trace_length_ext() - 1
     }
 
     /// Returns size of the constraint evaluation domain.
     ///
-    /// This is guaranteed to be a power of two, and is equal to `trace_length * ce_blowup_factor`.
+    /// This is guaranteed to be a power of two, and is equal to `trace_length_ext * ce_blowup_factor`.
     pub fn ce_domain_size(&self) -> usize {
-        self.trace_info.length() * self.ce_blowup_factor
+        self.trace_length_ext() * self.ce_blowup_factor
     }
 
     /// Returns the size of the low-degree extension domain.
     ///
-    /// This is guaranteed to be a power of two, and is equal to `trace_length * lde_blowup_factor`.
+    /// This is guaranteed to be a power of two, and is equal to `trace_length_ext * lde_blowup_factor`.
     pub fn lde_domain_size(&self) -> usize {
-        self.trace_info.length() * self.options.blowup_factor()
+        self.trace_length_ext() * self.options.blowup_factor()
     }
 
     /// Returns the number of transition constraints for a computation, excluding the Lagrange
@@ -281,6 +293,8 @@ impl<B: StarkField> AirContext<B> {
     /// numerator is `trace_len - 1` for all transition constraints (i.e. the base degree is 1).
     /// Hence, no matter what the degree of the divisor is for each, the degree of the fraction will
     /// be at most `trace_len - 1`.
+    ///
+    /// TODO: update documentation
     pub fn num_constraint_composition_columns(&self) -> usize {
         let mut highest_constraint_degree = 0_usize;
         for degree in self
@@ -288,19 +302,20 @@ impl<B: StarkField> AirContext<B> {
             .iter()
             .chain(self.aux_transition_constraint_degrees.iter())
         {
-            let eval_degree = degree.get_evaluation_degree(self.trace_len());
+            let eval_degree =
+                degree.get_evaluation_degree(self.trace_len(), self.trace_length_ext());
             if eval_degree > highest_constraint_degree {
                 highest_constraint_degree = eval_degree
             }
         }
         let trace_length = self.trace_len();
+        let trace_length_ext = self.trace_length_ext();
         let transition_divisior_degree = trace_length - self.num_transition_exemptions();
 
         // we use the identity: ceil(a/b) = (a + b - 1)/b
         let num_constraint_col =
-            (highest_constraint_degree - transition_divisior_degree + trace_length - 1)
-                / trace_length;
-
+            (highest_constraint_degree - transition_divisior_degree + trace_length_ext - 1)
+                / trace_length_ext;
         cmp::max(num_constraint_col, 1)
     }
 
@@ -337,9 +352,11 @@ impl<B: StarkField> AirContext<B> {
             .iter()
             .chain(self.aux_transition_constraint_degrees.iter())
         {
-            let eval_degree = degree.get_evaluation_degree(self.trace_len());
+            let eval_degree =
+                degree.get_evaluation_degree(self.trace_len(), self.trace_length_ext());
             let max_constraint_composition_degree = self.ce_domain_size() - 1;
-            let max_exemptions = max_constraint_composition_degree + self.trace_len() - eval_degree;
+            let max_exemptions =
+                max_constraint_composition_degree + self.trace_length_ext() - eval_degree;
             assert!(
                 n <= max_exemptions,
                 "number of transition exemptions cannot exceed: {max_exemptions}, but was {n}"

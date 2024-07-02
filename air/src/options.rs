@@ -6,8 +6,10 @@
 use alloc::vec::Vec;
 
 use fri::FriOptions;
-use math::{StarkField, ToElements};
+use math::{FieldElement, StarkField, ToElements};
 use utils::{ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable};
+
+use crate::proof::get_conjectured_security;
 
 // CONSTANTS
 // ================================================================================================
@@ -82,6 +84,7 @@ pub struct ProofOptions {
     field_extension: FieldExtension,
     fri_folding_factor: u8,
     fri_remainder_max_degree: u8,
+    is_zk: bool,
 }
 
 // PROOF OPTIONS IMPLEMENTATION
@@ -109,13 +112,14 @@ impl ProofOptions {
     /// - `fri_folding_factor` is not 2, 4, 8, or 16.
     /// - `fri_remainder_max_degree` is greater than 255 or is not a power of two minus 1.
     #[rustfmt::skip]
-    pub const fn new(
+    pub  fn new(
         num_queries: usize,
         blowup_factor: usize,
         grinding_factor: u32,
         field_extension: FieldExtension,
         fri_folding_factor: usize,
         fri_remainder_max_degree: usize,
+        is_zk: bool,
     ) -> ProofOptions {
         // TODO: return errors instead of panicking
         assert!(num_queries > 0, "number of queries must be greater than 0");
@@ -147,6 +151,7 @@ impl ProofOptions {
             field_extension,
             fri_folding_factor: fri_folding_factor as u8,
             fri_remainder_max_degree: fri_remainder_max_degree as u8,
+            is_zk
         }
     }
 
@@ -206,6 +211,96 @@ impl ProofOptions {
         let remainder_max_degree = self.fri_remainder_max_degree as usize;
         FriOptions::new(self.blowup_factor(), folding_factor, remainder_max_degree)
     }
+
+    /// Returns whether zero-knowledge is enabled.
+    pub fn is_zk(&self) -> bool {
+        self.is_zk
+    }
+
+    /// Computes a lower bound on the degree of the polynomial used for randomizing the witness
+    /// polynomials.
+    /// TODO: revisit `h_init` and update the quotient decomposition
+    pub(crate) fn zk_witness_randomizer_degree<E>(&self, trace_domain_size: usize) -> Option<u32>
+    where
+        E: FieldElement,
+    {
+        if self.is_zk {
+            let h_init =
+                2 * 2 * (2 * self.field_extension().degree() as usize + self.num_queries())
+                    + self.num_queries();
+            let h = zk_randomness_conjectured(
+                h_init,
+                E::BaseField::MODULUS_BITS,
+                self.field_extension().degree(),
+                self.blowup_factor(),
+                self.num_queries(),
+                self.grinding_factor(),
+                trace_domain_size,
+                128,
+            );
+            Some(h)
+        } else {
+            None
+        }
+    }
+}
+
+fn zk_randomness_conjectured(
+    h_init: usize,
+    base_field_bits: u32,
+    extension_degree: u32,
+    blowup_factor: usize,
+    num_queries: usize,
+    grinding_factor: u32,
+    trace_domain_size: usize,
+    collision_resistance: u32,
+) -> u32 {
+    let initial_security = get_conjectured_security(
+        base_field_bits,
+        extension_degree,
+        blowup_factor,
+        num_queries,
+        grinding_factor,
+        trace_domain_size,
+        collision_resistance,
+    );
+    let mut n_q = num_queries;
+    let mut h = h_init;
+    loop {
+        loop {
+            let ext_trace_domain_size = (trace_domain_size + h).next_power_of_two();
+            let new_security = get_conjectured_security(
+                base_field_bits,
+                extension_degree,
+                blowup_factor,
+                n_q,
+                grinding_factor,
+                ext_trace_domain_size,
+                collision_resistance,
+            );
+            if new_security >= initial_security {
+                break;
+            } else {
+                n_q += 1;
+            }
+        }
+        h += n_q - num_queries;
+        let ext_trace_domain_size = (trace_domain_size + h).next_power_of_two();
+        let new_security = get_conjectured_security(
+            base_field_bits,
+            extension_degree,
+            blowup_factor,
+            n_q,
+            grinding_factor,
+            ext_trace_domain_size,
+            collision_resistance,
+        );
+
+        if new_security >= initial_security {
+            break;
+        }
+    }
+    h as u32
 }
 
 impl<E: StarkField> ToElements<E> for ProofOptions {
@@ -233,6 +328,7 @@ impl Serializable for ProofOptions {
         target.write(self.field_extension);
         target.write_u8(self.fri_folding_factor);
         target.write_u8(self.fri_remainder_max_degree);
+        target.write_bool(self.is_zk)
     }
 }
 
@@ -249,6 +345,7 @@ impl Deserializable for ProofOptions {
             FieldExtension::read_from(source)?,
             source.read_u8()? as usize,
             source.read_u8()? as usize,
+            source.read_bool()?,
         ))
     }
 }
@@ -339,6 +436,7 @@ mod tests {
             field_extension,
             fri_folding_factor as usize,
             fri_remainder_max_degree as usize,
+            false,
         );
         assert_eq!(expected, options.to_elements());
     }

@@ -8,6 +8,7 @@ use core::{iter::FusedIterator, slice};
 
 use crypto::{ElementHasher, VectorCommitment};
 use math::{fft, polynom, FieldElement};
+use rand_utils::{rand_value, rand_vector};
 #[cfg(feature = "concurrent")]
 use utils::iterators::*;
 use utils::{batch_iter_mut, iter, iter_mut, uninit_vector};
@@ -242,11 +243,13 @@ impl<E: FieldElement> ColMatrix<E> {
     }
 
     /// Evaluates polynomials contained in the columns of this matrix at a single point `x`.
-    pub fn evaluate_columns_at<F>(&self, x: F) -> Vec<F>
+    pub fn evaluate_columns_at<F>(&self, x: F, skip_last: bool) -> Vec<F>
     where
         F: FieldElement + From<E>,
     {
-        iter!(self.columns).map(|p| polynom::eval(p, x)).collect()
+        iter!(&self.columns[..self.columns.len() - skip_last as usize])
+            .map(|p| polynom::eval(p, x))
+            .collect()
     }
 
     // COMMITMENTS
@@ -293,6 +296,41 @@ impl<E: FieldElement> ColMatrix<E> {
     /// TODO: replace this with an iterator.
     pub fn into_columns(self) -> Vec<Vec<E>> {
         self.columns
+    }
+
+    pub(crate) fn randomize(&self, is_zk: u32, add_zk_col: bool) -> Self {
+        // Assumes that k = 1 where |H| + h =< |H|.2^k
+        let cur_len = self.num_rows();
+        let extended_len = (cur_len + is_zk as usize).next_power_of_two();
+        let pad_len = extended_len - cur_len;
+
+        let mut randomized_cols: Vec<Vec<E>> = self
+            .columns()
+            .map(|col| {
+                let mut added = vec![E::ZERO; pad_len];
+                for a in added.iter_mut() {
+                    *a = rand_value();
+                }
+
+                let mut res_col = col.to_vec();
+                res_col.extend_from_slice(&added);
+                for i in 0..pad_len {
+                    res_col[i] -= added[i]
+                }
+                res_col
+            })
+            .collect();
+
+        if add_zk_col {
+            let zk_col = rand_vector(cur_len);
+            let mut res_col = zk_col.to_vec();
+            let added = vec![E::ZERO; pad_len];
+            res_col.extend_from_slice(&added);
+
+            randomized_cols.push(res_col)
+        }
+
+        Self { columns: randomized_cols }
     }
 }
 

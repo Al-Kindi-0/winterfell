@@ -30,6 +30,9 @@ pub struct StarkDomain<B: StarkField> {
 
     /// Offset of the low-degree extension domain.
     domain_offset: B,
+
+    /// Extra information needed for constraint evaluation validation when zero-knowledge is enabled.
+    zk_info: Option<ZkInfo>,
 }
 
 // STARK DOMAIN IMPLEMENTATION
@@ -38,11 +41,22 @@ pub struct StarkDomain<B: StarkField> {
 impl<B: StarkField> StarkDomain<B> {
     /// Returns a new STARK domain initialized with the provided `context`.
     pub fn new<A: Air<BaseField = B>>(air: &A) -> Self {
-        let trace_twiddles = fft::get_twiddles(air.trace_length());
+        let trace_twiddles = fft::get_twiddles(air.context().trace_length_ext());
 
         // build constraint evaluation domain
         let domain_gen = B::get_root_of_unity(air.ce_domain_size().ilog2());
         let ce_domain = get_power_series(domain_gen, air.ce_domain_size());
+
+        let zk_info = if air.is_zk() {
+            Some(ZkInfo {
+                original_trace_length: air.trace_length(),
+                degree_witness_randomizer: air
+                    .zk_witness_randomizer_degree::<B>()
+                    .expect("should not panic as air.is_zk() is true"),
+            })
+        } else {
+            None
+        };
 
         StarkDomain {
             trace_twiddles,
@@ -50,6 +64,7 @@ impl<B: StarkField> StarkDomain<B> {
             ce_to_lde_blowup: air.lde_domain_size() / air.ce_domain_size(),
             ce_domain_mod_mask: air.ce_domain_size() - 1,
             domain_offset: air.domain_offset(),
+            zk_info,
         }
     }
 
@@ -72,6 +87,7 @@ impl<B: StarkField> StarkDomain<B> {
             ce_to_lde_blowup: 1,
             ce_domain_mod_mask: ce_domain_size - 1,
             domain_offset,
+            zk_info: None,
         }
     }
 
@@ -152,4 +168,14 @@ impl<B: StarkField> StarkDomain<B> {
     pub fn offset(&self) -> B {
         self.domain_offset
     }
+
+    pub(crate) fn zk_info(&self) -> Option<ZkInfo> {
+        self.zk_info
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ZkInfo {
+    pub(crate) original_trace_length: usize,
+    pub(crate) degree_witness_randomizer: u32,
 }

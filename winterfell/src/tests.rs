@@ -205,7 +205,7 @@ impl LagrangeComplexProver {
     fn new(aux_trace_width: usize) -> Self {
         Self {
             aux_trace_width,
-            options: ProofOptions::new(1, 2, 0, FieldExtension::None, 2, 1),
+            options: ProofOptions::new(1, 2, 0, FieldExtension::None, 2, 1, false),
         }
     }
 }
@@ -234,11 +234,12 @@ impl Prover for LagrangeComplexProver {
         trace_info: &TraceInfo,
         main_trace: &ColMatrix<Self::BaseField>,
         domain: &StarkDomain<Self::BaseField>,
+        is_zk: Option<u32>,
     ) -> (Self::TraceLde<E>, TracePolyTable<E>)
     where
         E: math::FieldElement<BaseField = Self::BaseField>,
     {
-        DefaultTraceLde::new(trace_info, main_trace, domain)
+        DefaultTraceLde::new(trace_info, main_trace, domain, is_zk)
     }
 
     fn new_evaluator<'a, E>(

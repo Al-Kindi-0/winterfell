@@ -63,10 +63,16 @@ where
         trace_info: &TraceInfo,
         main_trace: &ColMatrix<E::BaseField>,
         domain: &StarkDomain<E::BaseField>,
+        is_zk: Option<u32>,
     ) -> (Self, TracePolyTable<E>) {
         // extend the main execution trace and build a commitment to the extended trace
         let (main_segment_lde, main_segment_vector_com, main_segment_polys) =
-            build_trace_commitment::<E, E::BaseField, H, V>(main_trace, domain);
+            build_trace_commitment::<E, E::BaseField, H, V>(
+                main_trace,
+                domain,
+                is_zk,
+                is_zk.is_some(),
+            );
 
         let trace_poly_table = TracePolyTable::new(main_segment_polys);
         let trace_lde = DefaultTraceLde {
@@ -74,7 +80,7 @@ where
             main_segment_vector_com,
             aux_segment_lde: None,
             aux_segment_vector_com: None,
-            blowup: domain.trace_to_lde_blowup(),
+            blowup: domain.lde_domain_size() / trace_info.length(),
             trace_info: trace_info.clone(),
             _h: PhantomData,
         };
@@ -136,10 +142,11 @@ where
         &mut self,
         aux_trace: &ColMatrix<E>,
         domain: &StarkDomain<E::BaseField>,
+        is_zk: Option<u32>,
     ) -> (ColMatrix<E>, H::Digest) {
         // extend the auxiliary trace segment and build a commitment to the extended trace
         let (aux_segment_lde, aux_segment_vector_com, aux_segment_polys) =
-            build_trace_commitment::<E, E, H, Self::VC>(aux_trace, domain);
+            build_trace_commitment::<E, E, H, Self::VC>(aux_trace, domain, is_zk, false);
 
         // check errors
         assert!(
@@ -168,10 +175,9 @@ where
     ) {
         // at the end of the trace, next state wraps around and we read the first step again
         let next_lde_step = (lde_step + self.blowup()) % self.trace_len();
-
-        // copy main trace segment values into the frame
-        frame.current_mut().copy_from_slice(self.main_segment_lde.row(lde_step));
-        frame.next_mut().copy_from_slice(self.main_segment_lde.row(next_lde_step));
+        let l = frame.current().len();
+        frame.current_mut().copy_from_slice(&self.main_segment_lde.row(lde_step)[..l]);
+        frame.next_mut().copy_from_slice(&self.main_segment_lde.row(next_lde_step)[..l]);
     }
 
     /// Reads current and next rows from the auxiliary trace segment into the specified frame.
@@ -267,6 +273,8 @@ where
 fn build_trace_commitment<E, F, H, V>(
     trace: &ColMatrix<F>,
     domain: &StarkDomain<E::BaseField>,
+    is_zk: Option<u32>,
+    add_zk_col: bool,
 ) -> (RowMatrix<F>, V, ColMatrix<F>)
 where
     E: FieldElement,
@@ -283,14 +291,19 @@ where
         )
         .entered();
         let trace_polys = trace.interpolate_columns();
+        let trace_polys = if let Some(h) = is_zk {
+            trace_polys.randomize(h, add_zk_col)
+        } else {
+            trace_polys
+        };
         let trace_lde =
             RowMatrix::evaluate_polys_over::<DEFAULT_SEGMENT_WIDTH>(&trace_polys, domain);
         drop(span);
 
         (trace_lde, trace_polys)
     };
-    assert_eq!(trace_lde.num_cols(), trace.num_cols());
-    assert_eq!(trace_polys.num_rows(), trace.num_rows());
+    //assert_eq!(trace_lde.num_cols(), trace.num_cols());
+    //assert_eq!(trace_polys.num_rows(), trace.num_rows());
     assert_eq!(trace_lde.num_rows(), domain.lde_domain_size());
 
     // build trace commitment

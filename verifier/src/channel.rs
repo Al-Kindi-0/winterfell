@@ -313,7 +313,8 @@ where
         );
 
         // parse main trace segment queries
-        let main_segment_width = air.trace_info().main_trace_width();
+        // In the case zero-knowledge is enabled, we parse the randomizer polynomial as well
+        let main_segment_width = air.trace_info().main_trace_width() + air.is_zk() as usize;
         let main_segment_queries = queries.remove(0);
         let (main_segment_query_proofs, main_segment_states) = main_segment_queries
             .parse::<E::BaseField, H, V>(air.lde_domain_size(), num_queries, main_segment_width)
