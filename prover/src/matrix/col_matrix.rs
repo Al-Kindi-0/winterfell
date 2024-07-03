@@ -5,7 +5,6 @@
 
 use alloc::vec::Vec;
 use core::{iter::FusedIterator, slice};
-
 use crypto::{ElementHasher, VectorCommitment};
 use math::{fft, polynom, FieldElement};
 use rand::{ RngCore, Rng};
