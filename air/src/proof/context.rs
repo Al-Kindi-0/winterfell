@@ -58,7 +58,7 @@ impl Context {
         (self.trace_info.length()
             + self
                 .options
-                .zk_witness_randomizer_degree::<E::BaseField>(self.trace_info.length())
+                .zk_witness_randomizer_degree::<E::BaseField>(self.trace_info.length(), false)
                 .unwrap_or(0) as usize)
             .next_power_of_two()
             * self.options.blowup_factor()

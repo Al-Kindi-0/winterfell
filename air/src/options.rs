@@ -10,7 +10,7 @@ use libc_print::libc_println;
 use math::{FieldElement, StarkField, ToElements};
 use utils::{ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable};
 
-use crate::proof::get_conjectured_security;
+use crate::proof::{get_conjectured_security, get_security};
 
 // CONSTANTS
 // ================================================================================================
@@ -249,6 +249,7 @@ impl ProofOptions {
                 trace_domain_size,
                 num_quotient_polys,
                 128,
+                conjectured,
             );
             Some(h)
         } else {
@@ -275,8 +276,9 @@ fn zk_randomness_conjectured(
     trace_domain_size: usize,
     num_quotient_polys: usize,
     collision_resistance: u32,
+    conjectured: bool,
 ) -> u32 {
-    let initial_security = get_conjectured_security(
+    let initial_security = get_security(
         base_field_bits,
         extension_degree,
         blowup_factor,
@@ -293,7 +295,7 @@ fn zk_randomness_conjectured(
     for _ in 0..100 {
         for _ in 0..100 {
             let ext_trace_domain_size = (trace_domain_size + h).next_power_of_two();
-            let new_security = get_conjectured_security(
+            let new_security = get_security(
                 base_field_bits,
                 extension_degree,
                 blowup_factor,
@@ -315,7 +317,7 @@ fn zk_randomness_conjectured(
                 num_quotient_polys,
             );
         let ext_trace_domain_size = (trace_domain_size + h).next_power_of_two();
-        new_security = get_conjectured_security(
+        new_security = get_security(
             base_field_bits,
             extension_degree,
             blowup_factor,
