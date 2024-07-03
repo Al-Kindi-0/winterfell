@@ -7,7 +7,8 @@ use prover::{
     matrix::ColMatrix, DefaultConstraintEvaluator, DefaultTraceLde, Prover, StarkDomain, Trace,
     TracePolyTable, TraceTable,
 };
-use rand::distributions::{Distribution, Standard};
+use rand::{distributions::{Distribution, Standard}, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use utils::{Deserializable, Serializable};
 
 use super::air::{apply_round, PublicInputs, RescueAir, DIGEST_SIZE, HASH_CYCLE_LEN};
@@ -104,7 +105,8 @@ where
         domain: &StarkDomain<Self::BaseField>,
         is_zk: Option<u32>,
     ) -> (Self::TraceLde<E>, TracePolyTable<E>) {
-        DefaultTraceLde::new(trace_info, main_trace, domain, is_zk)
+        let mut prng = ChaCha20Rng::from_entropy();
+        DefaultTraceLde::new(trace_info, main_trace, domain, is_zk, &mut prng)
     }
 
     fn new_evaluator<'a, E: FieldElement<BaseField = Self::BaseField>>(

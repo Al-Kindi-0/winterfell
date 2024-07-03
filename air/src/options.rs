@@ -6,6 +6,7 @@
 use alloc::vec::Vec;
 
 use fri::FriOptions;
+use libc_print::libc_println;
 use math::{FieldElement, StarkField, ToElements};
 use utils::{ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable};
 
@@ -242,6 +243,7 @@ impl ProofOptions {
                 self.num_queries(),
                 self.grinding_factor(),
                 trace_domain_size,
+                num_quotient_polys,
                 128,
                 conjectured,
             );
@@ -267,6 +269,7 @@ fn zk_randomness_conjectured(
     num_queries: usize,
     grinding_factor: u32,
     trace_domain_size: usize,
+    num_quotient_polys: usize,
     collision_resistance: u32,
     conjectured: bool,
 ) -> u32 {

@@ -4,6 +4,18 @@ version = "0.1.0"
 edition = "2021"
 
 
+[lib]
+bench = false
+
+[[bench]]
+name = "signing"
+harness = false
+
+[features]
+concurrent = ["crypto/concurrent", "math/concurrent", "utils/concurrent", "prover/concurrent", "std"]
+default = ["std"]
+std = ["air/std", "crypto/std", "math/std", "utils/std"]
+
 [dependencies]
 air = { version = "0.9", path = "../air", package = "winter-air", default-features = false }
 crypto = { version = "0.9", path = "../crypto", package = "winter-crypto", default-features = false }
@@ -14,6 +26,7 @@ rand-utils = { version = "0.9", path = "../utils/rand", package = "winter-rand-u
 prover = { version = "0.9", path = "../prover", package = "winter-prover", default-features = false }
 verifier = { version = "0.9", path = "../verifier", package = "winter-verifier", default-features = false }
 serde = { version = "1.0", features = [ "derive" ], optional = true, default-features = false }
+rand_chacha = { version = "0.3", default-features = false }
 
 libc-print = "0.1.23"
 rand =  { version = "0.8" }

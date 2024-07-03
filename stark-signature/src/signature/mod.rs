@@ -26,6 +26,7 @@ impl PublicKey {
 // SECRET KEY
 // ================================================================================================
 
+#[derive(Default)]
 pub struct SecretKey {
     sk: [BaseElement; 4],
 }
