@@ -6,6 +6,7 @@
 use alloc::vec::Vec;
 
 use fri::FriOptions;
+use libc_print::libc_println;
 use math::{FieldElement, StarkField, ToElements};
 use utils::{ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable};
 
@@ -220,14 +221,24 @@ impl ProofOptions {
     /// Computes a lower bound on the degree of the polynomial used for randomizing the witness
     /// polynomials.
     /// TODO: revisit `h_init` and update the quotient decomposition
-    pub(crate) fn zk_witness_randomizer_degree<E>(&self, trace_domain_size: usize) -> Option<u32>
+    pub(crate) fn zk_witness_randomizer_degree<E>(
+        &self,
+        trace_domain_size: usize,
+        conjectured: bool,
+    ) -> Option<u32>
     where
         E: FieldElement,
     {
         if self.is_zk {
-            let h_init =
-                2 * 2 * (2 * self.field_extension().degree() as usize + self.num_queries())
-                    + self.num_queries();
+            let num_quotient_polys = self.blowup_factor();
+            libc_println!("num_quo polys {:?}", num_quotient_polys);
+            //let num_quotient_polys = 1;
+            let h_init = compute_degree_randomizing_poly(
+                self.field_extension().degree() as usize,
+                self.num_queries(),
+                num_quotient_polys,
+            );
+
             let h = zk_randomness_conjectured(
                 h_init,
                 E::BaseField::MODULUS_BITS,
@@ -236,6 +247,7 @@ impl ProofOptions {
                 self.num_queries(),
                 self.grinding_factor(),
                 trace_domain_size,
+                num_quotient_polys,
                 128,
             );
             Some(h)
@@ -243,6 +255,14 @@ impl ProofOptions {
             None
         }
     }
+}
+
+fn compute_degree_randomizing_poly(
+    extension_degree: usize,
+    num_fri_queries: usize,
+    num_quotient_polys: usize,
+) -> usize {
+    2 * num_quotient_polys * (extension_degree + num_fri_queries) + num_fri_queries
 }
 
 fn zk_randomness_conjectured(
@@ -253,6 +273,7 @@ fn zk_randomness_conjectured(
     num_queries: usize,
     grinding_factor: u32,
     trace_domain_size: usize,
+    num_quotient_polys: usize,
     collision_resistance: u32,
 ) -> u32 {
     let initial_security = get_conjectured_security(
@@ -263,10 +284,12 @@ fn zk_randomness_conjectured(
         grinding_factor,
         trace_domain_size,
         collision_resistance,
+        conjectured,
     );
     let mut n_q = num_queries;
     let mut h = h_init;
     let mut new_security = 0;
+
     for _ in 0..100 {
         for _ in 0..100 {
             let ext_trace_domain_size = (trace_domain_size + h).next_power_of_two();
@@ -278,6 +301,7 @@ fn zk_randomness_conjectured(
                 grinding_factor,
                 ext_trace_domain_size,
                 collision_resistance,
+                conjectured,
             );
             if new_security >= initial_security {
                 break;
@@ -285,7 +309,11 @@ fn zk_randomness_conjectured(
                 n_q += 1;
             }
         }
-        h += n_q - num_queries;
+        h = compute_degree_randomizing_poly(
+                extension_degree as usize,
+                n_q,
+                num_quotient_polys,
+            );
         let ext_trace_domain_size = (trace_domain_size + h).next_power_of_two();
         new_security = get_conjectured_security(
             base_field_bits,
@@ -295,6 +323,7 @@ fn zk_randomness_conjectured(
             grinding_factor,
             ext_trace_domain_size,
             collision_resistance,
+            conjectured,
         );
 
         if new_security >= initial_security {

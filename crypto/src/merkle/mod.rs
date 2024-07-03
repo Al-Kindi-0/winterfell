@@ -467,7 +467,7 @@ impl<H: Hasher> VectorCommitment<H> for MerkleTree<H> {
 
 use rand::{
     distributions::{Distribution, Standard},
-    thread_rng, RngCore,
+    thread_rng, RngCore, Rng
 };
 
 pub struct SaltedMerkleTree<H: Hasher> {
@@ -483,7 +483,7 @@ where
     // CONSTRUCTORS
     // --------------------------------------------------------------------------------------------
 
-    pub fn new<R: RngCore>(leaves: Vec<H::Digest>, _prng: &mut R) -> Result<Self, MerkleTreeError> {
+    pub fn new<R: RngCore>(leaves: Vec<H::Digest>, prng: &mut R) -> Result<Self, MerkleTreeError> {
         if leaves.len() < 2 {
             return Err(MerkleTreeError::TooFewLeaves(2, leaves.len()));
         }
@@ -492,7 +492,7 @@ where
         }
 
         let num_leaves = leaves.len();
-        let salts: Vec<H::Digest> = (0..num_leaves).map(|_| rand::random()).collect();
+        let salts: Vec<H::Digest> = (0..num_leaves).map(|_| prng.sample(Standard)).collect();
 
         let salted_leaves: Vec<H::Digest> = leaves
             .iter()
@@ -595,6 +595,23 @@ where
         SaltedMerkleTree::new(items, &mut prng)
     }
 
+    fn with_options(items: Vec<H::Digest>, _options: Self::Options) -> Result<Self, Self::Error> {
+        let mut prng = thread_rng();
+        Self::new(items, &mut prng)
+    }
+
+    fn get_domain_len(&self) -> usize {
+        1 << self.depth()
+    }
+
+    fn get_proof_domain_len(proof: &Self::Proof) -> usize {
+        proof.1.len()
+    }
+
+    fn get_multiproof_domain_len(proof: &Self::MultiProof) -> usize {
+        1 << proof.1.depth
+    }
+
     fn commitment(&self) -> H::Digest {
         *self.root()
     }
@@ -626,22 +643,5 @@ where
         proof: &Self::MultiProof,
     ) -> Result<(), Self::Error> {
         SaltedMerkleTree::<H>::verify_batch(&commitment, indexes, items, &proof.0, &proof.1)
-    }
-
-    fn with_options(items: Vec<H::Digest>, _options: Self::Options) -> Result<Self, Self::Error> {
-        let mut prng = thread_rng();
-        Self::new(items, &mut prng)
-    }
-
-    fn get_domain_len(&self) -> usize {
-        1 << self.depth()
-    }
-
-    fn get_proof_domain_len(proof: &Self::Proof) -> usize {
-        proof.1.len()
-    }
-
-    fn get_multiproof_domain_len(proof: &Self::MultiProof) -> usize {
-        1 << proof.1.depth
     }
 }

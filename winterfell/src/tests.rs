@@ -12,6 +12,7 @@ use prover::{
     math::{fields::f64::BaseElement, ExtensionOf, FieldElement},
     matrix::ColMatrix,
 };
+use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 
 use super::*;
 
@@ -239,7 +240,8 @@ impl Prover for LagrangeComplexProver {
     where
         E: math::FieldElement<BaseField = Self::BaseField>,
     {
-        DefaultTraceLde::new(trace_info, main_trace, domain, is_zk)
+        let mut prng = ChaCha20Rng::from_entropy();
+        DefaultTraceLde::new(trace_info, main_trace, domain, is_zk, &mut prng)
     }
 
     fn new_evaluator<'a, E>(

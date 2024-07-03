@@ -32,6 +32,7 @@ pub struct StarkDomain<B: StarkField> {
     domain_offset: B,
 
     /// Extra information needed for constraint evaluation validation when zero-knowledge is enabled.
+    #[cfg(debug_assertions)]
     zk_info: Option<ZkInfo>,
 }
 
@@ -47,6 +48,7 @@ impl<B: StarkField> StarkDomain<B> {
         let domain_gen = B::get_root_of_unity(air.ce_domain_size().ilog2());
         let ce_domain = get_power_series(domain_gen, air.ce_domain_size());
 
+        #[cfg(debug_assertions)]
         let zk_info = if air.is_zk() {
             Some(ZkInfo {
                 original_trace_length: air.trace_length(),
@@ -64,6 +66,7 @@ impl<B: StarkField> StarkDomain<B> {
             ce_to_lde_blowup: air.lde_domain_size() / air.ce_domain_size(),
             ce_domain_mod_mask: air.ce_domain_size() - 1,
             domain_offset: air.domain_offset(),
+            #[cfg(debug_assertions)]
             zk_info,
         }
     }
@@ -87,6 +90,7 @@ impl<B: StarkField> StarkDomain<B> {
             ce_to_lde_blowup: 1,
             ce_domain_mod_mask: ce_domain_size - 1,
             domain_offset,
+            #[cfg(debug_assertions)]
             zk_info: None,
         }
     }
@@ -169,11 +173,13 @@ impl<B: StarkField> StarkDomain<B> {
         self.domain_offset
     }
 
+    #[cfg(debug_assertions)]
     pub(crate) fn zk_info(&self) -> Option<ZkInfo> {
         self.zk_info
     }
 }
 
+#[cfg(debug_assertions)]
 #[derive(Clone, Copy, Debug)]
 pub struct ZkInfo {
     pub(crate) original_trace_length: usize,

@@ -13,6 +13,8 @@ use air::{
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use crypto::{hashers::Blake3_256, DefaultRandomCoin, MerkleTree, RandomCoin};
 use math::{fields::f64::BaseElement, ExtensionOf, FieldElement};
+use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
 use winter_prover::{
     matrix::ColMatrix, DefaultConstraintEvaluator, DefaultTraceLde, Prover, ProverGkrProof,
     StarkDomain, Trace, TracePolyTable,
@@ -207,7 +209,8 @@ impl Prover for LagrangeProver {
     where
         E: math::FieldElement<BaseField = Self::BaseField>,
     {
-        DefaultTraceLde::new(trace_info, main_trace, domain, is_zk)
+        let mut prng = ChaCha20Rng::from_entropy();
+        DefaultTraceLde::new(trace_info, main_trace, domain, is_zk, &mut prng)
     }
 
     fn new_evaluator<'a, E>(

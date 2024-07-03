@@ -4,6 +4,7 @@
 // LICENSE file in the root directory of this source tree.
 
 use alloc::vec::Vec;
+use rand::RngCore;
 use core::marker::PhantomData;
 
 use air::{proof::Queries, LagrangeKernelEvaluationFrame, TraceInfo};
@@ -59,19 +60,16 @@ where
     ///
     /// Returns a tuple containing a [TracePolyTable] with the trace polynomials for the main trace
     /// segment and the new [DefaultTraceLde].
-    pub fn new(
+    pub fn new<R: RngCore>(
         trace_info: &TraceInfo,
         main_trace: &ColMatrix<E::BaseField>,
         domain: &StarkDomain<E::BaseField>,
         is_zk: Option<u32>,
+        prng: &mut R
     ) -> (Self, TracePolyTable<E>) {
         // extend the main execution trace and build a commitment to the extended trace
         let (main_segment_lde, main_segment_vector_com, main_segment_polys) =
-            build_trace_commitment::<E, E::BaseField, H, V>(
-                main_trace,
-                domain,
-                is_zk,
-            );
+            build_trace_commitment::<E, E::BaseField, H, V, R>(main_trace, domain, is_zk, prng);
 
         let trace_poly_table = TracePolyTable::new(main_segment_polys);
         let trace_lde = DefaultTraceLde {
@@ -116,6 +114,7 @@ where
     E: FieldElement,
     H: ElementHasher<BaseField = E::BaseField> + core::marker::Sync,
     V: VectorCommitment<H> + core::marker::Sync,
+    
 {
     type HashFn = H;
     type VC = V;
@@ -137,15 +136,16 @@ where
     /// This function will panic if any of the following are true:
     /// - the number of rows in the provided `aux_trace` does not match the main trace.
     /// - the auxiliary trace has been previously set already.
-    fn set_aux_trace(
+    fn set_aux_trace<R: RngCore>(
         &mut self,
         aux_trace: &ColMatrix<E>,
         domain: &StarkDomain<E::BaseField>,
         is_zk: Option<u32>,
+        prng: &mut R
     ) -> (ColMatrix<E>, H::Digest) {
         // extend the auxiliary trace segment and build a commitment to the extended trace
         let (aux_segment_lde, aux_segment_vector_com, aux_segment_polys) =
-            build_trace_commitment::<E, E, H, Self::VC>(aux_trace, domain, is_zk);
+            build_trace_commitment::<E, E, H, Self::VC, R>(aux_trace, domain, is_zk, prng);
 
         // check errors
         assert!(
@@ -269,16 +269,18 @@ where
 ///
 /// The trace commitment is computed by building a vector containing the hashes of each row of
 /// the extended execution trace, then building a vector commitment to the resulting vector.
-fn build_trace_commitment<E, F, H, V>(
+fn build_trace_commitment<E, F, H, V, R>(
     trace: &ColMatrix<F>,
     domain: &StarkDomain<E::BaseField>,
     is_zk: Option<u32>,
+    prng: &mut R,
 ) -> (RowMatrix<F>, V, ColMatrix<F>)
 where
     E: FieldElement,
     F: FieldElement<BaseField = E::BaseField>,
     H: ElementHasher<BaseField = E::BaseField>,
     V: VectorCommitment<H>,
+    R: RngCore
 {
     // extend the execution trace
     let (trace_lde, trace_polys) = {
@@ -290,7 +292,7 @@ where
         .entered();
         let trace_polys = trace.interpolate_columns();
         let trace_polys = if let Some(h) = is_zk {
-            trace_polys.randomize(h)
+            trace_polys.randomize(h, prng)
         } else {
             trace_polys
         };

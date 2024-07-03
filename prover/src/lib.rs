@@ -59,6 +59,8 @@ use math::{
     ExtensibleField, FieldElement, StarkField, ToElements,
 };
 use maybe_async::{maybe_async, maybe_await};
+use rand::{RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use tracing::{event, info_span, instrument, Level};
 pub use utils::{
     iterators, ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable,
@@ -297,6 +299,8 @@ pub trait Prover {
                 &air,
                 pub_inputs_elements,
             );
+        let mut prng = ChaCha20Rng::from_entropy();
+        let zk_witness_randomizer_degree = air.zk_witness_randomizer_degree::<E>();
 
         // 1 ----- Commit to the execution trace --------------------------------------------------
 
@@ -312,7 +316,7 @@ pub trait Prover {
         let (mut trace_lde, mut trace_polys) = maybe_await!(self.commit_to_main_trace_segment(
             &trace,
             &domain,
-            air.zk_witness_randomizer_degree::<E>(),
+            zk_witness_randomizer_degree,
             &mut channel
         ));
 
@@ -346,7 +350,8 @@ pub trait Prover {
                 let (aux_segment_polys, aux_segment_commitment) = trace_lde.set_aux_trace(
                     &aux_trace,
                     &domain,
-                    air.zk_witness_randomizer_degree::<E>(),
+                    zk_witness_randomizer_degree,
+                    &mut prng,
                 );
 
                 // commit to the LDE of the extended auxiliary trace segment by writing its
@@ -401,8 +406,9 @@ pub trait Prover {
                 composition_poly_trace,
                 &domain,
                 &mut channel,
-                air.zk_witness_randomizer_degree::<E>(),
-                air.trace_length()
+                zk_witness_randomizer_degree,
+                air.trace_length(),
+                &mut prng
             ));
 
         // 4 ----- build DEEP composition polynomial ----------------------------------------------
@@ -534,16 +540,18 @@ pub trait Prover {
     /// The commitment is computed by building a vector containing the hashes of each row in
     /// the evaluation matrix, and then building vector commitment of the resulting vector.
     #[maybe_async]
-    fn build_constraint_commitment<E>(
+    fn build_constraint_commitment<E, R>(
         &self,
         composition_poly_trace: CompositionPolyTrace<E>,
         num_constraint_composition_columns: usize,
         domain: &StarkDomain<Self::BaseField>,
         is_zk: Option<u32>,
         original_trace_len: usize,
+        prng: &mut R,
     ) -> (ConstraintCommitment<E, Self::HashFn, Self::VC>, CompositionPoly<E>)
     where
         E: FieldElement<BaseField = Self::BaseField>,
+        R: RngCore,
     {
         // first, build constraint composition polynomial from its trace as follows:
         // - interpolate the trace into a polynomial in coefficient form
@@ -560,6 +568,7 @@ pub trait Prover {
                 num_constraint_composition_columns,
                 is_zk,
                 original_trace_len,
+                prng,
             )
         });
         //assert_eq!(composition_poly.num_columns(), num_constraint_composition_columns);
@@ -616,7 +625,7 @@ pub trait Prover {
     #[doc(hidden)]
     #[instrument(skip_all)]
     #[maybe_async]
-    fn commit_to_constraint_evaluations<E>(
+    fn commit_to_constraint_evaluations<E, R>(
         &self,
         air: &Self::Air,
         composition_poly_trace: CompositionPolyTrace<E>,
@@ -624,19 +633,22 @@ pub trait Prover {
         channel: &mut ProverChannel<'_, Self::Air, E, Self::HashFn, Self::RandomCoin, Self::VC>,
         is_zk: Option<u32>,
         original_trace_len: usize,
+        prng: &mut R,
     ) -> (ConstraintCommitment<E, Self::HashFn, Self::VC>, CompositionPoly<E>)
     where
         E: FieldElement<BaseField = Self::BaseField>,
+        R: RngCore,
     {
         // first, build a commitment to the evaluations of the constraint composition polynomial
         // columns
         let (constraint_commitment, composition_poly) = maybe_await!(self
-            .build_constraint_commitment::<E>(
+            .build_constraint_commitment::<E, R>(
                 composition_poly_trace,
                 air.context().num_constraint_composition_columns(),
                 domain,
                 is_zk,
-                original_trace_len
+                original_trace_len,
+                prng
             ));
 
         // then, commit to the evaluations of constraints by writing the commitment string of

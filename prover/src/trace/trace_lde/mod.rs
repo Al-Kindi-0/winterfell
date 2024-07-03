@@ -7,6 +7,7 @@ use alloc::vec::Vec;
 
 use air::{proof::Queries, LagrangeKernelEvaluationFrame, TraceInfo};
 use crypto::{ElementHasher, Hasher, VectorCommitment};
+use rand::RngCore;
 
 use super::{ColMatrix, EvaluationFrame, FieldElement, TracePolyTable};
 use crate::StarkDomain;
@@ -45,11 +46,12 @@ pub trait TraceLde<E: FieldElement>: Sync {
     /// This function is expected to panic if any of the following are true:
     /// - the number of rows in the provided `aux_trace` does not match the main trace.
     /// - this segment would exceed the number of segments specified by the trace layout.
-    fn set_aux_trace(
+    fn set_aux_trace<R: RngCore>(
         &mut self,
         aux_trace: &ColMatrix<E>,
         domain: &StarkDomain<E::BaseField>,
-        is_zk: Option<u32>
+        is_zk: Option<u32>,
+        prng: &mut R
     ) -> (ColMatrix<E>, <Self::HashFn as Hasher>::Digest);
 
     /// Reads current and next rows from the main trace segment into the specified frame.

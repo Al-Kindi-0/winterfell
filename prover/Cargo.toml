@@ -38,6 +38,7 @@ maybe_async = { path = "../utils/maybe_async" , package = "winter-maybe-async" }
 tracing = { version = "0.1", default-features = false, features = ["attributes"]}
 utils = { version = "0.9", path = "../utils/core", package = "winter-utils", default-features = false }
 
+rand_chacha = { version = "0.3", default-features = false }
 rand-utils = { version = "0.9", path = "../utils/rand", package = "winter-rand-utils" }
 
 libc-print = "0.1.23"

@@ -8,7 +8,7 @@ use core::{iter::FusedIterator, slice};
 
 use crypto::{ElementHasher, VectorCommitment};
 use math::{fft, polynom, FieldElement};
-use rand_utils::rand_value;
+use rand::{ RngCore, Rng};
 #[cfg(feature = "concurrent")]
 use utils::iterators::*;
 use utils::{batch_iter_mut, iter, iter_mut, uninit_vector};
@@ -298,8 +298,8 @@ impl<E: FieldElement> ColMatrix<E> {
         self.columns
     }
 
-    pub(crate) fn randomize(&self, is_zk: u32) -> Self {
-        // Assumes that k = 1 where |H| + h =< |H|.2^k
+    pub(crate) fn randomize<R: RngCore>(&self, is_zk: u32, prng: &mut R) -> Self {
+        // |H| + h =< |H|.2^k
         let cur_len = self.num_rows();
         let extended_len = (cur_len + is_zk as usize).next_power_of_two();
         let pad_len = extended_len - cur_len;
@@ -309,7 +309,9 @@ impl<E: FieldElement> ColMatrix<E> {
             .map(|col| {
                 let mut added = vec![E::ZERO; pad_len];
                 for a in added.iter_mut() {
-                    *a = rand_value();
+                    let bytes = prng.gen::<[u8; 32]>();
+                    *a = E::from_random_bytes(&bytes[..E::VALUE_SIZE])
+                        .expect("failed to generate randomness");
                 }
 
                 let mut res_col = col.to_vec();
