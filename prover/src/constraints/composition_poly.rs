@@ -75,7 +75,7 @@ impl<E: FieldElement> CompositionPoly<E> {
         let inv_twiddles = fft::get_inv_twiddles::<E::BaseField>(trace.len());
         fft::interpolate_poly_with_offset(&mut trace, &inv_twiddles, domain.offset());
 
-        let mut polys = segment(trace, domain.trace_length(), num_cols);
+        let mut polys = transpose(trace, domain.trace_length(), num_cols);
 
         if is_zk.is_some() {
             let extended_len = (original_trace_len + is_zk.unwrap() as usize).next_power_of_two();

@@ -8,7 +8,7 @@ use alloc::{string::ToString, vec::Vec};
 use math::{FieldElement, StarkField, ToElements};
 use utils::{ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable};
 
-use crate::{ProofOptions, TraceInfo};
+use crate::{ProofOptions, TraceInfo, CONJECTURED};
 
 // PROOF CONTEXT
 // ================================================================================================
@@ -58,7 +58,7 @@ impl Context {
         (self.trace_info.length()
             + self
                 .options
-                .zk_witness_randomizer_degree::<E::BaseField>(self.trace_info.length(), false)
+                .zk_witness_randomizer_degree::<E::BaseField>(self.trace_info.length(), CONJECTURED)
                 .unwrap_or(0) as usize)
             .next_power_of_two()
             * self.options.blowup_factor()

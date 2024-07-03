@@ -50,3 +50,5 @@ pub use air::{
     LagrangeKernelTransitionConstraints, TraceInfo, TransitionConstraintDegree,
     TransitionConstraints,
 };
+
+const CONJECTURED: bool = false;

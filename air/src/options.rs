@@ -10,7 +10,7 @@ use libc_print::libc_println;
 use math::{FieldElement, StarkField, ToElements};
 use utils::{ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable};
 
-use crate::proof::{get_conjectured_security, get_security};
+use crate::proof::get_security;
 
 // CONSTANTS
 // ================================================================================================
@@ -311,11 +311,7 @@ fn zk_randomness_conjectured(
                 n_q += 1;
             }
         }
-        h = compute_degree_randomizing_poly(
-                extension_degree as usize,
-                n_q,
-                num_quotient_polys,
-            );
+        h = compute_degree_randomizing_poly(extension_degree as usize, n_q, num_quotient_polys);
         let ext_trace_domain_size = (trace_domain_size + h).next_power_of_two();
         new_security = get_security(
             base_field_bits,

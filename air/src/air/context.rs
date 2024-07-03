@@ -8,7 +8,7 @@ use core::cmp;
 
 use math::StarkField;
 
-use crate::{air::TransitionConstraintDegree, ProofOptions, TraceInfo};
+use crate::{air::TransitionConstraintDegree, ProofOptions, TraceInfo, CONJECTURED};
 
 // AIR CONTEXT
 // ================================================================================================
@@ -135,7 +135,7 @@ impl<B: StarkField> AirContext<B> {
             );
         }
 
-        let h = options.zk_witness_randomizer_degree::<B>(trace_info.length()).unwrap_or(0);
+        let h = options.zk_witness_randomizer_degree::<B>(trace_info.length(), CONJECTURED).unwrap_or(0);
         let trace_length = trace_info.length();
         let trace_length_ext = (trace_length + h as usize).next_power_of_two();
         let lde_domain_size = trace_length_ext * options.blowup_factor();
