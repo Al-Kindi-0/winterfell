@@ -4,7 +4,6 @@
 // LICENSE file in the root directory of this source tree.
 
 use alloc::vec::Vec;
-use core::cmp;
 
 use math::StarkField;
 
@@ -135,7 +134,9 @@ impl<B: StarkField> AirContext<B> {
             );
         }
 
-        let h = options.zk_witness_randomizer_degree::<B>(trace_info.length(), CONJECTURED).unwrap_or(0);
+        let h = options
+            .zk_witness_randomizer_degree::<B>(trace_info.length(), CONJECTURED)
+            .unwrap_or(0);
         let trace_length = trace_info.length();
         let trace_length_ext = (trace_length + h as usize).next_power_of_two();
         let lde_domain_size = trace_length_ext * options.blowup_factor();
@@ -316,7 +317,11 @@ impl<B: StarkField> AirContext<B> {
         let num_constraint_col =
             (highest_constraint_degree - transition_divisior_degree + trace_length_ext - 1)
                 / trace_length_ext;
-        cmp::max(num_constraint_col, 1).next_power_of_two()
+        if num_constraint_col <= 1 {
+            2
+        } else {
+            num_constraint_col.next_power_of_two()
+        }
     }
 
     // DATA MUTATORS
