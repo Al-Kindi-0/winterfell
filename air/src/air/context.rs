@@ -316,7 +316,7 @@ impl<B: StarkField> AirContext<B> {
         let num_constraint_col =
             (highest_constraint_degree - transition_divisior_degree + trace_length_ext - 1)
                 / trace_length_ext;
-        cmp::max(num_constraint_col, 1)
+        cmp::max(num_constraint_col, 1).next_power_of_two()
     }
 
     // DATA MUTATORS

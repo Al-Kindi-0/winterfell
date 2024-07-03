@@ -74,8 +74,7 @@ impl<E: FieldElement> CompositionPoly<E> {
         // we interpolate this polynomial to transform it into coefficient form.
         let inv_twiddles = fft::get_inv_twiddles::<E::BaseField>(trace.len());
         fft::interpolate_poly_with_offset(&mut trace, &inv_twiddles, domain.offset());
-
-        let mut polys = transpose(trace, domain.trace_length(), num_cols);
+        let mut polys = transpose(trace, num_cols);
 
         if is_zk.is_some() {
             let extended_len = (original_trace_len + is_zk.unwrap() as usize).next_power_of_two();
@@ -119,9 +118,11 @@ impl<E: FieldElement> CompositionPoly<E> {
         self.column_len() - 1
     }
 
-    /// Returns evaluations of all composition polynomial columns at point z.
+    /// Returns evaluations of all composition polynomial columns at point z^m, where m is
+    /// the number of column polynomials.
     pub fn evaluate_at(&self, z: E, is_zk: bool) -> Vec<E> {
-        self.data.evaluate_columns_at(z, is_zk)
+        let z_m = z.exp((self.num_columns() as u32 - is_zk as u32).into());
+        self.data.evaluate_columns_at(z_m, is_zk)
     }
 
     /// Returns a reference to the matrix of individual column polynomials.
@@ -169,16 +170,16 @@ mod tests {
     use math::fields::f128::BaseElement;
 
     #[test]
-    fn segment() {
+    fn transpose() {
         let values = (0u128..16).map(BaseElement::new).collect::<Vec<_>>();
-        let actual = super::segment(values, 4, 4);
+        let actual = super::transpose(values, 4);
 
         #[rustfmt::skip]
         let expected = vec![
-            vec![BaseElement::new(0), BaseElement::new(1), BaseElement::new(2), BaseElement::new(3)],
-            vec![BaseElement::new(4), BaseElement::new(5), BaseElement::new(6), BaseElement::new(7)],
-            vec![BaseElement::new(8), BaseElement::new(9), BaseElement::new(10), BaseElement::new(11)],
-            vec![BaseElement::new(12), BaseElement::new(13), BaseElement::new(14), BaseElement::new(15)],
+            vec![BaseElement::new(0), BaseElement::new(4), BaseElement::new(8), BaseElement::new(12)],
+            vec![BaseElement::new(1), BaseElement::new(5), BaseElement::new(9), BaseElement::new(13)],
+            vec![BaseElement::new(2), BaseElement::new(6), BaseElement::new(10), BaseElement::new(14)],
+            vec![BaseElement::new(3), BaseElement::new(7), BaseElement::new(11), BaseElement::new(15)],
         ];
 
         assert_eq!(expected, actual)

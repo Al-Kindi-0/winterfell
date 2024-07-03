@@ -6,7 +6,6 @@
 use alloc::vec::Vec;
 
 use fri::FriOptions;
-use libc_print::libc_println;
 use math::{FieldElement, StarkField, ToElements};
 use utils::{ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable};
 
@@ -231,7 +230,6 @@ impl ProofOptions {
     {
         if self.is_zk {
             let num_quotient_polys = self.blowup_factor();
-            libc_println!("num_quo polys {:?}", num_quotient_polys);
             //let num_quotient_polys = 1;
             let h_init = compute_degree_randomizing_poly(
                 self.field_extension().degree() as usize,
