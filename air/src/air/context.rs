@@ -3,6 +3,8 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
+use core::cmp;
+
 use alloc::vec::Vec;
 
 use math::StarkField;
@@ -317,11 +319,7 @@ impl<B: StarkField> AirContext<B> {
         let num_constraint_col =
             (highest_constraint_degree - transition_divisior_degree + trace_length_ext - 1)
                 / trace_length_ext;
-        if num_constraint_col <= 1 {
-            2
-        } else {
-            num_constraint_col.next_power_of_two()
-        }
+        cmp::max(num_constraint_col, 1)
     }
 
     // DATA MUTATORS
