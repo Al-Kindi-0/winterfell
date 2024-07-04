@@ -261,7 +261,7 @@ where
             .iter()
             .enumerate()
             .fold(E::ZERO, |result, (i, &value)| {
-                result + z.exp_vartime(((i * (air.trace_poly_degree() + 1)) as u32).into()) * value
+                result + z.exp_vartime(((i * (176)) as u32).into()) * value
             });
     public_coin.reseed(H::hash_elements(&ood_constraint_evaluations));
 

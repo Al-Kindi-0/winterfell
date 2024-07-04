@@ -76,7 +76,6 @@ impl<E: FieldElement> CompositionPoly<E> {
         let x = l - 80;
         let y = (big_l + x - 1) / x;
 
-
         // at this point, combined_poly contains evaluations of the combined constraint polynomial;
         // we interpolate this polynomial to transform it into coefficient form.
         let inv_twiddles = fft::get_inv_twiddles::<E::BaseField>(trace.len());
@@ -84,6 +83,10 @@ impl<E: FieldElement> CompositionPoly<E> {
         //let mut polys = segment(trace, domain.trace_length(), num_cols);
         libc_println!("trace is {:?}", trace);
         let mut polys = segment(trace, x, y);
+        for poly in polys.iter() {
+
+        libc_println!("poly length is {:?}", poly.len());
+        }
         libc_println!("polys is {:?}", polys[0].len());
         libc_println!("polys is {:?}", polys[1].len());
         libc_println!("polys is {:?}", polys[2].len());
@@ -94,8 +97,7 @@ impl<E: FieldElement> CompositionPoly<E> {
         libc_println!("x is {:?}", x);
         libc_println!("y is {:?}", y);
 
-        let mut polys = complement_to(polys, l);
-
+        let mut polys = complement_to(polys, l, prng);
 
         if is_zk.is_some() {
             let extended_len = (original_trace_len + is_zk.unwrap() as usize).next_power_of_two();
@@ -155,16 +157,55 @@ impl<E: FieldElement> CompositionPoly<E> {
     }
 }
 
-fn complement_to<E: FieldElement>(polys: Vec<Vec<E>>, l: usize) -> Vec<Vec<E>> {
-    
+fn complement_to<R: RngCore, E: FieldElement>(
+    polys: Vec<Vec<E>>,
+    l: usize,
+    prng: &mut R,
+) -> Vec<Vec<E>> {
     let mut result = vec![];
-    for poly in polys {
-        let mut res = vec![E::ZERO; l];
-        for (i, entry) in poly.iter().enumerate(){
-            res[i] = *entry;
+    let mut current_poly = vec![E::ZERO; l - polys[0].len()];
+    let mut previous_poly = vec![E::ZERO; l - polys[0].len()];
+
+    for (index, poly) in polys.iter().enumerate().take_while(|(index, _)| *index != polys.len() - 1)
+    {
+        let diff = l - poly.len();
+        libc_println!("polylen is {:?}", poly.len());
+        libc_println!("diff is {:?}", diff);
+        for i in 0..diff {
+            let bytes = prng.gen::<[u8; 32]>();
+            current_poly[i] = E::from_random_bytes(&bytes[..E::VALUE_SIZE])
+                .expect("failed to generate randomness");
         }
+
+        let mut res = vec![];
+        res.extend_from_slice(&poly);
+        res.extend_from_slice(&current_poly);
+        
+
+        for i in 0..previous_poly.len() {
+            res[i] -= previous_poly[i];
+        }
+
+        for i in 0..previous_poly.len() {
+            previous_poly[i] = current_poly[i];
+        }
+
+        //let mut res = vec![E::ZERO; l];
+        //for (i, entry) in poly.iter().enumerate(){
+        //res[i] = *entry;
+        //}
         result.push(res)
     }
+
+    let poly = polys.last().unwrap();
+    let mut res = vec![E::ZERO; l];
+    for (i, entry) in poly.iter().enumerate() {
+        res[i] = *entry;
+    }
+    for i in 0..previous_poly.len() {
+        res[i] -= previous_poly[i];
+    }
+    result.push(res);
     result
 }
 

@@ -6,6 +6,7 @@
 use alloc::vec::Vec;
 
 use crypto::ElementHasher;
+use libc_print::libc_println;
 use math::FieldElement;
 use utils::{
     ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable, SliceReader,
@@ -159,14 +160,17 @@ impl OodFrame {
 
             (current_row, next_row)
         };
+        libc_println!("current_row {:?}", current_row);
+      
 
         // parse the constraint evaluations
         let mut reader = SliceReader::new(&self.evaluations);
-        let evaluations = reader.read_many(num_evaluations)?;
+        let evaluations = reader.read_many(num_evaluations-1)?;
+        libc_println!("evaluations {:?}", evaluations);
         if reader.has_more_bytes() {
             return Err(DeserializationError::UnconsumedBytes);
         }
-
+  libc_println!("here!");
         Ok((
             TraceOodFrame::new(current_row, next_row, main_trace_width, lagrange_kernel_frame),
             evaluations,

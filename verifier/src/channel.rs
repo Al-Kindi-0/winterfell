@@ -4,6 +4,7 @@
 // LICENSE file in the root directory of this source tree.
 
 use alloc::{string::ToString, vec::Vec};
+use libc_print::libc_println;
 use core::marker::PhantomData;
 
 use air::{
@@ -109,6 +110,8 @@ where
         let (fri_layer_queries, fri_layer_proofs) = fri_proof
             .parse_layers::<E, H, V>(lde_domain_size, fri_options.folding_factor())
             .map_err(|err| VerifierError::ProofDeserializationError(err.to_string()))?;
+        libc_println!("here ");
+        libc_println!("constraint_frame_width {:?} ", constraint_frame_width);
 
         // --- parse out-of-domain evaluation frame -----------------------------------------------
         let (ood_trace_frame, ood_constraint_evaluations) = ood_frame
@@ -392,7 +395,7 @@ where
         is_zk: bool,
     ) -> Result<Self, VerifierError> {
         let constraint_frame_width =
-            air.context().num_constraint_composition_columns() + is_zk as usize;
+            air.context().num_constraint_composition_columns() + is_zk as usize -1;
 
         let (query_proofs, evaluations) = queries
             .parse::<E, H, V>(air.lde_domain_size(), num_queries, constraint_frame_width)
