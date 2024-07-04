@@ -5,6 +5,7 @@
 
 use alloc::vec::Vec;
 
+use libc_print::libc_println;
 use math::{fft, FieldElement};
 use rand::{Rng, RngCore};
 
@@ -69,11 +70,32 @@ impl<E: FieldElement> CompositionPoly<E> {
 
         let mut trace = composition_trace.into_inner();
 
+        let h = is_zk.unwrap_or(0) as usize;
+        let l = domain.trace_length();
+        let big_l = trace.len();
+        let x = l - 80;
+        let y = (big_l + x - 1) / x;
+
+
         // at this point, combined_poly contains evaluations of the combined constraint polynomial;
         // we interpolate this polynomial to transform it into coefficient form.
         let inv_twiddles = fft::get_inv_twiddles::<E::BaseField>(trace.len());
         fft::interpolate_poly_with_offset(&mut trace, &inv_twiddles, domain.offset());
-        let mut polys = segment(trace, domain.trace_length(), num_cols);
+        //let mut polys = segment(trace, domain.trace_length(), num_cols);
+        libc_println!("trace is {:?}", trace);
+        let mut polys = segment(trace, x, y);
+        libc_println!("polys is {:?}", polys[0].len());
+        libc_println!("polys is {:?}", polys[1].len());
+        libc_println!("polys is {:?}", polys[2].len());
+        //libc_println!("polys is {:?}", polys);
+        libc_println!("trace.len() is {:?}", big_l);
+        libc_println!("l is {:?}", l);
+        libc_println!("h is {:?}", h);
+        libc_println!("x is {:?}", x);
+        libc_println!("y is {:?}", y);
+
+        let mut polys = complement_to(polys, l);
+
 
         if is_zk.is_some() {
             let extended_len = (original_trace_len + is_zk.unwrap() as usize).next_power_of_two();
@@ -131,6 +153,19 @@ impl<E: FieldElement> CompositionPoly<E> {
     pub fn into_columns(self) -> Vec<Vec<E>> {
         self.data.into_columns()
     }
+}
+
+fn complement_to<E: FieldElement>(polys: Vec<Vec<E>>, l: usize) -> Vec<Vec<E>> {
+    
+    let mut result = vec![];
+    for poly in polys {
+        let mut res = vec![E::ZERO; l];
+        for (i, entry) in poly.iter().enumerate(){
+            res[i] = *entry;
+        }
+        result.push(res)
+    }
+    result
 }
 
 // HELPER FUNCTIONS
