@@ -246,9 +246,9 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
         // Divide out the OOD point z from column polynomials
         iter_mut!(column_polys).take(num_cols).zip(ood_evaluations).for_each(
             |(poly, value_at_z)| {
-                // compute H'_i(x) = (H_i(x) - H_i(z)) / (x - z^m)
+                // compute H'_i(x) = (H_i(x) - H_i(z)) / (x - z)
                 poly[0] -= value_at_z;
-                polynom::syn_div_in_place(poly, 1, z_m);
+                polynom::syn_div_in_place(poly, 1, z);
             },
         );
 
