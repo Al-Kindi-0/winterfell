@@ -155,7 +155,12 @@ impl Deserializable for Context {
         let options = ProofOptions::read_from(source)?;
         let zk_blowup = usize::read_from(source)?;
 
-        Ok(Context { trace_info, field_modulus_bytes, options, zk_blowup})
+        Ok(Context {
+            trace_info,
+            field_modulus_bytes,
+            options,
+            zk_blowup,
+        })
     }
 }
 

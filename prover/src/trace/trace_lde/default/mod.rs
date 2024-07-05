@@ -4,11 +4,11 @@
 // LICENSE file in the root directory of this source tree.
 
 use alloc::vec::Vec;
-use rand::RngCore;
 use core::marker::PhantomData;
 
 use air::{proof::Queries, LagrangeKernelEvaluationFrame, TraceInfo, ZkParameters};
 use crypto::VectorCommitment;
+use rand::RngCore;
 use tracing::info_span;
 
 use super::{
@@ -65,11 +65,16 @@ where
         main_trace: &ColMatrix<E::BaseField>,
         domain: &StarkDomain<E::BaseField>,
         zk_parameters: Option<ZkParameters>,
-        prng: &mut R
+        prng: &mut R,
     ) -> (Self, TracePolyTable<E>) {
         // extend the main execution trace and build a commitment to the extended trace
         let (main_segment_lde, main_segment_vector_com, main_segment_polys) =
-            build_trace_commitment::<E, E::BaseField, H, V, R>(main_trace, domain, zk_parameters, prng);
+            build_trace_commitment::<E, E::BaseField, H, V, R>(
+                main_trace,
+                domain,
+                zk_parameters,
+                prng,
+            );
 
         let trace_poly_table = TracePolyTable::new(main_segment_polys);
         let trace_lde = DefaultTraceLde {
@@ -114,7 +119,6 @@ where
     E: FieldElement,
     H: ElementHasher<BaseField = E::BaseField> + core::marker::Sync,
     V: VectorCommitment<H> + core::marker::Sync,
-    
 {
     type HashFn = H;
     type VC = V;
@@ -141,7 +145,7 @@ where
         aux_trace: &ColMatrix<E>,
         domain: &StarkDomain<E::BaseField>,
         zk_parameters: Option<ZkParameters>,
-        prng: &mut R
+        prng: &mut R,
     ) -> (ColMatrix<E>, H::Digest) {
         // extend the auxiliary trace segment and build a commitment to the extended trace
         let (aux_segment_lde, aux_segment_vector_com, aux_segment_polys) =
@@ -280,7 +284,7 @@ where
     F: FieldElement<BaseField = E::BaseField>,
     H: ElementHasher<BaseField = E::BaseField>,
     V: VectorCommitment<H>,
-    R: RngCore
+    R: RngCore,
 {
     // extend the execution trace
     let (trace_lde, trace_polys) = {

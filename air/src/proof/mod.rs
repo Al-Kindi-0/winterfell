@@ -156,7 +156,7 @@ impl Proof {
             context: Context::new::<DummyField>(
                 TraceInfo::new(1, 8),
                 ProofOptions::new(1, 2, 2, FieldExtension::None, 8, 1, false),
-                1
+                1,
             ),
             num_unique_queries: 0,
             commitments: Commitments::default(),
@@ -227,15 +227,29 @@ pub(crate) fn get_security(
     grinding_factor: u32,
     trace_domain_size: usize,
     collision_resistance: u32,
-    conjectured: bool
+    conjectured: bool,
 ) -> u32 {
-
     if conjectured {
-        get_conjectured_security(base_field_bits, extension_degree, blowup_factor, num_queries, grinding_factor, trace_domain_size, collision_resistance)
+        get_conjectured_security(
+            base_field_bits,
+            extension_degree,
+            blowup_factor,
+            num_queries,
+            grinding_factor,
+            trace_domain_size,
+            collision_resistance,
+        )
     } else {
-        get_proven_security(base_field_bits, extension_degree, blowup_factor, num_queries, grinding_factor, trace_domain_size, collision_resistance)
+        get_proven_security(
+            base_field_bits,
+            extension_degree,
+            blowup_factor,
+            num_queries,
+            grinding_factor,
+            trace_domain_size,
+            collision_resistance,
+        )
     }
-
 }
 /// Computes conjectured security level for the specified proof parameters.
 pub(crate) fn get_conjectured_security(

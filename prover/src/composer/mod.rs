@@ -238,7 +238,6 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
     ) {
         assert!(!self.coefficients.is_empty());
 
-
         let mut column_polys = composition_poly.into_columns();
         let num_cols = ood_evaluations.len();
         let z = self.z;

@@ -5,18 +5,14 @@
 
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use math::fields::f64::BaseElement;
-
 use stark_signature::SecretKey;
 
-
 fn signing(c: &mut Criterion) {
-
     c.bench_function("Signing (random)", |b| {
         b.iter_batched(
             || {
                 let sk = SecretKey::default();
                 sk
-
             },
             |sk| sk.sign([BaseElement::new(0); 4]),
             BatchSize::SmallInput,

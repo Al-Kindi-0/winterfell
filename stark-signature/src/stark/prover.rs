@@ -1,13 +1,16 @@
 use std::marker::PhantomData;
 
-use air::{AuxRandElements, ConstraintCompositionCoefficients, ProofOptions, TraceInfo};
+use air::{AuxRandElements, ConstraintCompositionCoefficients, ProofOptions, TraceInfo, ZkParameters};
 use crypto::{DefaultRandomCoin, ElementHasher, Hasher, SaltedMerkleTree};
 use math::{fields::f64::BaseElement, FieldElement};
 use prover::{
     matrix::ColMatrix, DefaultConstraintEvaluator, DefaultTraceLde, Prover, StarkDomain, Trace,
     TracePolyTable, TraceTable,
 };
-use rand::{distributions::{Distribution, Standard}, SeedableRng};
+use rand::{
+    distributions::{Distribution, Standard},
+    SeedableRng,
+};
 use rand_chacha::ChaCha20Rng;
 use utils::{Deserializable, Serializable};
 
@@ -103,10 +106,10 @@ where
         trace_info: &TraceInfo,
         main_trace: &ColMatrix<Self::BaseField>,
         domain: &StarkDomain<Self::BaseField>,
-        is_zk: Option<u32>,
+        zk_parameters: Option<ZkParameters>,
     ) -> (Self::TraceLde<E>, TracePolyTable<E>) {
         let mut prng = ChaCha20Rng::from_entropy();
-        DefaultTraceLde::new(trace_info, main_trace, domain, is_zk, &mut prng)
+        DefaultTraceLde::new(trace_info, main_trace, domain, zk_parameters, &mut prng)
     }
 
     fn new_evaluator<'a, E: FieldElement<BaseField = Self::BaseField>>(

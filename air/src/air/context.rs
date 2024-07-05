@@ -3,9 +3,8 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use core::cmp;
-
 use alloc::vec::Vec;
+use core::cmp;
 
 use math::StarkField;
 
@@ -356,7 +355,9 @@ impl<B: StarkField> AirContext<B> {
     }
 
     pub fn zk_constraint_randomizer_degree(&self) -> usize {
-        self.zk_parameters().map(|para| para.degree_constraint_randomizer()).unwrap_or(0)
+        self.zk_parameters()
+            .map(|para| para.degree_constraint_randomizer())
+            .unwrap_or(0)
     }
 
     // DATA MUTATORS

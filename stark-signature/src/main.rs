@@ -2,8 +2,7 @@ use std::time::Instant;
 
 use rand::thread_rng;
 use rand_utils::rand_array;
-use stark_signature::SecretKey;
-use stark_signature::Signature;
+use stark_signature::{SecretKey, Signature};
 #[cfg(feature = "std")]
 use tracing::info_span;
 #[cfg(feature = "tracing-forest")]
@@ -11,8 +10,7 @@ use tracing_forest::ForestLayer;
 #[cfg(not(feature = "tracing-forest"))]
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
-use utils::Deserializable;
-use utils::Serializable;
+use utils::{Deserializable, Serializable};
 
 // EXAMPLE RUNNER
 // ================================================================================================

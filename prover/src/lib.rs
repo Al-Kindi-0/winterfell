@@ -42,13 +42,13 @@
 #[macro_use]
 extern crate alloc;
 
-use air::{AuxRandElements, ZkParameters};
 pub use air::{
     proof, proof::Proof, Air, AirContext, Assertion, BoundaryConstraint, BoundaryConstraintGroup,
     ConstraintCompositionCoefficients, ConstraintDivisor, DeepCompositionCoefficients,
     EvaluationFrame, FieldExtension, LagrangeKernelRandElements, ProofOptions, TraceInfo,
     TransitionConstraintDegree,
 };
+use air::{AuxRandElements, ZkParameters};
 pub use crypto;
 use crypto::{ElementHasher, RandomCoin, VectorCommitment};
 use fri::FriProver;
@@ -298,10 +298,10 @@ pub trait Prover {
             ProverChannel::<Self::Air, E, Self::HashFn, Self::RandomCoin, Self::VC>::new(
                 &air,
                 pub_inputs_elements,
-                air.context().zk_blowup_factor()
+                air.context().zk_blowup_factor(),
             );
         let mut prng = ChaCha20Rng::from_entropy();
-        let zk_parameters= air.context().zk_parameters();
+        let zk_parameters = air.context().zk_parameters();
 
         // 1 ----- Commit to the execution trace --------------------------------------------------
 
@@ -348,12 +348,8 @@ pub trait Prover {
             let aux_segment_polys = {
                 // extend the auxiliary trace segment and commit to the extended trace
                 let span = info_span!("commit_to_aux_trace_segment").entered();
-                let (aux_segment_polys, aux_segment_commitment) = trace_lde.set_aux_trace(
-                    &aux_trace,
-                    &domain,
-                    zk_parameters,
-                    &mut prng,
-                );
+                let (aux_segment_polys, aux_segment_commitment) =
+                    trace_lde.set_aux_trace(&aux_trace, &domain, zk_parameters, &mut prng);
 
                 // commit to the LDE of the extended auxiliary trace segment by writing its
                 // commitment into the channel
@@ -456,7 +452,10 @@ pub trait Prover {
 
         // make sure the degree of the DEEP composition polynomial is equal to trace polynomial
         // degree minus 1.
-        assert_eq!(air.context().trace_length_ext() - 2 + air.is_zk() as usize, deep_composition_poly.degree());
+        assert_eq!(
+            air.context().trace_length_ext() - 2 + air.is_zk() as usize,
+            deep_composition_poly.degree()
+        );
 
         // 5 ----- evaluate DEEP composition polynomial over LDE domain ---------------------------
         let deep_evaluations = {
@@ -607,8 +606,12 @@ pub trait Prover {
         E: FieldElement<BaseField = Self::BaseField>,
     {
         // extend the main execution trace and commit to the extended trace
-        let (trace_lde, trace_polys) =
-            maybe_await!(self.new_trace_lde(trace.info(), trace.main_segment(), domain, zk_parameters));
+        let (trace_lde, trace_polys) = maybe_await!(self.new_trace_lde(
+            trace.info(),
+            trace.main_segment(),
+            domain,
+            zk_parameters
+        ));
 
         // get the commitment to the main trace segment LDE
         let main_trace_commitment = trace_lde.get_main_trace_commitment();

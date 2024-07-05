@@ -48,7 +48,7 @@ pub use air::{
     LagrangeConstraintsCompositionCoefficients, LagrangeKernelBoundaryConstraint,
     LagrangeKernelConstraints, LagrangeKernelEvaluationFrame, LagrangeKernelRandElements,
     LagrangeKernelTransitionConstraints, TraceInfo, TransitionConstraintDegree,
-    TransitionConstraints, ZkParameters
+    TransitionConstraints, ZkParameters,
 };
 
 const CONJECTURED: bool = false;

@@ -12,7 +12,8 @@ use winterfell::{
 };
 
 use super::{
-    BaseElement, DefaultRandomCoin, ElementHasher, FieldElement, PhantomData, ProofOptions, Prover, VdfAir, VdfInputs, FORTY_TWO, INV_ALPHA
+    BaseElement, DefaultRandomCoin, ElementHasher, FieldElement, PhantomData, ProofOptions, Prover,
+    VdfAir, VdfInputs, FORTY_TWO, INV_ALPHA,
 };
 
 // VDF PROVER

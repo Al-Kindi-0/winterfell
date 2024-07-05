@@ -72,7 +72,7 @@ fn test() {
     let msg = [BaseElement::ZERO; DIGEST_SIZE];
 
     let pk = hash(sk);
-    let options = ProofOptions::new(4, 16, 0, ::air::FieldExtension::Quadratic, 4, 31, true);
+    let options = ProofOptions::new(4, 16, 0, ::air::FieldExtension::Cubic, 4, 31, true);
     let signature: RpoSignature<crypto::hashers::Rp64_256> = RpoSignature::new(options);
 
     let s = signature.sign(sk, msg);
