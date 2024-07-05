@@ -5,7 +5,7 @@
 
 use std::{vec, vec::Vec};
 
-use air::LagrangeKernelRandElements;
+use air::{LagrangeKernelRandElements, ZkParameters};
 use crypto::MerkleTree;
 use prover::{
     crypto::{hashers::Blake3_256, DefaultRandomCoin, RandomCoin},
@@ -235,13 +235,13 @@ impl Prover for LagrangeComplexProver {
         trace_info: &TraceInfo,
         main_trace: &ColMatrix<Self::BaseField>,
         domain: &StarkDomain<Self::BaseField>,
-        is_zk: Option<u32>,
+        zk_parameters: Option<ZkParameters>,
     ) -> (Self::TraceLde<E>, TracePolyTable<E>)
     where
         E: math::FieldElement<BaseField = Self::BaseField>,
     {
         let mut prng = ChaCha20Rng::from_entropy();
-        DefaultTraceLde::new(trace_info, main_trace, domain, is_zk, &mut prng)
+        DefaultTraceLde::new(trace_info, main_trace, domain, zk_parameters, &mut prng)
     }
 
     fn new_evaluator<'a, E>(

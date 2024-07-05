@@ -52,9 +52,7 @@ impl<B: StarkField> StarkDomain<B> {
         let zk_info = if air.is_zk() {
             Some(ZkInfo {
                 original_trace_length: air.trace_length(),
-                degree_witness_randomizer: air
-                    .zk_witness_randomizer_degree::<B>()
-                    .expect("should not panic as air.is_zk() is true"),
+                degree_witness_randomizer: air.context().zk_witness_randomizer_degree(),
             })
         } else {
             None
@@ -183,5 +181,5 @@ impl<B: StarkField> StarkDomain<B> {
 #[derive(Clone, Copy, Debug)]
 pub struct ZkInfo {
     pub(crate) original_trace_length: usize,
-    pub(crate) degree_witness_randomizer: u32,
+    pub(crate) degree_witness_randomizer: usize,
 }

@@ -3,6 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
+use air::ZkParameters;
 use alloc::vec::Vec;
 
 use math::{fft, FieldElement};
@@ -58,8 +59,7 @@ impl<E: FieldElement> CompositionPoly<E> {
         composition_trace: CompositionPolyTrace<E>,
         domain: &StarkDomain<E::BaseField>,
         num_cols: usize,
-        is_zk: Option<u32>,
-        original_trace_len: usize,
+        zk_parameters: Option<ZkParameters>,
         prng: &mut R,
     ) -> Self {
         assert!(
@@ -69,36 +69,33 @@ impl<E: FieldElement> CompositionPoly<E> {
 
         let mut trace = composition_trace.into_inner();
 
-        // TODO: update h to h_q
-        let h = is_zk.unwrap_or(0) as usize;
+        let h = if let Some(ref zk_parameters) = zk_parameters {
+            zk_parameters.degree_constraint_randomizer()
+        } else {
+            0
+        };
         let l = domain.trace_length();
-        let x = l - h;
+        let degree_chunked_quotient = l - h;
 
         // at this point, combined_poly contains evaluations of the combined constraint polynomial;
         // we interpolate this polynomial to transform it into coefficient form.
         let inv_twiddles = fft::get_inv_twiddles::<E::BaseField>(trace.len());
         fft::interpolate_poly_with_offset(&mut trace, &inv_twiddles, domain.offset());
 
-        let polys = segment(trace, x, num_cols);
+        let polys = segment(trace, degree_chunked_quotient, num_cols);
         let mut polys = complement_to(polys, l, prng);
 
-        if is_zk.is_some() {
-            let extended_len = (original_trace_len + is_zk.unwrap() as usize).next_power_of_two();
-            let pad_len = extended_len - original_trace_len;
-
-            //TODO: Check the degree of randomizer
-            let mut zk_col = vec![E::ZERO; original_trace_len];
+        // add randomizer polynomial for FRI
+        if zk_parameters.is_some() {
+            let extended_len = polys[0].len();
+            let mut zk_col = vec![E::ZERO; extended_len];
 
             for a in zk_col.iter_mut() {
                 let bytes = prng.gen::<[u8; 32]>();
                 *a = E::from_random_bytes(&bytes[..E::VALUE_SIZE])
                     .expect("failed to generate randomness");
             }
-
-            let mut res_col = zk_col.to_vec();
-            let added = vec![E::ZERO; pad_len];
-            res_col.extend_from_slice(&added);
-            polys.push(res_col)
+            polys.push(zk_col)
         }
 
         CompositionPoly { data: ColMatrix::new(polys) }
@@ -149,8 +146,7 @@ fn complement_to<R: RngCore, E: FieldElement>(
     let mut current_poly = vec![E::ZERO; l - polys[0].len()];
     let mut previous_poly = vec![E::ZERO; l - polys[0].len()];
 
-    for (_, poly) in polys.iter().enumerate().take_while(|(index, _)| *index != polys.len() - 1)
-    {
+    for (_, poly) in polys.iter().enumerate().take_while(|(index, _)| *index != polys.len() - 1) {
         let diff = l - poly.len();
         for i in 0..diff {
             let bytes = prng.gen::<[u8; 32]>();
@@ -161,7 +157,6 @@ fn complement_to<R: RngCore, E: FieldElement>(
         let mut res = vec![];
         res.extend_from_slice(&poly);
         res.extend_from_slice(&current_poly);
-        
 
         for i in 0..previous_poly.len() {
             res[i] -= previous_poly[i];

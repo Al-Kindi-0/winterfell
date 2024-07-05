@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 use core::{iter::FusedIterator, slice};
 use crypto::{ElementHasher, VectorCommitment};
 use math::{fft, polynom, FieldElement};
-use rand::{ RngCore, Rng};
+use rand::{Rng, RngCore};
 #[cfg(feature = "concurrent")]
 use utils::iterators::*;
 use utils::{batch_iter_mut, iter, iter_mut, uninit_vector};
@@ -297,10 +297,9 @@ impl<E: FieldElement> ColMatrix<E> {
         self.columns
     }
 
-    pub(crate) fn randomize<R: RngCore>(&self, is_zk: u32, prng: &mut R) -> Self {
-        // |H| + h =< |H|.2^k
+    pub(crate) fn randomize<R: RngCore>(&self, zk_blowup: usize, prng: &mut R) -> Self {
         let cur_len = self.num_rows();
-        let extended_len = (cur_len + is_zk as usize).next_power_of_two();
+        let extended_len = zk_blowup * cur_len;
         let pad_len = extended_len - cur_len;
 
         let randomized_cols: Vec<Vec<E>> = self

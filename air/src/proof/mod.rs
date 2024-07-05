@@ -156,6 +156,7 @@ impl Proof {
             context: Context::new::<DummyField>(
                 TraceInfo::new(1, 8),
                 ProofOptions::new(1, 2, 2, FieldExtension::None, 8, 1, false),
+                1
             ),
             num_unique_queries: 0,
             commitments: Commitments::default(),

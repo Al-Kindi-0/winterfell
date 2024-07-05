@@ -262,7 +262,7 @@ where
                 result
                     + z.exp_vartime(
                         ((i * (air.context().trace_length_ext()
-                            - air.context().is_zk().unwrap_or(0) as usize))
+                            - air.context().zk_constraint_randomizer_degree()))
                             as u32)
                             .into(),
                     ) * value

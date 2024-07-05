@@ -42,7 +42,7 @@
 #[macro_use]
 extern crate alloc;
 
-use air::AuxRandElements;
+use air::{AuxRandElements, ZkParameters};
 pub use air::{
     proof, proof::Proof, Air, AirContext, Assertion, BoundaryConstraint, BoundaryConstraintGroup,
     ConstraintCompositionCoefficients, ConstraintDivisor, DeepCompositionCoefficients,
@@ -184,7 +184,7 @@ pub trait Prover {
         trace_info: &TraceInfo,
         main_trace: &ColMatrix<Self::BaseField>,
         domain: &StarkDomain<Self::BaseField>,
-        is_zk: Option<u32>,
+        zk_parameters: Option<ZkParameters>,
     ) -> (Self::TraceLde<E>, TracePolyTable<E>)
     where
         E: FieldElement<BaseField = Self::BaseField>;
@@ -298,9 +298,10 @@ pub trait Prover {
             ProverChannel::<Self::Air, E, Self::HashFn, Self::RandomCoin, Self::VC>::new(
                 &air,
                 pub_inputs_elements,
+                air.context().zk_blowup_factor()
             );
         let mut prng = ChaCha20Rng::from_entropy();
-        let zk_witness_randomizer_degree = air.zk_witness_randomizer_degree::<E>();
+        let zk_parameters= air.context().zk_parameters();
 
         // 1 ----- Commit to the execution trace --------------------------------------------------
 
@@ -316,7 +317,7 @@ pub trait Prover {
         let (mut trace_lde, mut trace_polys) = maybe_await!(self.commit_to_main_trace_segment(
             &trace,
             &domain,
-            zk_witness_randomizer_degree,
+            zk_parameters,
             &mut channel
         ));
 
@@ -350,7 +351,7 @@ pub trait Prover {
                 let (aux_segment_polys, aux_segment_commitment) = trace_lde.set_aux_trace(
                     &aux_trace,
                     &domain,
-                    zk_witness_randomizer_degree,
+                    zk_parameters,
                     &mut prng,
                 );
 
@@ -406,8 +407,7 @@ pub trait Prover {
                 composition_poly_trace,
                 &domain,
                 &mut channel,
-                zk_witness_randomizer_degree,
-                air.trace_length(),
+                zk_parameters,
                 &mut prng
             ));
 
@@ -456,7 +456,7 @@ pub trait Prover {
 
         // make sure the degree of the DEEP composition polynomial is equal to trace polynomial
         // degree minus 1.
-        assert_eq!(air.context().trace_length_ext() - 2, deep_composition_poly.degree());
+        assert_eq!(air.context().trace_length_ext() - 2 + air.is_zk() as usize, deep_composition_poly.degree());
 
         // 5 ----- evaluate DEEP composition polynomial over LDE domain ---------------------------
         let deep_evaluations = {
@@ -465,7 +465,7 @@ pub trait Prover {
             // we check the following condition in debug mode only because infer_degree is an
             // expensive operation
             debug_assert_eq!(
-                air.context().trace_length_ext() - 2,
+                air.context().trace_length_ext() - 2 + air.is_zk() as usize,
                 infer_degree(&deep_evaluations, domain.offset())
             );
 
@@ -545,8 +545,7 @@ pub trait Prover {
         composition_poly_trace: CompositionPolyTrace<E>,
         num_constraint_composition_columns: usize,
         domain: &StarkDomain<Self::BaseField>,
-        is_zk: Option<u32>,
-        original_trace_len: usize,
+        zk_parameters: Option<ZkParameters>,
         prng: &mut R,
     ) -> (ConstraintCommitment<E, Self::HashFn, Self::VC>, CompositionPoly<E>)
     where
@@ -566,8 +565,7 @@ pub trait Prover {
                 composition_poly_trace,
                 domain,
                 num_constraint_composition_columns,
-                is_zk,
-                original_trace_len,
+                zk_parameters,
                 prng,
             )
         });
@@ -602,7 +600,7 @@ pub trait Prover {
         &self,
         trace: &Self::Trace,
         domain: &StarkDomain<Self::BaseField>,
-        is_zk: Option<u32>,
+        zk_parameters: Option<ZkParameters>,
         channel: &mut ProverChannel<'_, Self::Air, E, Self::HashFn, Self::RandomCoin, Self::VC>,
     ) -> (Self::TraceLde<E>, TracePolyTable<E>)
     where
@@ -610,7 +608,7 @@ pub trait Prover {
     {
         // extend the main execution trace and commit to the extended trace
         let (trace_lde, trace_polys) =
-            maybe_await!(self.new_trace_lde(trace.info(), trace.main_segment(), domain, is_zk));
+            maybe_await!(self.new_trace_lde(trace.info(), trace.main_segment(), domain, zk_parameters));
 
         // get the commitment to the main trace segment LDE
         let main_trace_commitment = trace_lde.get_main_trace_commitment();
@@ -631,8 +629,7 @@ pub trait Prover {
         composition_poly_trace: CompositionPolyTrace<E>,
         domain: &StarkDomain<Self::BaseField>,
         channel: &mut ProverChannel<'_, Self::Air, E, Self::HashFn, Self::RandomCoin, Self::VC>,
-        is_zk: Option<u32>,
-        original_trace_len: usize,
+        zk_parameters: Option<ZkParameters>,
         prng: &mut R,
     ) -> (ConstraintCommitment<E, Self::HashFn, Self::VC>, CompositionPoly<E>)
     where
@@ -646,8 +643,7 @@ pub trait Prover {
                 composition_poly_trace,
                 air.context().num_constraint_composition_columns(),
                 domain,
-                is_zk,
-                original_trace_len,
+                zk_parameters,
                 prng
             ));
 

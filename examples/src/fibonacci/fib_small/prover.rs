@@ -1,3 +1,4 @@
+use air::ZkParameters;
 use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 // Copyright (c) Facebook, Inc. and its affiliates.
 //
@@ -83,10 +84,10 @@ where
         trace_info: &TraceInfo,
         main_trace: &ColMatrix<Self::BaseField>,
         domain: &StarkDomain<Self::BaseField>,
-        is_zk: Option<u32>,
+        zk_parameters: Option<ZkParameters>,
     ) -> (Self::TraceLde<E>, TracePolyTable<E>) {
         let mut prng = ChaCha20Rng::from_entropy();
-        DefaultTraceLde::new(trace_info, main_trace, domain, is_zk, &mut prng)
+        DefaultTraceLde::new(trace_info, main_trace, domain, zk_parameters, &mut prng)
     }
 
     fn new_evaluator<'a, E: FieldElement<BaseField = Self::BaseField>>(

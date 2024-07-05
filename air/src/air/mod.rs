@@ -8,7 +8,7 @@ use alloc::{collections::BTreeMap, vec::Vec};
 use crypto::{RandomCoin, RandomCoinError};
 use math::{fft, ExtensibleField, ExtensionOf, FieldElement, StarkField, ToElements};
 
-use crate::{ProofOptions, CONJECTURED};
+use crate::ProofOptions;
 
 mod aux;
 pub use aux::{AuxRandElements, GkrVerifier};
@@ -17,7 +17,7 @@ mod trace_info;
 pub use trace_info::TraceInfo;
 
 mod context;
-pub use context::AirContext;
+pub use context::{AirContext, ZkParameters};
 
 mod assertions;
 pub use assertions::Assertion;
@@ -604,14 +604,5 @@ pub trait Air: Send + Sync {
     /// Returns whether zero-knowledge is enabled.
     fn is_zk(&self) -> bool {
         self.options().is_zk()
-    }
-
-    /// Computes a lower bound on the degree of the polynomial used for randomizing the witness
-    /// polynomials.
-    fn zk_witness_randomizer_degree<E>(&self) -> Option<u32>
-    where
-        E: FieldElement,
-    {
-        self.options().zk_witness_randomizer_degree::<E::BaseField>(self.trace_length(), CONJECTURED)
     }
 }

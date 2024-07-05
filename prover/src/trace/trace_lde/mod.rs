@@ -5,7 +5,7 @@
 
 use alloc::vec::Vec;
 
-use air::{proof::Queries, LagrangeKernelEvaluationFrame, TraceInfo};
+use air::{proof::Queries, LagrangeKernelEvaluationFrame, TraceInfo, ZkParameters};
 use crypto::{ElementHasher, Hasher, VectorCommitment};
 use rand::RngCore;
 
@@ -50,7 +50,7 @@ pub trait TraceLde<E: FieldElement>: Sync {
         &mut self,
         aux_trace: &ColMatrix<E>,
         domain: &StarkDomain<E::BaseField>,
-        is_zk: Option<u32>,
+        zk_parameters: Option<ZkParameters>,
         prng: &mut R
     ) -> (ColMatrix<E>, <Self::HashFn as Hasher>::Digest);
 

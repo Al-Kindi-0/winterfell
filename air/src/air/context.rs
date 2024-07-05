@@ -28,7 +28,7 @@ pub struct AirContext<B: StarkField> {
     pub(super) lde_domain_generator: B,
     pub(super) num_transition_exemptions: usize,
     pub(super) trace_length_ext: usize,
-    pub(super) is_zk: Option<u32>,
+    pub(super) zk_parameters: Option<ZkParameters>,
 }
 
 impl<B: StarkField> AirContext<B> {
@@ -141,7 +141,18 @@ impl<B: StarkField> AirContext<B> {
             .unwrap_or(0);
         let trace_length = trace_info.length();
         let trace_length_ext = (trace_length + h as usize).next_power_of_two();
+        let zk_blowup = trace_length_ext / trace_length;
         let lde_domain_size = trace_length_ext * options.blowup_factor();
+        let h_q = options.num_queries() + 1;
+        let zk_parameters = if options.is_zk() {
+            Some(ZkParameters {
+                degree_witness_randomizer: h as usize,
+                degree_constraint_randomizer: h_q,
+                zk_blowup_witness: zk_blowup,
+            })
+        } else {
+            None
+        };
 
         // determine minimum blowup factor needed to evaluate transition constraints by taking
         // the blowup factor of the highest degree constraint
@@ -178,7 +189,7 @@ impl<B: StarkField> AirContext<B> {
             lde_domain_generator: B::get_root_of_unity(lde_domain_size.ilog2()),
             num_transition_exemptions: 1,
             trace_length_ext,
-            is_zk: Some(h),
+            zk_parameters,
         }
     }
 
@@ -320,9 +331,10 @@ impl<B: StarkField> AirContext<B> {
             (highest_constraint_degree - transition_divisior_degree + trace_length_ext - 1)
                 / trace_length_ext;
 
-        if let Some(h) = self.is_zk {
+        if self.zk_parameters.is_some() {
             let quotient_degree = num_constraint_col * self.trace_length_ext();
-            let x = self.trace_length_ext() - h as usize;
+            let x =
+                self.trace_length_ext() - self.zk_parameters().unwrap().degree_witness_randomizer();
             let k = (quotient_degree + x - 1) / x;
 
             k
@@ -331,8 +343,20 @@ impl<B: StarkField> AirContext<B> {
         }
     }
 
-    pub fn is_zk(&self) -> Option<u32> {
-        self.is_zk
+    pub fn zk_parameters(&self) -> Option<ZkParameters> {
+        self.zk_parameters
+    }
+
+    pub fn zk_blowup_factor(&self) -> usize {
+        self.zk_parameters().map(|para| para.zk_blowup_witness()).unwrap_or(1)
+    }
+
+    pub fn zk_witness_randomizer_degree(&self) -> usize {
+        self.zk_parameters().map(|para| para.degree_witness_randomizer()).unwrap_or(0)
+    }
+
+    pub fn zk_constraint_randomizer_degree(&self) -> usize {
+        self.zk_parameters().map(|para| para.degree_constraint_randomizer()).unwrap_or(0)
     }
 
     // DATA MUTATORS
@@ -381,5 +405,24 @@ impl<B: StarkField> AirContext<B> {
 
         self.num_transition_exemptions = n;
         self
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct ZkParameters {
+    degree_witness_randomizer: usize,
+    degree_constraint_randomizer: usize,
+    zk_blowup_witness: usize,
+}
+
+impl ZkParameters {
+    pub fn degree_witness_randomizer(&self) -> usize {
+        self.degree_witness_randomizer
+    }
+    pub fn degree_constraint_randomizer(&self) -> usize {
+        self.degree_constraint_randomizer
+    }
+    pub fn zk_blowup_witness(&self) -> usize {
+        self.zk_blowup_witness
     }
 }

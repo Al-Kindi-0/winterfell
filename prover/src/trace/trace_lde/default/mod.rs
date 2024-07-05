@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 use rand::RngCore;
 use core::marker::PhantomData;
 
-use air::{proof::Queries, LagrangeKernelEvaluationFrame, TraceInfo};
+use air::{proof::Queries, LagrangeKernelEvaluationFrame, TraceInfo, ZkParameters};
 use crypto::VectorCommitment;
 use tracing::info_span;
 
@@ -64,12 +64,12 @@ where
         trace_info: &TraceInfo,
         main_trace: &ColMatrix<E::BaseField>,
         domain: &StarkDomain<E::BaseField>,
-        is_zk: Option<u32>,
+        zk_parameters: Option<ZkParameters>,
         prng: &mut R
     ) -> (Self, TracePolyTable<E>) {
         // extend the main execution trace and build a commitment to the extended trace
         let (main_segment_lde, main_segment_vector_com, main_segment_polys) =
-            build_trace_commitment::<E, E::BaseField, H, V, R>(main_trace, domain, is_zk, prng);
+            build_trace_commitment::<E, E::BaseField, H, V, R>(main_trace, domain, zk_parameters, prng);
 
         let trace_poly_table = TracePolyTable::new(main_segment_polys);
         let trace_lde = DefaultTraceLde {
@@ -140,12 +140,12 @@ where
         &mut self,
         aux_trace: &ColMatrix<E>,
         domain: &StarkDomain<E::BaseField>,
-        is_zk: Option<u32>,
+        zk_parameters: Option<ZkParameters>,
         prng: &mut R
     ) -> (ColMatrix<E>, H::Digest) {
         // extend the auxiliary trace segment and build a commitment to the extended trace
         let (aux_segment_lde, aux_segment_vector_com, aux_segment_polys) =
-            build_trace_commitment::<E, E, H, Self::VC, R>(aux_trace, domain, is_zk, prng);
+            build_trace_commitment::<E, E, H, Self::VC, R>(aux_trace, domain, zk_parameters, prng);
 
         // check errors
         assert!(
@@ -272,7 +272,7 @@ where
 fn build_trace_commitment<E, F, H, V, R>(
     trace: &ColMatrix<F>,
     domain: &StarkDomain<E::BaseField>,
-    is_zk: Option<u32>,
+    zk_parameters: Option<ZkParameters>,
     prng: &mut R,
 ) -> (RowMatrix<F>, V, ColMatrix<F>)
 where
@@ -291,8 +291,8 @@ where
         )
         .entered();
         let trace_polys = trace.interpolate_columns();
-        let trace_polys = if let Some(h) = is_zk {
-            trace_polys.randomize(h, prng)
+        let trace_polys = if zk_parameters.is_some() {
+            trace_polys.randomize(zk_parameters.expect("should not fail").zk_blowup_witness(), prng)
         } else {
             trace_polys
         };
