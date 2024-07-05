@@ -8,7 +8,7 @@ use alloc::{string::ToString, vec::Vec};
 use math::{FieldElement, StarkField, ToElements};
 use utils::{ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable};
 
-use crate::{ProofOptions, TraceInfo, CONJECTURED};
+use crate::{ProofOptions, TraceInfo};
 
 // PROOF CONTEXT
 // ================================================================================================
