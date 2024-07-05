@@ -229,12 +229,9 @@ impl ProofOptions {
         E: FieldElement,
     {
         if self.is_zk {
-            let num_quotient_polys = self.blowup_factor();
-            //let num_quotient_polys = 1;
             let h_init = compute_degree_randomizing_poly(
                 self.field_extension().degree() as usize,
                 self.num_queries(),
-                num_quotient_polys,
             );
 
             let h = zk_randomness_conjectured(
@@ -245,7 +242,6 @@ impl ProofOptions {
                 self.num_queries(),
                 self.grinding_factor(),
                 trace_domain_size,
-                num_quotient_polys,
                 128,
                 conjectured,
             );
@@ -259,9 +255,8 @@ impl ProofOptions {
 fn compute_degree_randomizing_poly(
     extension_degree: usize,
     num_fri_queries: usize,
-    num_quotient_polys: usize,
 ) -> usize {
-    2 * num_quotient_polys * (extension_degree + num_fri_queries) + num_fri_queries
+    2 * (extension_degree + num_fri_queries)
 }
 
 fn zk_randomness_conjectured(
@@ -272,7 +267,6 @@ fn zk_randomness_conjectured(
     num_queries: usize,
     grinding_factor: u32,
     trace_domain_size: usize,
-    num_quotient_polys: usize,
     collision_resistance: u32,
     conjectured: bool,
 ) -> u32 {
@@ -309,7 +303,7 @@ fn zk_randomness_conjectured(
                 n_q += 1;
             }
         }
-        h = compute_degree_randomizing_poly(extension_degree as usize, n_q, num_quotient_polys);
+        h = compute_degree_randomizing_poly(extension_degree as usize, n_q);
         let ext_trace_domain_size = (trace_domain_size + h).next_power_of_two();
         new_security = get_security(
             base_field_bits,

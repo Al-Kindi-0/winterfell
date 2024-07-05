@@ -6,7 +6,6 @@
 use alloc::vec::Vec;
 
 use crypto::{ElementHasher, Hasher, VectorCommitment};
-use libc_print::libc_println;
 use math::FieldElement;
 use utils::{
     ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable, SliceReader,
@@ -101,9 +100,6 @@ impl Queries {
         // make sure we have enough bytes to read the expected number of queries
         let num_query_bytes = E::ELEMENT_BYTES * values_per_query;
         let expected_bytes = num_queries * num_query_bytes;
-        libc_println!("num_queries {:?}", num_queries);
-        libc_println!("values per query {:?}", values_per_query);
-        libc_println!("E::ELEMENT_BYTES {:?}", E::ELEMENT_BYTES);
         if self.values.len() != expected_bytes {
             return Err(DeserializationError::InvalidValue(format!(
                 "expected {} query value bytes, but was {}",

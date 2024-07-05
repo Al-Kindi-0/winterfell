@@ -5,7 +5,6 @@
 
 use alloc::vec::Vec;
 
-use libc_print::libc_println;
 use math::{fft, FieldElement};
 use rand::{Rng, RngCore};
 
@@ -70,33 +69,17 @@ impl<E: FieldElement> CompositionPoly<E> {
 
         let mut trace = composition_trace.into_inner();
 
+        // TODO: update h to h_q
         let h = is_zk.unwrap_or(0) as usize;
         let l = domain.trace_length();
-        let big_l = trace.len();
-        let x = l - 80;
-        let y = (big_l + x - 1) / x;
+        let x = l - h;
 
         // at this point, combined_poly contains evaluations of the combined constraint polynomial;
         // we interpolate this polynomial to transform it into coefficient form.
         let inv_twiddles = fft::get_inv_twiddles::<E::BaseField>(trace.len());
         fft::interpolate_poly_with_offset(&mut trace, &inv_twiddles, domain.offset());
-        //let mut polys = segment(trace, domain.trace_length(), num_cols);
-        libc_println!("trace is {:?}", trace);
-        let mut polys = segment(trace, x, y);
-        for poly in polys.iter() {
 
-        libc_println!("poly length is {:?}", poly.len());
-        }
-        libc_println!("polys is {:?}", polys[0].len());
-        libc_println!("polys is {:?}", polys[1].len());
-        libc_println!("polys is {:?}", polys[2].len());
-        //libc_println!("polys is {:?}", polys);
-        libc_println!("trace.len() is {:?}", big_l);
-        libc_println!("l is {:?}", l);
-        libc_println!("h is {:?}", h);
-        libc_println!("x is {:?}", x);
-        libc_println!("y is {:?}", y);
-
+        let polys = segment(trace, x, num_cols);
         let mut polys = complement_to(polys, l, prng);
 
         if is_zk.is_some() {
@@ -166,11 +149,9 @@ fn complement_to<R: RngCore, E: FieldElement>(
     let mut current_poly = vec![E::ZERO; l - polys[0].len()];
     let mut previous_poly = vec![E::ZERO; l - polys[0].len()];
 
-    for (index, poly) in polys.iter().enumerate().take_while(|(index, _)| *index != polys.len() - 1)
+    for (_, poly) in polys.iter().enumerate().take_while(|(index, _)| *index != polys.len() - 1)
     {
         let diff = l - poly.len();
-        libc_println!("polylen is {:?}", poly.len());
-        libc_println!("diff is {:?}", diff);
         for i in 0..diff {
             let bytes = prng.gen::<[u8; 32]>();
             current_poly[i] = E::from_random_bytes(&bytes[..E::VALUE_SIZE])
@@ -189,11 +170,6 @@ fn complement_to<R: RngCore, E: FieldElement>(
         for i in 0..previous_poly.len() {
             previous_poly[i] = current_poly[i];
         }
-
-        //let mut res = vec![E::ZERO; l];
-        //for (i, entry) in poly.iter().enumerate(){
-        //res[i] = *entry;
-        //}
         result.push(res)
     }
 

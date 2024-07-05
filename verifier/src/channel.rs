@@ -4,7 +4,6 @@
 // LICENSE file in the root directory of this source tree.
 
 use alloc::{string::ToString, vec::Vec};
-use libc_print::libc_println;
 use core::marker::PhantomData;
 
 use air::{
@@ -110,8 +109,6 @@ where
         let (fri_layer_queries, fri_layer_proofs) = fri_proof
             .parse_layers::<E, H, V>(lde_domain_size, fri_options.folding_factor())
             .map_err(|err| VerifierError::ProofDeserializationError(err.to_string()))?;
-        libc_println!("here ");
-        libc_println!("constraint_frame_width {:?} ", constraint_frame_width);
 
         // --- parse out-of-domain evaluation frame -----------------------------------------------
         let (ood_trace_frame, ood_constraint_evaluations) = ood_frame
@@ -319,7 +316,6 @@ where
         // parse main trace segment queries
         // In the case zero-knowledge is enabled, we parse the randomizer polynomial as well
         let main_segment_width = air.trace_info().main_trace_width();
-        //let main_segment_width = air.trace_info().main_trace_width() + air.is_zk() as usize;
         let main_segment_queries = queries.remove(0);
         let (main_segment_query_proofs, main_segment_states) = main_segment_queries
             .parse::<E::BaseField, H, V>(air.lde_domain_size(), num_queries, main_segment_width)
@@ -395,7 +391,7 @@ where
         is_zk: bool,
     ) -> Result<Self, VerifierError> {
         let constraint_frame_width =
-            air.context().num_constraint_composition_columns() + is_zk as usize -1;
+            air.context().num_constraint_composition_columns() + is_zk as usize;
 
         let (query_proofs, evaluations) = queries
             .parse::<E, H, V>(air.lde_domain_size(), num_queries, constraint_frame_width)

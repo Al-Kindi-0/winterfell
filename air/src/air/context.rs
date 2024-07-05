@@ -7,7 +7,6 @@ use core::cmp;
 
 use alloc::vec::Vec;
 
-use libc_print::libc_println;
 use math::StarkField;
 
 use crate::{air::TransitionConstraintDegree, ProofOptions, TraceInfo, CONJECTURED};
@@ -143,10 +142,6 @@ impl<B: StarkField> AirContext<B> {
         let trace_length = trace_info.length();
         let trace_length_ext = (trace_length + h as usize).next_power_of_two();
         let lde_domain_size = trace_length_ext * options.blowup_factor();
-
-        libc_println!("original trace length {:?}", trace_length);
-        libc_println!("original trace length ext {:?}", trace_length_ext);
-        libc_println!("original lde {:?}", lde_domain_size);
 
         // determine minimum blowup factor needed to evaluate transition constraints by taking
         // the blowup factor of the highest degree constraint
@@ -324,26 +319,20 @@ impl<B: StarkField> AirContext<B> {
         let num_constraint_col =
             (highest_constraint_degree - transition_divisior_degree + trace_length_ext - 1)
                 / trace_length_ext;
-                libc_println!("num_constraint_col {:?}", num_constraint_col);
-        
+
         if let Some(h) = self.is_zk {
-            let h = 80;
-            let ce_domain_size = num_constraint_col * self.lde_domain_size();
-            let x = self.lde_domain_size() - h as usize;
-            let k = (ce_domain_size + x - 1) / x;
+            let quotient_degree = num_constraint_col * self.trace_length_ext();
+            let x = self.trace_length_ext() - h as usize;
+            let k = (quotient_degree + x - 1) / x;
 
-            libc_println!("k is {:?}", k);
-            libc_println!("h is {:?}", h);
-            libc_println!("ce_domain_size  is {:?}", ce_domain_size);
-            libc_println!("lde_domain_size  is {:?}", self.lde_domain_size());
-
-
-           cmp::max(num_constraint_col, 1)+4
-
-        } else{
-            cmp::max(num_constraint_col, 1)+4
-
+            k
+        } else {
+            cmp::max(num_constraint_col, 1)
         }
+    }
+
+    pub fn is_zk(&self) -> Option<u32> {
+        self.is_zk
     }
 
     // DATA MUTATORS

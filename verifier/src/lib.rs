@@ -42,7 +42,6 @@ use air::{AuxRandElements, GkrVerifier};
 pub use crypto;
 use crypto::{ElementHasher, Hasher, RandomCoin, VectorCommitment};
 use fri::FriVerifier;
-use libc_print::libc_println;
 pub use math;
 use math::{
     fields::{CubeExtension, QuadExtension},
@@ -255,13 +254,18 @@ where
     // H(X) = \sum_{i=0}^{m-1} X^{i * l} H_i(X).
     // Also, reseed the public coin with the OOD constraint evaluations received from the prover.
     let ood_constraint_evaluations = channel.read_ood_constraint_evaluations();
-    libc_println!("ood_constraint eval {:?}", ood_constraint_evaluations);
     let ood_constraint_evaluation_2 =
         ood_constraint_evaluations
             .iter()
             .enumerate()
             .fold(E::ZERO, |result, (i, &value)| {
-                result + z.exp_vartime(((i * (176)) as u32).into()) * value
+                result
+                    + z.exp_vartime(
+                        ((i * (air.context().trace_length_ext()
+                            - air.context().is_zk().unwrap_or(0) as usize))
+                            as u32)
+                            .into(),
+                    ) * value
             });
     public_coin.reseed(H::hash_elements(&ood_constraint_evaluations));
 

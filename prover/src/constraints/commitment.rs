@@ -4,7 +4,6 @@
 // LICENSE file in the root directory of this source tree.
 
 use alloc::vec::Vec;
-use libc_print::libc_println;
 use core::marker::PhantomData;
 
 use air::proof::Queries;
@@ -73,7 +72,6 @@ where
         let mut evaluations = Vec::new();
         for &position in positions {
             let row = self.evaluations.row(position).to_vec();
-            libc_println!("row {:?}", row);
             evaluations.push(row);
         }
 
