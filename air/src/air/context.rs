@@ -334,7 +334,7 @@ impl<B: StarkField> AirContext<B> {
         if self.zk_parameters.is_some() {
             let quotient_degree = num_constraint_col * self.trace_length_ext();
             let x =
-                self.trace_length_ext() - self.zk_parameters().unwrap().degree_witness_randomizer();
+                self.trace_length_ext() - self.zk_parameters().unwrap().degree_constraint_randomizer();
             let k = (quotient_degree + x - 1) / x;
 
             k
