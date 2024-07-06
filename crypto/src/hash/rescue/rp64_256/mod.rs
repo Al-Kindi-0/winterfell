@@ -305,14 +305,14 @@ impl Rp64_256 {
     #[inline(always)]
     pub fn apply_round(state: &mut [BaseElement; STATE_WIDTH], round: usize) {
         // apply first half of Rescue round
-        Self::apply_sbox(state);
         Self::apply_mds(state);
         Self::add_constants(state, &ARK1[round]);
+        Self::apply_sbox(state);
 
         // apply second half of Rescue round
-        Self::apply_inv_sbox(state);
         Self::apply_mds(state);
         Self::add_constants(state, &ARK2[round]);
+        Self::apply_inv_sbox(state);
     }
 
     // HELPER FUNCTIONS
