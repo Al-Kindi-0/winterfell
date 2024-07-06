@@ -18,6 +18,7 @@ pub struct Context {
     trace_info: TraceInfo,
     field_modulus_bytes: Vec<u8>,
     options: ProofOptions,
+    // TODO: Investigate if this creates an attack on the verifier with regards to security level
     zk_blowup: usize,
 }
 
@@ -90,6 +91,10 @@ impl Context {
     pub fn options(&self) -> &ProofOptions {
         &self.options
     }
+
+    pub fn zk_blowup(&self) -> usize {
+        self.zk_blowup
+    }
 }
 
 impl<E: StarkField> ToElements<E> for Context {
@@ -130,6 +135,7 @@ impl Serializable for Context {
         target.write_u8(self.field_modulus_bytes.len() as u8);
         target.write_bytes(&self.field_modulus_bytes);
         self.options.write_into(target);
+        self.zk_blowup.write_into(target);
     }
 }
 

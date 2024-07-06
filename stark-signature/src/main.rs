@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use crypto::hashers::Rp64_256;
 use rand::thread_rng;
 use rand_utils::rand_array;
 use stark_signature::{SecretKey, Signature};
@@ -53,6 +54,13 @@ fn main() {
     println!("---------------------\nSignature generated in {} ms", now.elapsed().as_millis());
 
     let signature_bytes = signature.to_bytes();
+    println!("Signature size: {:.1} KB", signature_bytes.len() as f64 / 1024f64);
+
+    let proven_security_level = signature.proof.security_level::<Rp64_256>(false);
+    println!(
+        "security: {} bits (proven)",
+         proven_security_level,
+    );
 
     // verify the signature
     println!("---------------------");

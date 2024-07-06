@@ -72,9 +72,12 @@ fn test() {
     let msg = [BaseElement::ZERO; DIGEST_SIZE];
 
     let pk = hash(sk);
-    let options = ProofOptions::new(4, 16, 0, ::air::FieldExtension::Cubic, 4, 31, true);
+    let options = ProofOptions::new(80, 8, 0, ::air::FieldExtension::Cubic, 4, 31, true);
     let signature: RpoSignature<crypto::hashers::Rp64_256> = RpoSignature::new(options);
 
+
     let s = signature.sign(sk, msg);
-    signature.verify(pk, msg, s).expect("msg");
+    let s_bytes = s.to_bytes();
+    let s = <Proof as utils::Deserializable>::read_from_bytes(&s_bytes);
+    signature.verify(pk, msg, s.unwrap()).expect("msg");
 }

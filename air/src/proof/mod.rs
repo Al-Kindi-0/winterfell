@@ -113,7 +113,7 @@ impl Proof {
                 self.context.options().blowup_factor(),
                 self.options().num_queries(),
                 self.options().grinding_factor(),
-                self.trace_info().length(),
+                self.trace_info().length() * self.context.zk_blowup(),
                 H::COLLISION_RESISTANCE,
             )
         } else {
@@ -123,7 +123,7 @@ impl Proof {
                 self.context.options().blowup_factor(),
                 self.options().num_queries(),
                 self.options().grinding_factor(),
-                self.trace_info().length(),
+                self.trace_info().length() * self.context.zk_blowup(),
                 H::COLLISION_RESISTANCE,
             )
         }

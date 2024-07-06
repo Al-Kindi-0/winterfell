@@ -6,20 +6,23 @@
 use structopt::StructOpt;
 use winterfell::{
     crypto::hashers::{Rp64_256, RpJive64_256},
-    math::fields::f128::BaseElement,
+    math::fields::f64::BaseElement,
     FieldExtension, Proof, ProofOptions, VerifierError,
 };
 
-pub mod fibonacci;
-#[cfg(feature = "std")]
-pub mod lamport;
-#[cfg(feature = "std")]
-pub mod merkle;
-pub mod rescue;
-#[cfg(feature = "std")]
-pub mod rescue_raps;
+//pub mod fibonacci;
+//#[cfg(feature = "std")]
+//pub mod lamport;
+//#[cfg(feature = "std")]
+//pub mod merkle;
+//pub mod rescue;
+//#[cfg(feature = "std")]
+//pub mod rescue_raps;
+//pub mod vdf;
+
+pub mod rpo_hash_cycle;
+
 pub mod utils;
-pub mod vdf;
 
 #[cfg(test)]
 mod tests;
@@ -30,6 +33,7 @@ mod tests;
 pub type Blake3_192 = winterfell::crypto::hashers::Blake3_192<BaseElement>;
 pub type Blake3_256 = winterfell::crypto::hashers::Blake3_256<BaseElement>;
 pub type Sha3_256 = winterfell::crypto::hashers::Sha3_256<BaseElement>;
+pub type Rpo256 = Rp64_256;
 
 pub trait Example {
     fn prove(&self) -> Proof;
@@ -59,11 +63,11 @@ pub struct ExampleOptions {
     blowup_factor: Option<usize>,
 
     /// Grinding factor for query seed
-    #[structopt(short = "g", long = "grinding", default_value = "16")]
+    #[structopt(short = "g", long = "grinding", default_value = "0")]
     grinding_factor: u32,
 
     /// Field extension degree for composition polynomial
-    #[structopt(short = "e", long = "field_extension", default_value = "1")]
+    #[structopt(short = "e", long = "field_extension", default_value = "3")]
     field_extension: u32,
 
     /// Folding factor for FRI protocol
@@ -98,7 +102,7 @@ impl ExampleOptions {
                 self.grinding_factor,
                 field_extension,
                 self.folding_factor,
-                31,
+                255,
                 false,
             ),
             hash_fn,
@@ -198,6 +202,12 @@ pub enum ExampleType {
         /// Number of signers; must be one less than a power of two
         #[structopt(short = "n", default_value = "3")]
         num_signers: usize,
+    },
+    /// Compute a hash chain using RPO hash function
+    Rpo {
+        /// Length of the hash chain; must be a power of two
+        #[structopt(short = "n", default_value = "256")]
+        chain_length: usize,
     },
 }
 

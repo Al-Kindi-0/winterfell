@@ -62,7 +62,7 @@ impl SecretKey {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Signature {
-    proof: Proof,
+    pub proof: Proof,
 }
 
 impl Signature {
@@ -76,8 +76,8 @@ impl Signature {
     }
 }
 
-fn get_proof_options() -> ProofOptions {
-    ProofOptions::new(80, 8, 16, ::air::FieldExtension::Cubic, 8, 255, true)
+pub fn get_proof_options() -> ProofOptions {
+    ProofOptions::new(80, 8, 0, ::air::FieldExtension::Cubic, 8, 255, true)
 }
 
 // SERIALIZATION / DESERIALIZATION
