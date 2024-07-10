@@ -72,7 +72,7 @@ impl Air for RescueAir {
             TransitionConstraintDegree::new(7),
         ];
         assert_eq!(TRACE_WIDTH, trace_info.width());
-        let context = AirContext::new(trace_info, degrees, 4, options);
+        let context = AirContext::new(trace_info, degrees, 12, options);
         let context = context.set_num_transition_exemptions(1);
         RescueAir { context, pub_key: pub_inputs.pub_key }
     }
@@ -100,8 +100,17 @@ impl Air for RescueAir {
 
     fn get_assertions(&self) -> Vec<Assertion<Self::BaseField>> {
         // Assert that the public key is the correct one
+        let initial_step = 0;
         let last_step = self.trace_length() - 1;
         vec![
+            Assertion::single(0, initial_step, Self::BaseField::ZERO),
+            Assertion::single(1, initial_step, Self::BaseField::ZERO),
+            Assertion::single(2, initial_step, Self::BaseField::ZERO),
+            Assertion::single(3, initial_step, Self::BaseField::ZERO),
+            Assertion::single(8, initial_step, Self::BaseField::ZERO),
+            Assertion::single(9, initial_step, Self::BaseField::ZERO),
+            Assertion::single(10, initial_step, Self::BaseField::ZERO),
+            Assertion::single(11, initial_step, Self::BaseField::ZERO),
             Assertion::single(4, last_step, self.pub_key[0]),
             Assertion::single(5, last_step, self.pub_key[1]),
             Assertion::single(6, last_step, self.pub_key[2]),
