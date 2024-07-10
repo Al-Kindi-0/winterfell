@@ -1,10 +1,13 @@
 use std::ops::Range;
 
 use crate::utils::{are_equal, is_zero, not, EvaluationResult};
-use winterfell::{
-    crypto, math::{fields::f64::BaseElement, FieldElement, ToElements}, Air, AirContext, Assertion, EvaluationFrame, ProofOptions, TraceInfo, TransitionConstraintDegree
-};
 use crypto::hashers::{ARK1, ARK2, MDS};
+use winterfell::{
+    crypto,
+    math::{fields::f64::BaseElement, FieldElement, ToElements},
+    Air, AirContext, Assertion, EvaluationFrame, ProofOptions, TraceInfo,
+    TransitionConstraintDegree,
+};
 
 // CONSTANTS
 // ================================================================================================
@@ -64,21 +67,21 @@ impl Air for RescueAir {
     fn new(trace_info: TraceInfo, pub_inputs: PublicInputs, options: ProofOptions) -> Self {
         let degrees = vec![
             // Apply RPO rounds.
-        TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-        TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-        TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-        TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-        TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-        TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-        TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-        TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-        TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-        TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-        TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-        TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
         ];
         assert_eq!(TRACE_WIDTH, trace_info.width());
-        let context = AirContext::new(trace_info, degrees, 8, options);
+        let context = AirContext::new(trace_info, degrees, 16, options);
         RescueAir {
             context,
             result: pub_inputs.result,
@@ -118,27 +121,37 @@ impl Air for RescueAir {
 
     fn get_assertions(&self) -> Vec<Assertion<Self::BaseField>> {
         // Assert starting and ending values of the hash chain
-        let last_step =self.trace_length() - 1;
+        let initial_step = 0;
+        let last_step = self.trace_length() - 1;
         vec![
-            Assertion::single(4,  0, self.seed[0]),
-            Assertion::single(5,  0, self.seed[1]),
-            Assertion::single(6,  0, self.seed[2]),
-            Assertion::single(7,  0, self.seed[3]),
-            Assertion::single(4,  last_step, self.result[0]),
-            Assertion::single(5,  last_step, self.result[1]),
-            Assertion::single(6,  last_step, self.result[2]),
-            Assertion::single(7,  last_step, self.result[3]),
+            Assertion::single(0, initial_step, Self::BaseField::ZERO),
+            Assertion::single(1, initial_step, Self::BaseField::ZERO),
+            Assertion::single(2, initial_step, Self::BaseField::ZERO),
+            Assertion::single(3, initial_step, Self::BaseField::ZERO),
+            Assertion::single(4, initial_step, self.seed[0]),
+            Assertion::single(5, initial_step, self.seed[1]),
+            Assertion::single(6, initial_step, self.seed[2]),
+            Assertion::single(7, initial_step, self.seed[3]),
+            Assertion::single(8, initial_step, Self::BaseField::ZERO),
+            Assertion::single(9, initial_step, Self::BaseField::ZERO),
+            Assertion::single(10, initial_step, Self::BaseField::ZERO),
+            Assertion::single(11, initial_step, Self::BaseField::ZERO),
+
+            Assertion::single(4, last_step, self.result[0]),
+            Assertion::single(5, last_step, self.result[1]),
+            Assertion::single(6, last_step, self.result[2]),
+            Assertion::single(7, last_step, self.result[3]),
         ]
     }
 
     fn get_periodic_column_values(&self) -> Vec<Vec<Self::BaseField>> {
         let mut result = vec![CYCLE_MASK.to_vec()];
-        result.append(&mut  get_round_constants());
+        result.append(&mut get_round_constants());
         result
     }
-    
+
     type GkrProof = ();
-    
+
     type GkrVerifier = ();
 }
 
@@ -190,7 +203,7 @@ pub fn enforce_rpo_round<E: FieldElement + From<BaseElement>>(
     // compute the state that should result from applying the inverse of the last operation of the
     // RPO round to the next step of the computation.
     let mut step2 = [E::ZERO; STATE_WIDTH];
-    step2.copy_from_slice(frame. next());
+    step2.copy_from_slice(frame.next());
     apply_sbox(&mut step2);
 
     // make sure that the results are equal.
@@ -198,7 +211,6 @@ pub fn enforce_rpo_round<E: FieldElement + From<BaseElement>>(
         result.agg_constraint(i, flag, are_equal(step2[i], step1[i]));
     }
 }
-
 
 #[inline(always)]
 fn apply_sbox<E: FieldElement + From<BaseElement>>(state: &mut [E; STATE_WIDTH]) {
@@ -219,10 +231,10 @@ fn apply_mds<E: FieldElement + From<BaseElement>>(state: &mut [E; STATE_WIDTH]) 
     *state = result
 }
 /// Returns RPO round constants arranged in column-major form.
-pub fn get_round_constants () -> Vec<Vec<BaseElement>> {
+pub fn get_round_constants() -> Vec<Vec<BaseElement>> {
     let mut constants = Vec::new();
     for _ in 0..(STATE_WIDTH * 2) {
-        constants.push(vec![ BaseElement::ZERO; HASH_CYCLE_LEN]);
+        constants.push(vec![BaseElement::ZERO; HASH_CYCLE_LEN]);
     }
 
     #[allow(clippy::needless_range_loop)]
