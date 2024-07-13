@@ -260,12 +260,7 @@ where
             .enumerate()
             .fold(E::ZERO, |result, (i, &value)| {
                 result
-                    + z.exp_vartime(
-                        ((i * (air.context().trace_length_ext()
-                            - air.context().zk_constraint_randomizer_degree()))
-                            as u32)
-                            .into(),
-                    ) * value
+                    + z.exp_vartime(((i * air.context().num_coefficients_chunk_quotient()) as u32).into()) * value
             });
     public_coin.reseed(H::hash_elements(&ood_constraint_evaluations));
 

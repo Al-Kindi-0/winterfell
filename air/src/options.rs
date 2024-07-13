@@ -321,6 +321,7 @@ fn zk_randomness_conjectured(
     if new_security < initial_security {
         panic!("initial security is too low")
     }
+    // TODO: handle the case when n_q changes
     h as u32
 }
 

@@ -331,15 +331,59 @@ impl<B: StarkField> AirContext<B> {
                 / trace_length_ext;
 
         if self.zk_parameters.is_some() {
-            let quotient_degree = num_constraint_col * self.trace_length_ext();
-            let x =
-                self.trace_length_ext() - self.zk_parameters().unwrap().degree_constraint_randomizer();
-            let k = (quotient_degree + x - 1) / x;
+            let quotient_degree = if highest_constraint_degree < trace_length_ext {
+                // This means that our transition constraints have degree 1 and hence the boundary
+                // constraints will determine the degree
+                trace_length_ext - 2
+            } else {
+                highest_constraint_degree - transition_divisior_degree
+            };
+            let n_q = self.options.num_queries();
+            let den = self.trace_length_ext() - (n_q + 1);
+            let big_b = (quotient_degree + 1 + den - 1) / den;
 
-            k
+            big_b
         } else {
             cmp::max(num_constraint_col, 1)
         }
+    }
+
+    pub fn constraint_composition_degree(&self) -> usize {
+        let mut highest_constraint_degree = 0_usize;
+        for degree in self
+            .main_transition_constraint_degrees
+            .iter()
+            .chain(self.aux_transition_constraint_degrees.iter())
+        {
+            let eval_degree =
+                degree.get_evaluation_degree(self.trace_len(), self.trace_length_ext());
+            if eval_degree > highest_constraint_degree {
+                highest_constraint_degree = eval_degree
+            }
+        }
+        let trace_length = self.trace_len();
+        let transition_divisior_degree = trace_length - self.num_transition_exemptions();
+
+        //   highest_constraint_degree - transition_divisior_degree
+        if highest_constraint_degree < self.trace_length_ext {
+            // This means that our transition constraints have degree 1 and hence the boundary
+            // constraints will determine the degree
+            self.trace_length_ext - 2
+        } else {
+            highest_constraint_degree - transition_divisior_degree
+        }
+    }
+
+    pub fn num_coefficients_chunk_quotient(&self) -> usize {
+        if self.zk_parameters().is_some() {
+        let big_b = self.num_constraint_composition_columns();
+        let quotient_degree = self.constraint_composition_degree();
+        let big_a = (quotient_degree + 1 + big_b - 1) / big_b;
+
+        big_a
+    } else {
+        self.trace_len()
+    }
     }
 
     pub fn zk_parameters(&self) -> Option<ZkParameters> {
