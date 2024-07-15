@@ -10,7 +10,7 @@ use super::Blake3_256;
 
 #[test]
 fn rescue_test_basic_proof_verification() {
-    let rescue_eg = Box::new(super::RpoExample::<Blake3_256>::new(256, build_options(false)));
+    let rescue_eg = Box::new(super::RpoExample::<Blake3_256>::new(128, build_options(false)));
     crate::tests::test_basic_proof_verification(rescue_eg);
 }
 
@@ -32,5 +32,5 @@ fn build_options(use_extension_field: bool) -> ProofOptions {
     } else {
         FieldExtension::None
     };
-    ProofOptions::new(28, 8, 0, extension, 4, 31, false)
+    ProofOptions::new(28, 4, 0, extension, 4, 31, false)
 }

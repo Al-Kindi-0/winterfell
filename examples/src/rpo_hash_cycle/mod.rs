@@ -67,6 +67,7 @@ impl<H: ElementHasher> RpoExample<H> {
         // compute the sequence of hashes using external implementation of Rescue hash
         let now = Instant::now();
         let result = compute_hash_chain(seed, chain_length);
+        println!("hash result {:?}", result);
         println!(
             "Computed a chain of {} Rescue hashes in {} ms",
             chain_length,

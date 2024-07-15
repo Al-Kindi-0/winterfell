@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{ops::Range, os::linux::raw::stat};
 
 use crate::utils::{are_equal, is_zero, not, EvaluationResult};
 use crypto::hashers::{ARK1, ARK2, MDS};
@@ -25,7 +25,7 @@ const CYCLE_MASK: [BaseElement; HASH_CYCLE_LEN] = [
 ];
 
 pub const HASH_CYCLE_LEN: usize = 8;
-pub const TRACE_WIDTH: usize = 12;
+pub const TRACE_WIDTH: usize = 3 * 12;
 
 /// Sponge state is set to 12 field elements or 96 bytes; 8 elements are reserved for rate and
 /// the remaining 4 elements are reserved for capacity.
@@ -67,18 +67,42 @@ impl Air for RescueAir {
     fn new(trace_info: TraceInfo, pub_inputs: PublicInputs, options: ProofOptions) -> Self {
         let degrees = vec![
             // Apply RPO rounds.
-            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
-            TransitionConstraintDegree::with_cycles(7, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
+            TransitionConstraintDegree::with_cycles(3, vec![HASH_CYCLE_LEN]),
         ];
         assert_eq!(TRACE_WIDTH, trace_info.width());
         let context = AirContext::new(trace_info, degrees, 16, options);
@@ -111,7 +135,7 @@ impl Air for RescueAir {
 
         // when hash_flag = 1, constraints for Rescue round are enforced
         //rescue::enforce_round(result, current, next, ark, hash_flag);
-        enforce_rpo_round(frame, result, ark, hash_flag);
+        enforce_rpo_round_2(frame, result, ark, hash_flag);
 
         // when hash_flag = 0, constraints for copying hash values to the next
         // step are enforced.
@@ -136,7 +160,6 @@ impl Air for RescueAir {
             Assertion::single(9, initial_step, Self::BaseField::ZERO),
             Assertion::single(10, initial_step, Self::BaseField::ZERO),
             Assertion::single(11, initial_step, Self::BaseField::ZERO),
-
             Assertion::single(4, last_step, self.result[0]),
             Assertion::single(5, last_step, self.result[1]),
             Assertion::single(6, last_step, self.result[2]),
@@ -159,8 +182,8 @@ impl Air for RescueAir {
 // ------------------------------------------------------------------------------------------------
 
 /// when flag = 1, enforces that the next state of the computation is defined like so:
-/// - the first two registers are equal to the values from the previous step
-/// - the other two registers are equal to 0
+/// - the first four registers are equal to the values from the previous step
+/// - the last four registers are equal to 0
 fn enforce_hash_copy<E: FieldElement>(result: &mut [E], current: &[E], next: &[E], flag: E) {
     result.agg_constraint(0, flag, is_zero(next[0]));
     result.agg_constraint(1, flag, is_zero(next[1]));
@@ -220,8 +243,9 @@ fn apply_sbox<E: FieldElement + From<BaseElement>>(state: &mut [E; STATE_WIDTH])
         *v *= t2 * t4;
     });
 }
+
 #[inline(always)]
-fn apply_mds<E: FieldElement + From<BaseElement>>(state: &mut [E; STATE_WIDTH]) {
+pub fn apply_mds<E: FieldElement + From<BaseElement>>(state: &mut [E; STATE_WIDTH]) {
     let mut result = [E::ZERO; STATE_WIDTH];
     result.iter_mut().zip(MDS).for_each(|(r, mds_row)| {
         state.iter().zip(mds_row).for_each(|(&s, m)| {
@@ -230,6 +254,7 @@ fn apply_mds<E: FieldElement + From<BaseElement>>(state: &mut [E; STATE_WIDTH]) 
     });
     *state = result
 }
+
 /// Returns RPO round constants arranged in column-major form.
 pub fn get_round_constants() -> Vec<Vec<BaseElement>> {
     let mut constants = Vec::new();
@@ -246,4 +271,140 @@ pub fn get_round_constants() -> Vec<Vec<BaseElement>> {
     }
 
     constants
+}
+
+#[inline(always)]
+fn apply_first_linear_layer_and_cube<E: FieldElement + From<BaseElement>>(
+    state: &mut [E; 3 * STATE_WIDTH],
+    ark: &[E],
+) {
+    let mut step1 = [E::ZERO; STATE_WIDTH];
+    step1.copy_from_slice(&state[..STATE_WIDTH]);
+
+    apply_mds(&mut step1);
+
+    // add constants
+    for i in 0..STATE_WIDTH {
+        step1[i] += ark[i];
+    }
+
+    //apply_pow3(&mut result);
+
+    state
+        .iter()
+        .skip(STATE_WIDTH)
+        .take(STATE_WIDTH)
+        .zip(step1.iter_mut())
+        .for_each(|(&s_3, r)| *r *= s_3 * s_3);
+
+    apply_mds(&mut step1);
+
+    // add constants
+    for i in 0..STATE_WIDTH {
+        step1[i] += ark[STATE_WIDTH + i];
+    }
+
+    let mut result2 = [E::ZERO; STATE_WIDTH];
+    let state2 = state.clone();
+
+    state2
+        .iter()
+        .take(STATE_WIDTH)
+        .zip(state.iter().skip(2 * STATE_WIDTH).zip(result2.iter_mut()))
+        .for_each(|(&next, (&cur, res))| *res = cur * cur * next)
+}
+
+#[inline(always)]
+fn apply_pow3<E: FieldElement + From<BaseElement>>(state: &mut [E; STATE_WIDTH]) {
+    state.iter_mut().for_each(|v| {
+        let t2 = v.square();
+        *v *= t2;
+    });
+}
+
+#[inline(always)]
+fn apply_second_linear_layer_and_cube<E: FieldElement + From<BaseElement>>(
+    state: &mut [E; 3 * STATE_WIDTH],
+    ark: &[E],
+) {
+    let mut result = [E::ZERO; STATE_WIDTH];
+    result.copy_from_slice(&state[..STATE_WIDTH]);
+
+    apply_mds(&mut result);
+
+    // add constants
+    for i in 0..STATE_WIDTH {
+        result[i] += ark[i];
+    }
+
+    apply_pow3(&mut result);
+}
+
+pub fn enforce_rpo_round_2<E: FieldElement + From<BaseElement>>(
+    frame: &EvaluationFrame<E>,
+    result: &mut [E],
+    ark: &[E],
+    flag: E,
+) {
+    // 1) (M.x + k)^3 == frame.current()[STATE_WIDTH + i..2*STATE_WIDTH]
+
+    // compute the state that should result from applying the linear map (i.e., MDS multiplication plus
+    // constant addition)
+    let mut step1 = [E::ZERO; STATE_WIDTH];
+    step1.copy_from_slice(&frame.current()[..STATE_WIDTH]);
+
+    apply_mds(&mut step1);
+
+    // add constants
+    for i in 0..STATE_WIDTH {
+        step1[i] += ark[i];
+    }
+
+    // Enforce second set of constraints i.e., that (M.x + k)^3 == frame.current()[STATE_WIDTH + i..2*STATE_WIDTH]
+    for i in 0..STATE_WIDTH {
+        result.agg_constraint(
+            i + STATE_WIDTH,
+            flag,
+            are_equal(frame.current()[STATE_WIDTH + i], step1[i].exp(3_u32.into())),
+        );
+    }
+
+    // 2) (M.x + k)^3 * (M.x + k)^3 * (M.x + k) ==
+
+    // (M.x + k)^3 * (M.x + k)^3 * (M.x + k)
+    step1
+        .iter_mut()
+        .zip(frame.current().iter().skip(STATE_WIDTH).take(STATE_WIDTH))
+        .for_each(|(r, &s_3)| *r *= s_3 * s_3);
+
+    apply_mds(&mut step1);
+
+    for i in 0..STATE_WIDTH {
+        step1[i] += ark[STATE_WIDTH + i];
+    }
+
+    // y * x * x (= y^7)
+    let mut step2 = [E::ZERO; STATE_WIDTH];
+    step2
+        .iter_mut()
+        .zip(
+            frame
+                .next()
+                .iter()
+                .take(STATE_WIDTH)
+                .zip(frame.current().iter().skip(2 * STATE_WIDTH)),
+        )
+        .for_each(|(res, (&next, &cur))| *res = cur * cur * next);
+    for i in 0..STATE_WIDTH {
+        result.agg_constraint(i, flag, are_equal(step2[i], step1[i]));
+    }
+
+    // 3) y^3 = x
+    for i in 0..STATE_WIDTH {
+        result.agg_constraint(
+            i + 2 * STATE_WIDTH,
+            flag,
+            are_equal(frame.current()[2 * STATE_WIDTH + i], frame.next()[i].exp(3_u32.into())),
+        );
+    }
 }
