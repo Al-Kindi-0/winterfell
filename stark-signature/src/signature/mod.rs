@@ -74,10 +74,14 @@ impl Signature {
 
         signature.verify(pk, message, self.proof.clone()).is_ok()
     }
+    
+    pub fn security_level(&self) -> u32 {
+        self.proof.security_level::<Rp64_256>(false)
+    }
 }
 
 fn get_proof_options() -> ProofOptions {
-    ProofOptions::new(80, 8, 16, ::air::FieldExtension::Cubic, 8, 255, true)
+    ProofOptions::new(89, 8, 0, ::air::FieldExtension::Cubic, 8, 255, true)
 }
 
 // SERIALIZATION / DESERIALIZATION

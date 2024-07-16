@@ -130,6 +130,7 @@ impl Serializable for Context {
         target.write_u8(self.field_modulus_bytes.len() as u8);
         target.write_bytes(&self.field_modulus_bytes);
         self.options.write_into(target);
+        self.zk_blowup.write_into(target);
     }
 }
 

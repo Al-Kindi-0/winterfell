@@ -56,7 +56,9 @@ fn main() {
 
     // verify the signature
     println!("---------------------");
+    println!("Signature size: {:.1} KB", signature_bytes.len() as f64 / 1024f64);
     let parsed_signature = Signature::read_from_bytes(&signature_bytes).unwrap();
+    println!("---------------------\n Security level {}", signature.security_level());
     assert_eq!(signature, parsed_signature);
     let now = Instant::now();
     if pk.verify(message, &signature) {
