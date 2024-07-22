@@ -453,10 +453,7 @@ pub trait Prover {
 
         // make sure the degree of the DEEP composition polynomial is equal to trace polynomial
         // degree minus 1.
-        assert_eq!(
-            air.context().trace_length_ext() - 2 + air.is_zk() as usize,
-            deep_composition_poly.degree()
-        );
+        assert_eq!(air.context().trace_length_ext() - 2, deep_composition_poly.degree());
 
         // 5 ----- evaluate DEEP composition polynomial over LDE domain ---------------------------
         let deep_evaluations = {
@@ -465,7 +462,7 @@ pub trait Prover {
             // we check the following condition in debug mode only because infer_degree is an
             // expensive operation
             debug_assert_eq!(
-                air.context().trace_length_ext() - 2 + air.is_zk() as usize,
+                air.context().trace_length_ext() - 2,
                 infer_degree(&deep_evaluations, domain.offset())
             );
 
@@ -569,7 +566,10 @@ pub trait Prover {
                 prng,
             )
         });
-        //assert_eq!(composition_poly.num_columns(), num_constraint_composition_columns);
+        assert_eq!(
+            composition_poly.num_columns(),
+            num_constraint_composition_columns + zk_parameters.is_some() as usize
+        );
         assert_eq!(composition_poly.column_degree(), domain.trace_length() - 1);
 
         // then, evaluate composition polynomial columns over the LDE domain
@@ -577,7 +577,10 @@ pub trait Prover {
         let composed_evaluations = info_span!("evaluate_composition_poly_columns").in_scope(|| {
             RowMatrix::evaluate_polys_over::<DEFAULT_SEGMENT_WIDTH>(composition_poly.data(), domain)
         });
-        //assert_eq!(composed_evaluations.num_cols(), num_constraint_composition_columns);
+        assert_eq!(
+            composed_evaluations.num_cols(),
+            num_constraint_composition_columns + zk_parameters.is_some() as usize
+        );
         assert_eq!(composed_evaluations.num_rows(), domain_size);
 
         // finally, build constraint evaluation commitment

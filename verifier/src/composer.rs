@@ -79,7 +79,6 @@ impl<E: FieldElement> DeepComposer<E> {
         ood_main_frame: EvaluationFrame<E>,
         ood_aux_frame: Option<EvaluationFrame<E>>,
         ood_lagrange_kernel_frame: Option<&LagrangeKernelEvaluationFrame<E>>,
-        is_zk: bool,
     ) -> Vec<E> {
         let ood_main_trace_states = [ood_main_frame.current(), ood_main_frame.next()];
 
@@ -87,7 +86,6 @@ impl<E: FieldElement> DeepComposer<E> {
         // each query; we also track common denominator for each query separately; this way we can
         // use a batch inversion in the end.
         let n = queried_main_trace_states.num_rows();
-        let width = queried_main_trace_states.num_columns();
         let mut result_num = Vec::<E>::with_capacity(n);
         let mut result_den = Vec::<E>::with_capacity(n);
         for ((_, row), &x) in (0..n).zip(queried_main_trace_states.rows()).zip(&self.x_coordinates)
@@ -114,14 +112,7 @@ impl<E: FieldElement> DeepComposer<E> {
 
             // add the numerators of T'_i(x) and T''_i(x) together; we can do this because later on
             // we'll use the common denominator computed above.
-            // In the case zero-knowledge is enabled, the randomizer is added to DEEP composition
-            // polynomial.
-            let randomizer = if is_zk {
-                E::from(is_zk as u8) * t1_den * t2_den * row[width - is_zk as usize].into()
-            } else {
-                E::ZERO
-            };
-            result_num.push(t1_num * t2_den + t2_num * t1_den + randomizer);
+            result_num.push(t1_num * t2_den + t2_num * t1_den);
         }
 
         // if the trace has auxiliary segments, compose columns from these segments as well; we
@@ -247,6 +238,8 @@ impl<E: FieldElement> DeepComposer<E> {
                 // composition coefficient, and add the result to the numerator aggregator
                 composition_num += (evaluation - ood_evaluations[i]) * self.cc.constraints[i];
             }
+            // In the case zero-knowledge is enabled, the randomizer is added to DEEP composition
+            // polynomial.
             if is_zk {
                 let randmizer_at_x = query_values[num_cols];
                 composition_num += randmizer_at_x * (x - z);

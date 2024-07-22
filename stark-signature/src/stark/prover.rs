@@ -1,6 +1,8 @@
 use std::marker::PhantomData;
 
-use air::{AuxRandElements, ConstraintCompositionCoefficients, ProofOptions, TraceInfo, ZkParameters};
+use air::{
+    AuxRandElements, ConstraintCompositionCoefficients, ProofOptions, TraceInfo, ZkParameters,
+};
 use crypto::{DefaultRandomCoin, ElementHasher, Hasher, SaltedMerkleTree};
 use math::{fields::f64::BaseElement, FieldElement};
 use prover::{

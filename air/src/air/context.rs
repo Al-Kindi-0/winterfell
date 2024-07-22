@@ -340,9 +340,9 @@ impl<B: StarkField> AirContext<B> {
             };
             let n_q = self.options.num_queries();
             let den = self.trace_length_ext() - (n_q + 1);
-            let big_b = (quotient_degree + 1 + den - 1) / den;
 
-            big_b
+            // we use the identity: ceil(a/b) = (a + b - 1)/b
+            (quotient_degree + 1 + den - 1) / den
         } else {
             cmp::max(num_constraint_col, 1)
         }
@@ -376,14 +376,15 @@ impl<B: StarkField> AirContext<B> {
 
     pub fn num_coefficients_chunk_quotient(&self) -> usize {
         if self.zk_parameters().is_some() {
-        let big_b = self.num_constraint_composition_columns();
-        let quotient_degree = self.constraint_composition_degree();
-        let big_a = (quotient_degree + 1 + big_b - 1) / big_b;
+            let num_constraint_composition_cols = self.num_constraint_composition_columns();
+            let quotient_degree = self.constraint_composition_degree();
 
-        big_a
-    } else {
-        self.trace_len()
-    }
+            // we use the identity: ceil(a/b) = (a + b - 1)/b
+            (quotient_degree + 1 + num_constraint_composition_cols - 1)
+                / num_constraint_composition_cols
+        } else {
+            self.trace_len()
+        }
     }
 
     pub fn zk_parameters(&self) -> Option<ZkParameters> {

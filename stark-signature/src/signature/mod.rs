@@ -74,7 +74,7 @@ impl Signature {
 
         signature.verify(pk, message, self.proof.clone()).is_ok()
     }
-    
+
     pub fn security_level(&self) -> u32 {
         self.proof.security_level::<Rp64_256>(false)
     }

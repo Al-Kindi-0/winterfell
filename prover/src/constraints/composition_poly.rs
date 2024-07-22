@@ -76,7 +76,7 @@ impl<E: FieldElement> CompositionPoly<E> {
 
         let quotient_degree = polynom::degree_of(&trace);
         let degree_chunked_quotient = if zk_parameters.is_some() {
-            (quotient_degree + 1 + num_cols - 1)/ num_cols
+            (quotient_degree + 1 + num_cols - 1) / num_cols
         } else {
             domain.trace_length()
         };
@@ -93,6 +93,8 @@ impl<E: FieldElement> CompositionPoly<E> {
                 *a = E::from_random_bytes(&bytes[..E::VALUE_SIZE])
                     .expect("failed to generate randomness");
             }
+            // reduce the degree to match that of the DEEP composition polynomial
+            zk_col[extended_len - 1] = E::ZERO;
             polys.push(zk_col)
         }
 
@@ -192,8 +194,6 @@ fn segment<E: FieldElement>(
     trace_len: usize,
     num_cols: usize,
 ) -> Vec<Vec<E>> {
-    // assert_eq!(degree_of(&coefficients), trace_len * num_cols);
-
     coefficients
         .chunks(trace_len)
         .take(num_cols)

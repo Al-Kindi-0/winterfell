@@ -23,7 +23,7 @@ pub struct DeepCompositionPoly<E: FieldElement> {
     cc: DeepCompositionCoefficients<E>,
     z: E,
     g: E,
-    randomizer_idx: Option<usize>,
+    is_zk: bool,
 }
 
 impl<E: FieldElement> DeepCompositionPoly<E> {
@@ -37,18 +37,12 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
         z: E,
         cc: DeepCompositionCoefficients<E>,
     ) -> Self {
-        let randomizer_idx = if air.is_zk() {
-            Some(air.trace_info().main_trace_width())
-        } else {
-            None
-        };
-
         DeepCompositionPoly {
             coefficients: vec![],
             cc,
             z,
             g: E::from(air.trace_domain_generator()),
-            randomizer_idx,
+            is_zk: air.is_zk(),
         }
     }
 
@@ -111,13 +105,7 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
         let mut i = 0;
 
         // --- merge polynomials of the main trace segment ----------------------------------------
-        for (_, poly) in trace_polys.main_trace_polys().enumerate().take_while(|(j, _)| {
-            if let Some(idx) = self.randomizer_idx {
-                *j != idx
-            } else {
-                true
-            }
-        }) {
+        for poly in trace_polys.main_trace_polys() {
             // compute T'(x) = T(x) - T(z), multiply it by a pseudo-random coefficient,
             // and add the result into composition polynomial
             acc_trace_poly::<E::BaseField, E>(
@@ -168,13 +156,6 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
         let mut trace_poly =
             merge_trace_compositions(vec![t1_composition, t2_composition], vec![self.z, next_z]);
 
-        if self.randomizer_idx.is_some() {
-            let main_trace_polys = trace_polys.main_trace_polys();
-            let randomizer =
-                main_trace_polys.last().expect("there should at least be one main trace poly");
-            iter_mut!(trace_poly).zip(randomizer).for_each(|(a, &b)| *a += b.into());
-        }
-
         // finally compose the final term associated to the Lagrange kernel trace polynomial if
         // there is one present.
         // TODO: Investigate using FFT to speed up this block (see #281).
@@ -215,7 +196,6 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
 
         // set the coefficients of the DEEP composition polynomial
         self.coefficients = trace_poly;
-        //assert_eq!(self.poly_size() - 2, self.degree());
     }
 
     // CONSTRAINT POLYNOMIAL COMPOSITION
@@ -256,13 +236,13 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
             mul_acc::<E, E>(&mut self.coefficients, poly, self.cc.constraints[i]);
         }
 
-        if self.randomizer_idx.is_some() {
+        if self.is_zk {
             iter_mut!(self.coefficients)
                 .zip(&column_polys[column_polys.len() - 1])
                 .for_each(|(a, b)| *a += *b);
         }
 
-        //assert_eq!(self.poly_size() - 2, self.degree());
+        assert_eq!(self.coefficients.len() - 2, self.degree());
     }
 
     // LOW-DEGREE EXTENSION

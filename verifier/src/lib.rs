@@ -264,7 +264,9 @@ where
             .enumerate()
             .fold(E::ZERO, |result, (i, &value)| {
                 result
-                    + z.exp_vartime(((i * air.context().num_coefficients_chunk_quotient()) as u32).into()) * value
+                    + z.exp_vartime(
+                        ((i * air.context().num_coefficients_chunk_quotient()) as u32).into(),
+                    ) * value
             });
     public_coin.reseed_with_salt(H::hash_elements(&ood_constraint_evaluations), salts.remove(0));
 
@@ -333,7 +335,6 @@ where
         ood_main_trace_frame,
         ood_aux_trace_frame,
         ood_lagrange_kernel_frame,
-        air.is_zk(),
     );
     let c_composition = composer.compose_constraint_evaluations(
         queried_constraint_evaluations,
