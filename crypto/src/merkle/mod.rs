@@ -467,7 +467,7 @@ impl<H: Hasher> VectorCommitment<H> for MerkleTree<H> {
 
 use rand::{
     distributions::{Distribution, Standard},
-    thread_rng, RngCore, Rng
+    thread_rng, Rng, RngCore,
 };
 
 pub struct SaltedMerkleTree<H: Hasher> {
@@ -507,7 +507,7 @@ where
 
     /// Returns the root of the tree.
     pub fn root(&self) -> &H::Digest {
-        &self.tree.root()
+        self.tree.root()
     }
 
     pub fn depth(&self) -> usize {

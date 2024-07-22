@@ -431,8 +431,7 @@ fn build_transition_constraint_degrees<E: FieldElement>(
             degree_witness_randomizer,
         }: ZkInfo = zk_info;
 
-        let ext_len =
-            (original_trace_length + degree_witness_randomizer as usize).next_power_of_two();
+        let ext_len = (original_trace_length + degree_witness_randomizer).next_power_of_two();
         (original_trace_length, ext_len)
     } else {
         (domain.trace_length(), domain.trace_length())

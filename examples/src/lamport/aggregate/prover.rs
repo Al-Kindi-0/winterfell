@@ -125,7 +125,7 @@ where
         domain: &StarkDomain<Self::BaseField>,
         zk_parameters: Option<ZkParameters>,
     ) -> (Self::TraceLde<E>, TracePolyTable<E>) {
-    let mut prng = ChaCha20Rng::from_entropy();
+        let mut prng = ChaCha20Rng::from_entropy();
         DefaultTraceLde::new(trace_info, main_trace, domain, zk_parameters, &mut prng)
     }
 

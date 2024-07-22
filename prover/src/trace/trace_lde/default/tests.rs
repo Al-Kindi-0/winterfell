@@ -35,7 +35,7 @@ fn extend_trace_table() {
         trace.main_segment(),
         &domain,
         None,
-        &mut prng
+        &mut prng,
     );
 
     // check the width and length of the extended trace
@@ -88,7 +88,7 @@ fn commit_trace_table() {
         trace.main_segment(),
         &domain,
         None,
-        &mut prng
+        &mut prng,
     );
 
     // build commitment, using a Merkle tree, to the trace rows

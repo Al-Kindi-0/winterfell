@@ -252,10 +252,7 @@ impl ProofOptions {
     }
 }
 
-fn compute_degree_randomizing_poly(
-    extension_degree: usize,
-    num_fri_queries: usize,
-) -> usize {
+fn compute_degree_randomizing_poly(extension_degree: usize, num_fri_queries: usize) -> usize {
     2 * (extension_degree + num_fri_queries)
 }
 

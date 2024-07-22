@@ -262,6 +262,7 @@
 //!     math::{fields::f128::BaseElement, FieldElement, ToElements},
 //!     matrix::ColMatrix,
 //!     DefaultTraceLde, ProofOptions, Prover, StarkDomain, Trace, TracePolyTable, TraceTable,
+//!     ZkParameters,
 //! };
 //!
 //! # use winterfell::{
@@ -371,7 +372,7 @@
 //!         trace_info: &TraceInfo,
 //!         main_trace: &ColMatrix<Self::BaseField>,
 //!         domain: &StarkDomain<Self::BaseField>,
-//!         is_zk: Option<u32>,
+//!         is_zk: Option<ZkParameters>,
 //!     ) -> (Self::TraceLde<E>, TracePolyTable<E>) {
 //!         DefaultTraceLde::new(trace_info, main_trace, domain, is_zk)
 //!     }
@@ -403,6 +404,7 @@
 //! #    DefaultTraceLde, EvaluationFrame, TraceInfo,
 //! #    TransitionConstraintDegree, TraceTable, FieldExtension, Prover,
 //! #    ProofOptions, StarkDomain, Proof, Trace, TracePolyTable,
+//! #    ZkParameters
 //! # };
 //! #
 //! # pub fn build_do_work_trace(start: BaseElement, n: usize) -> TraceTable<BaseElement> {
@@ -515,7 +517,7 @@
 //! #        trace_info: &TraceInfo,
 //! #        main_trace: &ColMatrix<Self::BaseField>,
 //! #        domain: &StarkDomain<Self::BaseField>,
-//! #        is_zk: Option<u32>,
+//! #        is_zk: Option<ZkParameters>,
 //! #    ) -> (Self::TraceLde<E>, TracePolyTable<E>) {
 //! #        DefaultTraceLde::new(trace_info, main_trace, domain, is_zk)
 //! #    }
@@ -597,7 +599,7 @@
 #[cfg(test)]
 extern crate std;
 
-pub use air::{AuxRandElements, GkrVerifier};
+pub use air::{AuxRandElements, GkrVerifier, ZkParameters};
 pub use prover::{
     crypto, iterators, math, matrix, Air, AirContext, Assertion, AuxTraceWithMetadata,
     BoundaryConstraint, BoundaryConstraintGroup, ByteReader, ByteWriter, CompositionPolyTrace,

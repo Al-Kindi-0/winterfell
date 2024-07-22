@@ -42,13 +42,13 @@
 #[macro_use]
 extern crate alloc;
 
-use air::{AuxRandElements, ZkParameters};
 pub use air::{
     proof, proof::Proof, Air, AirContext, Assertion, BoundaryConstraint, BoundaryConstraintGroup,
     ConstraintCompositionCoefficients, ConstraintDivisor, DeepCompositionCoefficients,
     EvaluationFrame, FieldExtension, LagrangeKernelRandElements, ProofOptions, TraceInfo,
     TransitionConstraintDegree,
 };
+use air::{AuxRandElements, ZkParameters};
 pub use crypto;
 use crypto::{ElementHasher, RandomCoin, VectorCommitment};
 use fri::FriProver;
@@ -298,10 +298,10 @@ pub trait Prover {
             ProverChannel::<Self::Air, E, Self::HashFn, Self::RandomCoin, Self::VC>::new(
                 &air,
                 pub_inputs_elements,
-                air.context().zk_blowup_factor()
+                air.context().zk_blowup_factor(),
             );
         let mut prng = ChaCha20Rng::from_entropy();
-        let zk_parameters= air.context().zk_parameters();
+        let zk_parameters = air.context().zk_parameters();
 
         // 1 ----- Commit to the execution trace --------------------------------------------------
 
@@ -318,6 +318,7 @@ pub trait Prover {
             &trace,
             &domain,
             zk_parameters,
+            &mut prng,
             &mut channel
         ));
 
@@ -348,16 +349,12 @@ pub trait Prover {
             let aux_segment_polys = {
                 // extend the auxiliary trace segment and commit to the extended trace
                 let span = info_span!("commit_to_aux_trace_segment").entered();
-                let (aux_segment_polys, aux_segment_commitment) = trace_lde.set_aux_trace(
-                    &aux_trace,
-                    &domain,
-                    zk_parameters,
-                    &mut prng,
-                );
+                let (aux_segment_polys, aux_segment_commitment) =
+                    trace_lde.set_aux_trace(&aux_trace, &domain, zk_parameters, &mut prng);
 
                 // commit to the LDE of the extended auxiliary trace segment by writing its
                 // commitment into the channel
-                channel.commit_trace(aux_segment_commitment);
+                channel.commit_trace(aux_segment_commitment, &mut prng);
 
                 drop(span);
                 aux_segment_polys
@@ -430,10 +427,10 @@ pub trait Prover {
             // z * g^2, z * g^4, ..., z * g^(2^(v-1)), where v = log(trace_len).
             let ood_trace_states =
                 trace_polys.get_ood_frame(z, air.context().trace_info().length());
-            channel.send_ood_trace_states(&ood_trace_states);
+            channel.send_ood_trace_states(&ood_trace_states, &mut prng);
 
             let ood_evaluations = composition_poly.evaluate_at(z, air.is_zk());
-            channel.send_ood_constraint_evaluations(&ood_evaluations);
+            channel.send_ood_constraint_evaluations(&ood_evaluations, &mut prng);
 
             // draw random coefficients to use during DEEP polynomial composition, and use them to
             // initialize the DEEP composition polynomial
@@ -456,7 +453,10 @@ pub trait Prover {
 
         // make sure the degree of the DEEP composition polynomial is equal to trace polynomial
         // degree minus 1.
-        assert_eq!(air.context().trace_length_ext() - 2 + air.is_zk() as usize, deep_composition_poly.degree());
+        assert_eq!(
+            air.context().trace_length_ext() - 2 + air.is_zk() as usize,
+            deep_composition_poly.degree()
+        );
 
         // 5 ----- evaluate DEEP composition polynomial over LDE domain ---------------------------
         let deep_evaluations = {
@@ -478,7 +478,7 @@ pub trait Prover {
         let num_layers = fri_options.num_fri_layers(lde_domain_size);
         let mut fri_prover = FriProver::<_, _, _, Self::VC>::new(fri_options);
         info_span!("compute_fri_layers", num_layers)
-            .in_scope(|| fri_prover.build_layers(&mut channel, deep_evaluations));
+            .in_scope(|| fri_prover.build_layers(&mut channel, deep_evaluations, &mut prng));
 
         // 7 ----- determine query positions ------------------------------------------------------
         let query_positions = {
@@ -596,26 +596,32 @@ pub trait Prover {
     #[doc(hidden)]
     #[instrument(skip_all)]
     #[maybe_async]
-    fn commit_to_main_trace_segment<E>(
+    fn commit_to_main_trace_segment<E, R>(
         &self,
         trace: &Self::Trace,
         domain: &StarkDomain<Self::BaseField>,
         zk_parameters: Option<ZkParameters>,
+        prng: &mut R,
         channel: &mut ProverChannel<'_, Self::Air, E, Self::HashFn, Self::RandomCoin, Self::VC>,
     ) -> (Self::TraceLde<E>, TracePolyTable<E>)
     where
         E: FieldElement<BaseField = Self::BaseField>,
+        R: RngCore,
     {
         // extend the main execution trace and commit to the extended trace
-        let (trace_lde, trace_polys) =
-            maybe_await!(self.new_trace_lde(trace.info(), trace.main_segment(), domain, zk_parameters));
+        let (trace_lde, trace_polys) = maybe_await!(self.new_trace_lde(
+            trace.info(),
+            trace.main_segment(),
+            domain,
+            zk_parameters
+        ));
 
         // get the commitment to the main trace segment LDE
         let main_trace_commitment = trace_lde.get_main_trace_commitment();
 
         // commit to the LDE of the main trace by writing the the commitment string into
         // the channel
-        channel.commit_trace(main_trace_commitment);
+        channel.commit_trace(main_trace_commitment, prng);
 
         (trace_lde, trace_polys)
     }
@@ -649,7 +655,7 @@ pub trait Prover {
 
         // then, commit to the evaluations of constraints by writing the commitment string of
         // the constraint commitment into the channel
-        channel.commit_constraints(constraint_commitment.commitment());
+        channel.commit_constraints(constraint_commitment.commitment(), prng);
 
         (constraint_commitment, composition_poly)
     }

@@ -79,6 +79,8 @@ pub struct Proof {
     pub pow_nonce: u64,
     /// Optionally, an auxiliary (non-STARK) proof that was generated during auxiliary trace generation.
     pub gkr_proof: Option<Vec<u8>>,
+    /// Random values needed for Fiat-Shamir.
+    pub salts: Vec<u8>,
 }
 
 impl Proof {
@@ -156,7 +158,7 @@ impl Proof {
             context: Context::new::<DummyField>(
                 TraceInfo::new(1, 8),
                 ProofOptions::new(1, 2, 2, FieldExtension::None, 8, 1, false),
-                1
+                1,
             ),
             num_unique_queries: 0,
             commitments: Commitments::default(),
@@ -169,6 +171,7 @@ impl Proof {
             fri_proof: FriProof::new_dummy(),
             pow_nonce: 0,
             gkr_proof: None,
+            salts: vec![],
         }
     }
 }
@@ -187,6 +190,7 @@ impl Serializable for Proof {
         self.fri_proof.write_into(target);
         self.pow_nonce.write_into(target);
         self.gkr_proof.write_into(target);
+        self.salts.write_into(target);
     }
 }
 
@@ -211,6 +215,7 @@ impl Deserializable for Proof {
             fri_proof: FriProof::read_from(source)?,
             pow_nonce: source.read_u64()?,
             gkr_proof: Option::<Vec<u8>>::read_from(source)?,
+            salts: Vec::read_from(source)?,
         };
         Ok(proof)
     }
@@ -227,15 +232,29 @@ pub(crate) fn get_security(
     grinding_factor: u32,
     trace_domain_size: usize,
     collision_resistance: u32,
-    conjectured: bool
+    conjectured: bool,
 ) -> u32 {
-
     if conjectured {
-        get_conjectured_security(base_field_bits, extension_degree, blowup_factor, num_queries, grinding_factor, trace_domain_size, collision_resistance)
+        get_conjectured_security(
+            base_field_bits,
+            extension_degree,
+            blowup_factor,
+            num_queries,
+            grinding_factor,
+            trace_domain_size,
+            collision_resistance,
+        )
     } else {
-        get_proven_security(base_field_bits, extension_degree, blowup_factor, num_queries, grinding_factor, trace_domain_size, collision_resistance)
+        get_proven_security(
+            base_field_bits,
+            extension_degree,
+            blowup_factor,
+            num_queries,
+            grinding_factor,
+            trace_domain_size,
+            collision_resistance,
+        )
     }
-
 }
 
 /// Computes conjectured security level for the specified proof parameters.
@@ -280,9 +299,8 @@ fn get_proven_security(
     let m_optimal = (m_min as u32..m_max as u32)
         .max_by_key(|&a| {
             proven_security_protocol_for_m(
-               
                 base_field_bits,
-               extension_degree,
+                extension_degree,
     blowup_factor,
     num_queries,
     grinding_factor,

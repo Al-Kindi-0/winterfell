@@ -3,9 +3,9 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use air::ZkParameters;
 use alloc::vec::Vec;
 
+use air::ZkParameters;
 use math::{fft, FieldElement};
 use rand::{Rng, RngCore};
 
@@ -143,28 +143,30 @@ fn complement_to<R: RngCore, E: FieldElement>(
     prng: &mut R,
 ) -> Vec<Vec<E>> {
     let mut result = vec![];
-    let mut current_poly = vec![E::ZERO; l - polys[0].len()];
-    let mut previous_poly = vec![E::ZERO; l - polys[0].len()];
+
+    let randomizer_poly_size = l - polys[0].len();
+    let mut current_poly = vec![E::ZERO; randomizer_poly_size];
+    let mut previous_poly = vec![E::ZERO; randomizer_poly_size];
 
     for (_, poly) in polys.iter().enumerate().take_while(|(index, _)| *index != polys.len() - 1) {
         let diff = l - poly.len();
-        for i in 0..diff {
+
+        for eval in current_poly.iter_mut().take(diff) {
             let bytes = prng.gen::<[u8; 32]>();
-            current_poly[i] = E::from_random_bytes(&bytes[..E::VALUE_SIZE])
+            *eval = E::from_random_bytes(&bytes[..E::VALUE_SIZE])
                 .expect("failed to generate randomness");
         }
 
         let mut res = vec![];
-        res.extend_from_slice(&poly);
+        res.extend_from_slice(poly);
         res.extend_from_slice(&current_poly);
 
-        for i in 0..previous_poly.len() {
+        for i in 0..randomizer_poly_size {
             res[i] -= previous_poly[i];
         }
 
-        for i in 0..previous_poly.len() {
-            previous_poly[i] = current_poly[i];
-        }
+        previous_poly.copy_from_slice(&current_poly[..randomizer_poly_size]);
+
         result.push(res)
     }
 
@@ -173,7 +175,7 @@ fn complement_to<R: RngCore, E: FieldElement>(
     for (i, entry) in poly.iter().enumerate() {
         res[i] = *entry;
     }
-    for i in 0..previous_poly.len() {
+    for i in 0..randomizer_poly_size {
         res[i] -= previous_poly[i];
     }
     result.push(res);
