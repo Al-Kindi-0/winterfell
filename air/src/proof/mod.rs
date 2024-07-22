@@ -224,38 +224,6 @@ impl Deserializable for Proof {
 // HELPER FUNCTIONS
 // ================================================================================================
 
-pub(crate) fn get_security(
-    base_field_bits: u32,
-    extension_degree: u32,
-    blowup_factor: usize,
-    num_queries: usize,
-    grinding_factor: u32,
-    trace_domain_size: usize,
-    collision_resistance: u32,
-    conjectured: bool,
-) -> u32 {
-    if conjectured {
-        get_conjectured_security(
-            base_field_bits,
-            extension_degree,
-            blowup_factor,
-            num_queries,
-            grinding_factor,
-            trace_domain_size,
-            collision_resistance,
-        )
-    } else {
-        get_proven_security(
-            base_field_bits,
-            extension_degree,
-            blowup_factor,
-            num_queries,
-            grinding_factor,
-            trace_domain_size,
-            collision_resistance,
-        )
-    }
-}
 /// Computes conjectured security level for the specified proof parameters.
 pub(crate) fn get_conjectured_security(
     base_field_bits: u32,

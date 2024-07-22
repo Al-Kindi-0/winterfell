@@ -8,7 +8,7 @@ use core::cmp;
 
 use math::StarkField;
 
-use crate::{air::TransitionConstraintDegree, ProofOptions, TraceInfo, CONJECTURED};
+use crate::{air::TransitionConstraintDegree, ProofOptions, TraceInfo};
 
 // AIR CONTEXT
 // ================================================================================================
@@ -135,13 +135,12 @@ impl<B: StarkField> AirContext<B> {
             );
         }
 
-        let h = options
-            .zk_witness_randomizer_degree::<B>(trace_info.length(), CONJECTURED)
-            .unwrap_or(0);
+        let h = options.zk_witness_randomizer_degree().unwrap_or(0);
         let trace_length = trace_info.length();
         let trace_length_ext = (trace_length + h as usize).next_power_of_two();
         let zk_blowup = trace_length_ext / trace_length;
         let lde_domain_size = trace_length_ext * options.blowup_factor();
+        // equation (12) in https://eprint.iacr.org/2024/1037
         let h_q = options.num_queries() + 1;
         let zk_parameters = if options.is_zk() {
             Some(ZkParameters {
@@ -392,16 +391,20 @@ impl<B: StarkField> AirContext<B> {
     }
 
     pub fn zk_blowup_factor(&self) -> usize {
-        self.zk_parameters().map(|para| para.zk_blowup_witness()).unwrap_or(1)
+        self.zk_parameters()
+            .map(|parameters| parameters.zk_blowup_witness())
+            .unwrap_or(1)
     }
 
     pub fn zk_witness_randomizer_degree(&self) -> usize {
-        self.zk_parameters().map(|para| para.degree_witness_randomizer()).unwrap_or(0)
+        self.zk_parameters()
+            .map(|parameters| parameters.degree_witness_randomizer())
+            .unwrap_or(0)
     }
 
     pub fn zk_constraint_randomizer_degree(&self) -> usize {
         self.zk_parameters()
-            .map(|para| para.degree_constraint_randomizer())
+            .map(|parameters| parameters.degree_constraint_randomizer())
             .unwrap_or(0)
     }
 

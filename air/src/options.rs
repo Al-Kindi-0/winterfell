@@ -6,10 +6,8 @@
 use alloc::vec::Vec;
 
 use fri::FriOptions;
-use math::{FieldElement, StarkField, ToElements};
+use math::{StarkField, ToElements};
 use utils::{ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable};
-
-use crate::proof::get_security;
 
 // CONSTANTS
 // ================================================================================================
@@ -219,110 +217,25 @@ impl ProofOptions {
 
     /// Computes a lower bound on the degree of the polynomial used for randomizing the witness
     /// polynomials.
-    /// TODO: revisit `h_init` and update the quotient decomposition
-    pub(crate) fn zk_witness_randomizer_degree<E>(
-        &self,
-        trace_domain_size: usize,
-        conjectured: bool,
-    ) -> Option<u32>
-    where
-        E: FieldElement,
-    {
+    pub(crate) fn zk_witness_randomizer_degree(&self) -> Option<u32> {
         if self.is_zk {
-            let h_init = compute_degree_randomizing_poly(
+            let h = compute_degree_randomizing_poly(
                 self.field_extension().degree() as usize,
                 self.num_queries(),
             );
 
-            let h = zk_randomness_conjectured(
-                h_init,
-                E::BaseField::MODULUS_BITS,
-                self.field_extension().degree(),
-                self.blowup_factor(),
-                self.num_queries(),
-                self.grinding_factor(),
-                trace_domain_size,
-                128,
-                conjectured,
-            );
-            Some(h)
+            Some(h as u32)
         } else {
             None
         }
     }
 }
 
-fn compute_degree_randomizing_poly(extension_degree: usize, num_fri_queries: usize) -> usize {
+/// Computes the number of coefficients of the polynomials used to randomize the witness polynomials.
+///
+/// This is based on equation (13) in https://eprint.iacr.org/2024/1037
+pub fn compute_degree_randomizing_poly(extension_degree: usize, num_fri_queries: usize) -> usize {
     2 * (extension_degree + num_fri_queries)
-}
-
-fn zk_randomness_conjectured(
-    h_init: usize,
-    base_field_bits: u32,
-    extension_degree: u32,
-    blowup_factor: usize,
-    num_queries: usize,
-    grinding_factor: u32,
-    trace_domain_size: usize,
-    collision_resistance: u32,
-    conjectured: bool,
-) -> u32 {
-    let initial_security = get_security(
-        base_field_bits,
-        extension_degree,
-        blowup_factor,
-        num_queries,
-        grinding_factor,
-        trace_domain_size,
-        collision_resistance,
-        conjectured,
-    );
-    let mut n_q = num_queries;
-    let mut h = h_init;
-    let mut new_security = 0;
-
-    for _ in 0..100 {
-        for _ in 0..100 {
-            let ext_trace_domain_size = (trace_domain_size + h).next_power_of_two();
-            let new_security = get_security(
-                base_field_bits,
-                extension_degree,
-                blowup_factor,
-                n_q,
-                grinding_factor,
-                ext_trace_domain_size,
-                collision_resistance,
-                conjectured,
-            );
-            if new_security >= initial_security {
-                break;
-            } else {
-                n_q += 1;
-            }
-        }
-        h = compute_degree_randomizing_poly(extension_degree as usize, n_q);
-        let ext_trace_domain_size = (trace_domain_size + h).next_power_of_two();
-        new_security = get_security(
-            base_field_bits,
-            extension_degree,
-            blowup_factor,
-            n_q,
-            grinding_factor,
-            ext_trace_domain_size,
-            collision_resistance,
-            conjectured,
-        );
-
-        if new_security >= initial_security {
-            break;
-        }
-    }
-
-    if new_security < initial_security {
-        panic!("initial security is too low")
-    }
-    // TODO: handle the case when n_q changes
-    h as u32
 }
 
 impl<E: StarkField> ToElements<E> for ProofOptions {
