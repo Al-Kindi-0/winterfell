@@ -251,11 +251,11 @@ where
     public_coin.reseed_with_salt(ood_trace_frame.hash::<H>(), salts.remove(0));
 
     // read evaluations of composition polynomial columns sent by the prover, and reduce them into
-    // a single value by computing \sum_{i=0}^{m-1}(z^(i * l) * value_i), where value_i is the
-    // evaluation of the ith column polynomial H_i(X) at z, l is the trace length and m is
+    // a single value by computing \sum_{i=0}^{m-1}(z^(i) * value_i), where value_i is the
+    // evaluation of the ith column polynomial H_i(X) at z^m, l is the trace length and m is
     // the number of composition column polynomials. This computes H(z) (i.e.
     // the evaluation of the composition polynomial at z) using the fact that
-    // H(X) = \sum_{i=0}^{m-1} X^{i * l} H_i(X).
+    // H(X) = \sum_{i=0}^{m-1} X^{i} H_i(X^m).
     // Also, reseed the public coin with the OOD constraint evaluations received from the prover.
     let ood_constraint_evaluations = channel.read_ood_constraint_evaluations();
     let ood_constraint_evaluation_2 =
@@ -264,12 +264,7 @@ where
             .enumerate()
             .fold(E::ZERO, |result, (i, &value)| {
                 result
-                    + z.exp_vartime(
-                        ((i * (air.context().trace_length_ext()
-                            - air.context().zk_constraint_randomizer_degree()))
-                            as u32)
-                            .into(),
-                    ) * value
+                    + z.exp_vartime(((i * air.context().num_coefficients_chunk_quotient()) as u32).into()) * value
             });
     public_coin.reseed_with_salt(H::hash_elements(&ood_constraint_evaluations), salts.remove(0));
 
@@ -338,6 +333,7 @@ where
         ood_main_trace_frame,
         ood_aux_trace_frame,
         ood_lagrange_kernel_frame,
+        air.is_zk(),
     );
     let c_composition = composer.compose_constraint_evaluations(
         queried_constraint_evaluations,

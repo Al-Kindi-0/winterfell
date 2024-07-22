@@ -111,7 +111,13 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
         let mut i = 0;
 
         // --- merge polynomials of the main trace segment ----------------------------------------
-        for poly in trace_polys.main_trace_polys() {
+        for (_, poly) in trace_polys.main_trace_polys().enumerate().take_while(|(j, _)| {
+            if let Some(idx) = self.randomizer_idx {
+                *j != idx
+            } else {
+                true
+            }
+        }) {
             // compute T'(x) = T(x) - T(z), multiply it by a pseudo-random coefficient,
             // and add the result into composition polynomial
             acc_trace_poly::<E::BaseField, E>(
@@ -162,6 +168,13 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
         let mut trace_poly =
             merge_trace_compositions(vec![t1_composition, t2_composition], vec![self.z, next_z]);
 
+        if self.randomizer_idx.is_some() {
+            let main_trace_polys = trace_polys.main_trace_polys();
+            let randomizer =
+                main_trace_polys.last().expect("there should at least be one main trace poly");
+            iter_mut!(trace_poly).zip(randomizer).for_each(|(a, &b)| *a += b.into());
+        }
+
         // finally compose the final term associated to the Lagrange kernel trace polynomial if
         // there is one present.
         // TODO: Investigate using FFT to speed up this block (see #281).
@@ -211,7 +224,7 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
     /// into the DEEP composition polynomial. This method is intended to be called only after the
     /// add_trace_polys() method has been executed. The composition is done as follows:
     ///
-    /// - For each H_i(x), compute H'_i(x) = (H_i(x) - H(z)) / (x - z), where H_i(x) is the
+    /// - For each H_i(x), compute H'_i(x) = (H_i(x) - H(z)) / (x - z^m), where H_i(x) is the
     ///   ith composition polynomial column.
     /// - Then, combine all H_i(x) polynomials together by computing H(x) = sum(H_i(x) * cc_i) for
     ///   all i, where cc_i is the coefficient for the random linear combination drawn from the

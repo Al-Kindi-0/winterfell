@@ -6,7 +6,10 @@
 use core::slice;
 
 use math::{fields::f64::BaseElement, FieldElement};
-use utils::{ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable};
+use rand::distributions::{Distribution, Standard};
+use utils::{
+    ByteReader, ByteWriter, Deserializable, DeserializationError, Randomizable, Serializable,
+};
 
 use super::{Digest, DIGEST_SIZE};
 
@@ -96,6 +99,18 @@ impl From<ElementDigest> for [BaseElement; DIGEST_SIZE] {
 impl From<ElementDigest> for [u8; 32] {
     fn from(value: ElementDigest) -> Self {
         value.as_bytes()
+    }
+}
+
+impl Distribution<ElementDigest> for Standard {
+    fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> ElementDigest {
+        let mut res = [BaseElement::ZERO; DIGEST_SIZE];
+        for r in res.iter_mut() {
+            let mut source = [0_u8; 8];
+            rng.fill_bytes(&mut source);
+            *r = BaseElement::from_random_bytes(&source).expect("failed to generate element");
+        }
+        ElementDigest::new(res)
     }
 }
 

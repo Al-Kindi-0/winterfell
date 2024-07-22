@@ -6,7 +6,7 @@
 use alloc::vec::Vec;
 
 use air::ZkParameters;
-use math::{fft, FieldElement};
+use math::{fft, polynom, FieldElement};
 use rand::{Rng, RngCore};
 
 use super::{ColMatrix, StarkDomain};
@@ -69,21 +69,19 @@ impl<E: FieldElement> CompositionPoly<E> {
 
         let mut trace = composition_trace.into_inner();
 
-        let h = if let Some(ref zk_parameters) = zk_parameters {
-            zk_parameters.degree_constraint_randomizer()
-        } else {
-            0
-        };
-        let l = domain.trace_length();
-        let degree_chunked_quotient = l - h;
-
         // at this point, combined_poly contains evaluations of the combined constraint polynomial;
         // we interpolate this polynomial to transform it into coefficient form.
         let inv_twiddles = fft::get_inv_twiddles::<E::BaseField>(trace.len());
         fft::interpolate_poly_with_offset(&mut trace, &inv_twiddles, domain.offset());
 
+        let quotient_degree = polynom::degree_of(&trace);
+        let degree_chunked_quotient = if zk_parameters.is_some() {
+            (quotient_degree + 1 + num_cols - 1)/ num_cols
+        } else {
+            domain.trace_length()
+        };
         let polys = segment(trace, degree_chunked_quotient, num_cols);
-        let mut polys = complement_to(polys, l, prng);
+        let mut polys = complement_to(polys, domain.trace_length(), prng);
 
         // add randomizer polynomial for FRI
         if zk_parameters.is_some() {
