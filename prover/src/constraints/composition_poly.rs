@@ -74,6 +74,7 @@ impl<E: FieldElement> CompositionPoly<E> {
         let inv_twiddles = fft::get_inv_twiddles::<E::BaseField>(trace.len());
         fft::interpolate_poly_with_offset(&mut trace, &inv_twiddles, domain.offset());
 
+        // compute the segment quotient polynomials
         let quotient_degree = polynom::degree_of(&trace);
         let degree_chunked_quotient = if zk_parameters.is_some() {
             (quotient_degree + 1 + num_cols - 1) / num_cols
@@ -83,7 +84,7 @@ impl<E: FieldElement> CompositionPoly<E> {
         let polys = segment(trace, degree_chunked_quotient, num_cols);
         let mut polys = complement_to(polys, domain.trace_length(), prng);
 
-        // add randomizer polynomial for FRI
+        // generate a randomizer polynomial for FRI
         if zk_parameters.is_some() {
             let extended_len = polys[0].len();
             let mut zk_col = vec![E::ZERO; extended_len];

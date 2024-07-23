@@ -236,6 +236,7 @@ impl<E: FieldElement> DeepCompositionPoly<E> {
             mul_acc::<E, E>(&mut self.coefficients, poly, self.cc.constraints[i]);
         }
 
+        // add the randomizer codeword for FRI
         if self.is_zk {
             iter_mut!(self.coefficients)
                 .zip(&column_polys[column_polys.len() - 1])
