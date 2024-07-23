@@ -6,9 +6,7 @@
 use std::time::Duration;
 
 use air::{
-    Air, AirContext, Assertion, AuxRandElements, ConstraintCompositionCoefficients,
-    EvaluationFrame, FieldExtension, GkrRandElements, LagrangeKernelRandElements, ProofOptions,
-    TraceInfo, TransitionConstraintDegree,
+    Air, AirContext, Assertion, AuxRandElements, ConstraintCompositionCoefficients, DefaultLogUpGkrEval, EvaluationFrame, FieldExtension, GkrRandElements, LagrangeKernelRandElements, ProofOptions, TraceInfo, TransitionConstraintDegree
 };
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use crypto::{hashers::Blake3_256, DefaultRandomCoin, MerkleTree, RandomCoin};
@@ -159,6 +157,8 @@ impl Air for LagrangeKernelAir {
     ) -> Vec<Assertion<E>> {
         vec![Assertion::single(1, 0, E::ZERO)]
     }
+    
+    type LogUpGkrEvaluator = DefaultLogUpGkrEval<Self::BaseField>;
 }
 
 // LagrangeProver

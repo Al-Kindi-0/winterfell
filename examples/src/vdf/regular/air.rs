@@ -3,9 +3,10 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
+use std::marker::PhantomData;
+
 use winterfell::{
-    math::ToElements, Air, AirContext, Assertion, EvaluationFrame, TraceInfo,
-    TransitionConstraintDegree,
+    math::{ExtensionOf, ToElements}, Air, AirContext, Assertion, EvaluationFrame, LogUpGkrEvaluator, LogUpGkrOracle, TraceInfo, TransitionConstraintDegree
 };
 
 use super::{BaseElement, FieldElement, ProofOptions, ALPHA, FORTY_TWO, TRACE_WIDTH};
@@ -69,5 +70,55 @@ impl Air for VdfAir {
 
     fn context(&self) -> &AirContext<Self::BaseField> {
         &self.context
+    }
+    
+    type LogUpGkrEvaluator = DefaultLogUpGkrEval<Self::BaseField>;
+}
+
+
+pub struct DefaultLogUpGkrEval<E: FieldElement> {
+    _field: PhantomData<E>,
+}
+
+impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> where VdfInputs: ToElements<<G as FieldElement>::BaseField> {
+    type BaseField = G::BaseField;
+
+    type PublicInputs = VdfInputs;
+
+    type Query<E: FieldElement<BaseField = Self::BaseField>> = [E; 1];
+
+    fn get_oracles(&self) -> Vec<LogUpGkrOracle<Self::BaseField>> {
+        todo!()
+    }
+
+    fn get_num_rand_values() -> usize {
+        todo!()
+    }
+
+    fn build_query<E>(&self, frame: &EvaluationFrame<E>, periodic_values: &[E]) -> Self::Query<E>
+    where
+        E: FieldElement<BaseField = Self::BaseField>,
+    {
+        todo!()
+    }
+
+    fn evaluate_query<F, E>(
+        &self,
+        query: &Self::Query<F>,
+        rand_values: &[E],
+        numerator: &mut [E],
+        denominator: &mut [E],
+    ) where
+        F: FieldElement<BaseField = Self::BaseField>,
+        E: FieldElement<BaseField = Self::BaseField> + ExtensionOf<F>,
+    {
+        todo!()
+    }
+
+    fn compute_claim<E>(&self, inputs: &Self::PublicInputs, rand_values: &[E]) -> E
+    where
+        E: FieldElement<BaseField = Self::BaseField>,
+    {
+        todo!()
     }
 }

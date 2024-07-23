@@ -49,4 +49,6 @@ pub use air::{
     LagrangeKernelConstraints, LagrangeKernelEvaluationFrame, LagrangeKernelRandElements,
     LagrangeKernelTransitionConstraints, TraceInfo, TransitionConstraintDegree,
     TransitionConstraints,
+
+    DefaultLogUpGkrEval, LogUpGkrEvaluator, LogUpGkrOracle
 };

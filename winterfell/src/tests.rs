@@ -129,6 +129,7 @@ impl Air for LagrangeKernelComplexAir {
     type GkrVerifier = DummyGkrVerifier;
 
     type PublicInputs = ();
+    type LogUpGkrEvaluator = DefaultLogUpGkrEval<Self::BaseField>;
 
     fn new(trace_info: TraceInfo, _pub_inputs: Self::PublicInputs, options: ProofOptions) -> Self {
         Self {
