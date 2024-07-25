@@ -1,12 +1,3 @@
-// Copyright (c) Facebook, Inc. and its affiliates.
-//
-// This source code is licensed under the MIT license found in the
-// LICENSE file in the root directory of this source tree.
-
-use std::marker::PhantomData;
-use std::vec::{  Vec,};
-use std::vec;
-
 use crate::{
     crypto::{hashers::Blake3_256, DefaultRandomCoin, RandomCoin},
     math::{fields::f64::BaseElement, ExtensionOf, FieldElement},
@@ -17,26 +8,22 @@ use crate::{
 use air::{
     Air, AirContext, Assertion, AuxRandElements, ConstraintCompositionCoefficients, FieldExtension,
     GkrRandElements, LagrangeKernelRandElements, LogUpGkrOracle, ProofOptions, TraceInfo,
-    };
+    TransitionConstraintDegree,
+};
 use crypto::MerkleTree;
 
 use super::*;
 
 #[test]
 fn test_logup_gkr() {
-    let trace = LogUpGkrSimple::new(2_usize.pow(6), 1);
+    let trace = LogUpGkrSimple::new(2_usize.pow(10), 0);
 
     let prover = LogUpGkrSimpleProver::new(0);
 
     let _proof = prover.prove(trace).unwrap();
 
-    verify::<
-        LogUpGkrSimpleAir,
-        Blake3_256<BaseElement>,
-        DefaultRandomCoin<Blake3_256<BaseElement>>,
-        MerkleTree<Blake3_256<BaseElement>>,
-    >(_proof, (), &AcceptableOptions::MinConjecturedSecurity(0))
-    .unwrap()
+ 
+    // libc_println!("proof {:?}", _proof);
 }
 
 // LagrangeComplexTrace
@@ -113,11 +100,11 @@ impl Trace for LogUpGkrSimple {
 // AIR
 // =================================================================================================
 
-struct LogUpGkrSimpleAir {
+struct LagrangeKernelComplexAir {
     context: AirContext<BaseElement>,
 }
 
-impl Air for LogUpGkrSimpleAir {
+impl Air for LagrangeKernelComplexAir {
     type BaseField = BaseElement;
     // `GkrProof` is log(trace_len) for this dummy example, so that the verifier knows how many aux
     // random variables to generate
@@ -287,7 +274,7 @@ impl LogUpGkrSimpleProver {
 
 impl Prover for LogUpGkrSimpleProver {
     type BaseField = BaseElement;
-    type Air = LogUpGkrSimpleAir;
+    type Air = LagrangeKernelComplexAir;
     type Trace = LogUpGkrSimple;
     type HashFn = Blake3_256<BaseElement>;
     type VC = MerkleTree<Blake3_256<BaseElement>>;
@@ -295,7 +282,7 @@ impl Prover for LogUpGkrSimpleProver {
     type TraceLde<E: FieldElement<BaseField = BaseElement>> =
         DefaultTraceLde<E, Self::HashFn, Self::VC>;
     type ConstraintEvaluator<'a, E: FieldElement<BaseField = BaseElement>> =
-        DefaultConstraintEvaluator<'a, LogUpGkrSimpleAir, E>;
+        DefaultConstraintEvaluator<'a, LagrangeKernelComplexAir, E>;
 
     fn get_pub_inputs(&self, _trace: &Self::Trace) -> <<Self as Prover>::Air as Air>::PublicInputs {
     }

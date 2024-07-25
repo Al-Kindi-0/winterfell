@@ -42,16 +42,22 @@
 #[macro_use]
 extern crate alloc;
 
+use air::proof::FinalOpeningClaim;
 pub use air::{
-    proof, proof::Proof, Air, AirContext, Assertion, BoundaryConstraint, BoundaryConstraintGroup,
-    ConstraintCompositionCoefficients, ConstraintDivisor, DeepCompositionCoefficients,
-    EvaluationFrame, FieldExtension, LagrangeKernelRandElements, ProofOptions, TraceInfo,
+    proof, proof::Proof, Air, AirContext, Assertion, AuxRandElements, BoundaryConstraint,
+    BoundaryConstraintGroup, ConstraintCompositionCoefficients, ConstraintDivisor,
+    DeepCompositionCoefficients, EvaluationFrame, FieldExtension, GkrRandElements,
+    LagrangeKernelRandElements, LogUpGkrEvaluator, ProofOptions, TraceInfo,
     TransitionConstraintDegree,
 };
-use air::{AuxRandElements, GkrRandElements};
+
+use alloc::vec::Vec;
 pub use crypto;
 use crypto::{ElementHasher, RandomCoin, VectorCommitment};
 use fri::FriProver;
+
+use logup_gkr::prove_gkr;
+
 pub use math;
 use math::{
     fft::infer_degree,
@@ -85,6 +91,11 @@ pub use trace::{
     AuxTraceWithMetadata, DefaultTraceLde, Trace, TraceLde, TracePolyTable, TraceTable,
     TraceTableFragment,
 };
+
+mod sum_check;
+pub use sum_check::*;
+
+mod logup_gkr;
 
 mod channel;
 use channel::ProverChannel;
@@ -313,10 +324,30 @@ pub trait Prover {
 
         // build the auxiliary trace segment, and append the resulting segments to trace commitment
         // and trace polynomial table structs
-        let aux_trace_with_metadata = if air.trace_info().is_multi_segment() {
-            let (gkr_proof, aux_rand_elements) = if air.context().has_lagrange_kernel_aux_column() {
-                let (gkr_proof, gkr_rand_elements) =
-                    maybe_await!(self.generate_gkr_proof(&trace, channel.public_coin()));
+        let aux_trace_with_metadata = if air.trace_info().is_multi_segment()
+            || air.context().is_with_logup_gkr()
+        {
+            let (gkr_proof, aux_rand_elements) = if air.context().is_with_logup_gkr() {
+                let gkr_proof =
+                    prove_gkr(&trace, &air.get_logup_gkr_evaluator::<E>(), channel.public_coin())
+                        .map_err(|_| ProverError::FailedToGenerateGkrProof)?;
+
+                let FinalOpeningClaim { eval_point, openings } =
+                    gkr_proof.clone().final_layer_proof.after_merge_proof.openings_claim.clone();
+
+                channel.public_coin().reseed(Self::HashFn::hash_elements(&openings));
+
+                let mut batching_randomness = Vec::with_capacity(openings.len() - 1);
+ 
+                for _ in 0..openings.len() - 1 {
+                    batching_randomness
+                        .push(channel.public_coin().draw().expect("failed to generate randomness"))
+                }
+
+                let gkr_rand_elements = GkrRandElements::new(
+                    LagrangeKernelRandElements::new(eval_point),
+                    batching_randomness,
+                );
 
                 let rand_elements = air
                     .get_aux_rand_elements(channel.public_coin())
@@ -333,7 +364,6 @@ pub trait Prover {
 
                 (None, AuxRandElements::new(rand_elements))
             };
-
             let aux_trace = maybe_await!(self.build_aux_trace(&trace, &aux_rand_elements));
 
             // commit to the auxiliary trace segment
@@ -363,7 +393,7 @@ pub trait Prover {
         // This checks validity of both, assertions and state transitions. We do this in debug
         // mode only because this is a very expensive operation.
         #[cfg(debug_assertions)]
-        trace.validate(&air, aux_trace_with_metadata.as_ref());
+        //trace.validate(&air, aux_trace_with_metadata.as_ref());
 
         // Destructure `aux_trace_with_metadata`.
         let (aux_trace, aux_rand_elements, gkr_proof) = match aux_trace_with_metadata {

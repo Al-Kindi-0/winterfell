@@ -3,7 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use core::marker::PhantomData;
+use core::{fmt::Debug, marker::PhantomData};
 
 use alloc::{collections::BTreeMap, vec::Vec};
 
@@ -322,6 +322,12 @@ pub trait Air: Send + Sync {
         unimplemented!("`get_auxiliary_proof_verifier()` must be implemented when the proof contains a GKR proof");
     }
 
+    fn get_logup_gkr_evaluator<E: FieldElement<BaseField = Self::BaseField>>(
+        &self,
+    ) -> Self::LogUpGkrEvaluator {
+        unimplemented!("`get_auxiliary_proof_verifier()` must be implemented when the proof contains a GKR proof");
+    }
+
     // PROVIDED METHODS
     // --------------------------------------------------------------------------------------------
 
@@ -609,7 +615,7 @@ pub trait Air: Send + Sync {
     }
 }
 
-pub trait LogUpGkrEvaluator {
+pub trait LogUpGkrEvaluator: Clone {
     /// Defines the base field of the evaluator.
     type BaseField: StarkField;
 
@@ -619,14 +625,19 @@ pub trait LogUpGkrEvaluator {
     /// Defines the query for this evaluator.
     ///
     /// This is intended to be a simple struct which would not require allocations.
-    type Query<E: FieldElement<BaseField = Self::BaseField>>;
+    type Query<E: FieldElement<BaseField = Self::BaseField>>: From<Vec<E>> + Debug;
 
     /// Gets a list of all oracles involved in LogUp-GKR; this is intended to be used in construction of
     /// MLEs.
     fn get_oracles(&self) -> Vec<LogUpGkrOracle<Self::BaseField>>;
 
     /// Returns the number of random values needed to evaluate a query.
-    fn get_num_rand_values() -> usize;
+    fn get_num_rand_values(&self) -> usize;
+
+    /// Returns the number of fractions in the LogUp-GKR statement.
+    fn get_num_fractions(&self) -> usize;
+
+    fn max_degree(&self) -> usize;
 
     /// Builds a query from the provided main trace frame and periodic values.
     ///
@@ -666,12 +677,14 @@ pub trait LogUpGkrEvaluator {
         E: FieldElement<BaseField = Self::BaseField>;
 }
 
-pub enum LogUpGkrOracle<E: StarkField> {
+#[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
+pub enum LogUpGkrOracle<B: StarkField> {
     CurrentRow(usize),
     NextRow(usize),
-    PeriodicValue(Vec<E>),
+    PeriodicValue(Vec<B>),
 }
 
+#[derive(Clone)]
 pub struct DefaultLogUpGkrEval<E: FieldElement> {
     _field: PhantomData<E>,
 }
@@ -681,13 +694,13 @@ impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> {
 
     type PublicInputs = ();
 
-    type Query<E: FieldElement<BaseField = Self::BaseField>> = [E; 1];
+    type Query<E: FieldElement<BaseField = Self::BaseField>> = Vec<E>;
 
     fn get_oracles(&self) -> Vec<LogUpGkrOracle<Self::BaseField>> {
         todo!()
     }
 
-    fn get_num_rand_values() -> usize {
+    fn get_num_rand_values(&self) -> usize {
         todo!()
     }
 
@@ -715,6 +728,14 @@ impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> {
     where
         E: FieldElement<BaseField = Self::BaseField>,
     {
+        todo!()
+    }
+
+    fn get_num_fractions(&self) -> usize {
+        todo!()
+    }
+
+    fn max_degree(&self) -> usize {
         todo!()
     }
 }

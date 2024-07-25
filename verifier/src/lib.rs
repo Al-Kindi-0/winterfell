@@ -33,15 +33,19 @@ extern crate alloc;
 
 use alloc::{string::ToString, vec::Vec};
 
+use air::{
+    proof::{FinalOpeningClaim, GkrCircuitProof}, AuxRandElements, GkrRandElements, LagrangeKernelRandElements, LogUpGkrEvaluator
+};
 pub use air::{
     proof::Proof, Air, AirContext, Assertion, BoundaryConstraint, BoundaryConstraintGroup,
     ConstraintCompositionCoefficients, ConstraintDivisor, DeepCompositionCoefficients,
     EvaluationFrame, FieldExtension, ProofOptions, TraceInfo, TransitionConstraintDegree,
 };
-use air::{AuxRandElements, GkrVerifier};
 pub use crypto;
 use crypto::{ElementHasher, Hasher, RandomCoin, VectorCommitment};
 use fri::FriVerifier;
+
+use libc_print::libc_println;
 pub use math;
 use math::{
     fields::{CubeExtension, QuadExtension},
@@ -59,6 +63,9 @@ use evaluator::evaluate_constraints;
 
 mod composer;
 use composer::DeepComposer;
+
+mod logup_gkr;
+use logup_gkr::{verify_virtual_bus, VerifierError as GkrVerifierError};
 
 mod errors;
 pub use errors::VerifierError;
@@ -175,19 +182,19 @@ where
 
     // process auxiliary trace segments (if any), to build a set of random elements for each segment
     let aux_trace_rand_elements = if air.trace_info().is_multi_segment() {
-        if air.context().has_lagrange_kernel_aux_column() {
+        if air.context().is_with_logup_gkr() {
             let gkr_proof = {
                 let gkr_proof_serialized = channel
                     .read_gkr_proof()
-                    .expect("Expected an a GKR proof because trace has lagrange kernel column");
+                    .expect("Expected a GKR proof but there was none");
 
-                Deserializable::read_from_bytes(gkr_proof_serialized)
+                GkrCircuitProof::read_from_bytes(&gkr_proof_serialized)
                     .map_err(|err| VerifierError::ProofDeserializationError(err.to_string()))?
             };
-            let gkr_rand_elements = air
-                .get_gkr_proof_verifier::<E>()
-                .verify::<E, _>(gkr_proof, &mut public_coin)
-                .map_err(|err| VerifierError::GkrProofVerificationFailed(err.to_string()))?;
+
+            let gkr_rand_elements =
+                verify_gkr(gkr_proof, &air.get_logup_gkr_evaluator::<E>(), &mut public_coin)
+                    .map_err(|err| VerifierError::GkrProofVerificationFailed(err.to_string()))?;
 
             let rand_elements = air.get_aux_rand_elements(&mut public_coin).expect(
                 "failed to generate the random elements needed to build the auxiliary trace",
@@ -339,6 +346,37 @@ where
     fri_verifier
         .verify(&mut channel, &deep_evaluations, &query_positions)
         .map_err(VerifierError::FriVerificationFailed)
+}
+
+fn verify_gkr<E: FieldElement, H: ElementHasher<BaseField = E::BaseField>,>(
+    gkr_proof: GkrCircuitProof<E>,
+    evaluator: &impl LogUpGkrEvaluator<BaseField = E::BaseField>,
+    public_coin: &mut impl RandomCoin<BaseField = E::BaseField, Hasher = H>,
+) -> Result<GkrRandElements<E>, GkrVerifierError> {
+    let claim = E::ZERO;
+    let num_logup_random_values = evaluator.get_num_rand_values();
+    let mut logup_randomness: Vec<E> = Vec::with_capacity(num_logup_random_values);
+
+    for _ in 0..num_logup_random_values {
+        logup_randomness.push(public_coin.draw().expect("failed to generate randomness"));
+    }
+
+    let final_eval_claim =
+        verify_virtual_bus(claim, evaluator, &gkr_proof, logup_randomness, public_coin)?;
+
+    let FinalOpeningClaim { eval_point, openings } = final_eval_claim;
+
+    public_coin.reseed(H::hash_elements(&openings));
+
+    let mut batching_randomness = Vec::with_capacity(openings.len() - 1);
+    for _ in 0..openings.len() - 1 {
+        batching_randomness.push(public_coin.draw().expect("failed to generate randomness"))
+    }
+
+    let gkr_rand_elements =
+        GkrRandElements::new(LagrangeKernelRandElements::new(eval_point), batching_randomness);
+
+    Ok(gkr_rand_elements)
 }
 
 // ACCEPTABLE OPTIONS

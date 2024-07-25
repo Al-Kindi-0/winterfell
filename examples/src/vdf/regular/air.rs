@@ -76,6 +76,7 @@ impl Air for VdfAir {
 }
 
 
+#[derive(Clone)]
 pub struct DefaultLogUpGkrEval<E: FieldElement> {
     _field: PhantomData<E>,
 }
@@ -85,13 +86,13 @@ impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> where VdfInpu
 
     type PublicInputs = VdfInputs;
 
-    type Query<E: FieldElement<BaseField = Self::BaseField>> = [E; 1];
+    type Query<E: FieldElement<BaseField = Self::BaseField>> = Vec<E>;
 
     fn get_oracles(&self) -> Vec<LogUpGkrOracle<Self::BaseField>> {
         todo!()
     }
 
-    fn get_num_rand_values() -> usize {
+    fn get_num_rand_values(&self) -> usize {
         todo!()
     }
 
@@ -119,6 +120,14 @@ impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> where VdfInpu
     where
         E: FieldElement<BaseField = Self::BaseField>,
     {
+        todo!()
+    }
+    
+    fn get_num_fractions(&self) -> usize {
+        todo!()
+    }
+    
+    fn max_degree(&self) -> usize {
         todo!()
     }
 }
