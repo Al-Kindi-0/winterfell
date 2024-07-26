@@ -3,7 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use std::marker::PhantomData;
+use std::{marker::PhantomData, println};
 use std::vec;
 use std::vec::Vec;
 
@@ -24,9 +24,9 @@ use super::*;
 
 #[test]
 fn test_logup_gkr() {
-    let trace = LogUpGkrSimple::new(2_usize.pow(6), 1);
+    let trace = LogUpGkrSimple::new(2_usize.pow(7), 1);
 
-    let prover = LogUpGkrSimpleProver::new(0);
+    let prover = LogUpGkrSimpleProver::new(1);
 
     let _proof = prover.prove(trace).unwrap();
 
@@ -83,7 +83,7 @@ impl LogUpGkrSimple {
 
         Self {
             main_trace: ColMatrix::new(vec![table, multiplicity, values_0, values_1, values_2]),
-            info: TraceInfo::new_multi_segment(5, aux_segment_width, 0, trace_len, vec![]),
+            info: TraceInfo::new_multi_segment(5, aux_segment_width + 2, 0, trace_len, vec![]),
         }
     }
 
@@ -206,7 +206,6 @@ impl LogUpGkrEvaluator for PlainLogUpGkrEval<BaseElement> {
 
     type PublicInputs = ();
 
-    type Query<E: FieldElement<BaseField = Self::BaseField>> = Vec<E>;
 
     fn get_oracles(&self) -> Vec<LogUpGkrOracle<Self::BaseField>> {
         let committed_0 = LogUpGkrOracle::CurrentRow(0);
@@ -229,7 +228,7 @@ impl LogUpGkrEvaluator for PlainLogUpGkrEval<BaseElement> {
         3
     }
 
-    fn build_query<E>(&self, frame: &EvaluationFrame<E>, _periodic_values: &[E]) -> Self::Query<E>
+    fn build_query<E>(&self, frame: &EvaluationFrame<E>, _periodic_values: &[E]) -> Vec<E>
     where
         E: FieldElement<BaseField = Self::BaseField>,
     {
@@ -239,7 +238,7 @@ impl LogUpGkrEvaluator for PlainLogUpGkrEval<BaseElement> {
 
     fn evaluate_query<F, E>(
         &self,
-        query: &Self::Query<F>,
+        query: &[F],
         rand_values: &[E],
         numerator: &mut [E],
         denominator: &mut [E],
@@ -266,6 +265,10 @@ impl LogUpGkrEvaluator for PlainLogUpGkrEval<BaseElement> {
         E: FieldElement<BaseField = Self::BaseField>,
     {
         E::ZERO
+    }
+    
+    fn get_num_periodic_col(&self) -> usize {
+        todo!()
     }
 }
 // LagrangeComplexProver
@@ -347,27 +350,23 @@ impl Prover for LogUpGkrSimpleProver {
             LagrangeKernelRandElements::new(rand_elements)
         };
 
-        ((), GkrRandElements::new(lagrange_kernel_rand_elements, Vec::new()))
+        ((), GkrRandElements::new(lagrange_kernel_rand_elements, Vec::new(), Vec::new(), Vec::new()))
     }
 
     fn build_aux_trace<E>(
         &self,
         main_trace: &Self::Trace,
-        aux_rand_elements: &AuxRandElements<E>,
+        _aux_rand_elements: &AuxRandElements<E>,
     ) -> ColMatrix<E>
     where
         E: FieldElement<BaseField = Self::BaseField>,
     {
         let main_trace = main_trace.main_segment();
-        let lagrange_kernel_rand_elements = aux_rand_elements
-            .lagrange()
-            .expect("expected lagrange random elements to be present.");
-
+ 
         let mut columns = Vec::new();
 
-        // First all other auxiliary columns
-        let rand_summed = lagrange_kernel_rand_elements.iter().fold(E::ZERO, |acc, &r| acc + r);
-        for _ in 1..self.aux_trace_width {
+        let rand_summed = E::from(777_u32);
+        for _ in 0..self.aux_trace_width {
             // building a dummy auxiliary column
             let column = main_trace
                 .get_column(0)
@@ -376,27 +375,6 @@ impl Prover for LogUpGkrSimpleProver {
                 .collect();
 
             columns.push(column);
-        }
-
-        // then build the Lagrange kernel column
-        {
-            let r = &lagrange_kernel_rand_elements;
-
-            let mut lagrange_col = Vec::with_capacity(main_trace.num_rows());
-
-            for row_idx in 0..main_trace.num_rows() {
-                let mut row_value = E::ONE;
-                for (bit_idx, &r_i) in r.iter().enumerate() {
-                    if row_idx & (1 << bit_idx) == 0 {
-                        row_value *= E::ONE - r_i;
-                    } else {
-                        row_value *= r_i;
-                    }
-                }
-                lagrange_col.push(row_value);
-            }
-
-            columns.push(lagrange_col);
         }
 
         ColMatrix::new(columns)

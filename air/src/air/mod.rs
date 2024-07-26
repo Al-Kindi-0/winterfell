@@ -355,13 +355,16 @@ pub trait Air: Send + Sync {
         lagrange_composition_coefficients: LagrangeConstraintsCompositionCoefficients<E>,
         lagrange_kernel_rand_elements: &LagrangeKernelRandElements<E>,
     ) -> Option<LagrangeKernelConstraints<E>> {
-        self.context().lagrange_kernel_aux_column_idx().map(|col_idx| {
-            LagrangeKernelConstraints::new(
+        if self.context().is_with_logup_gkr() {
+            let col_idx = self.context().trace_info().aux_segment_width() - 1;
+            Some(LagrangeKernelConstraints::new(
                 lagrange_composition_coefficients,
                 lagrange_kernel_rand_elements,
                 col_idx,
-            )
-        })
+            ))
+        } else {
+            None
+        }
     }
 
     /// Returns values for all periodic columns used in the computation.
@@ -558,7 +561,7 @@ pub trait Air: Send + Sync {
             b_coefficients.push(public_coin.draw()?);
         }
 
-        let lagrange = if self.context().has_lagrange_kernel_aux_column() {
+        let lagrange = if self.context().is_with_logup_gkr() {
             let mut lagrange_kernel_t_coefficients = Vec::new();
             for _ in 0..self.context().trace_len().ilog2() {
                 lagrange_kernel_t_coefficients.push(public_coin.draw()?);
@@ -574,10 +577,17 @@ pub trait Air: Send + Sync {
             None
         };
 
+        let s_col = if self.context().is_with_logup_gkr() {
+            Some(public_coin.draw()?)
+        } else {
+            None
+        };
+
         Ok(ConstraintCompositionCoefficients {
             transition: t_coefficients,
             boundary: b_coefficients,
             lagrange,
+            s_col,
         })
     }
 
@@ -601,7 +611,13 @@ pub trait Air: Send + Sync {
             c_coefficients.push(public_coin.draw()?);
         }
 
-        let lagrange_cc = if self.context().has_lagrange_kernel_aux_column() {
+        let lagrange_cc = if self.context().is_with_logup_gkr() {
+            Some(public_coin.draw()?)
+        } else {
+            None
+        };
+
+        let s_col = if self.context().is_with_logup_gkr() {
             Some(public_coin.draw()?)
         } else {
             None
@@ -611,6 +627,7 @@ pub trait Air: Send + Sync {
             trace: t_coefficients,
             constraints: c_coefficients,
             lagrange: lagrange_cc,
+            s_col,
         })
     }
 }
@@ -621,11 +638,6 @@ pub trait LogUpGkrEvaluator: Clone {
 
     /// Public inputs need to compute the final claim.
     type PublicInputs: ToElements<Self::BaseField> + Send;
-
-    /// Defines the query for this evaluator.
-    ///
-    /// This is intended to be a simple struct which would not require allocations.
-    type Query<E: FieldElement<BaseField = Self::BaseField>>: From<Vec<E>> + Debug;
 
     /// Gets a list of all oracles involved in LogUp-GKR; this is intended to be used in construction of
     /// MLEs.
@@ -639,13 +651,15 @@ pub trait LogUpGkrEvaluator: Clone {
 
     fn max_degree(&self) -> usize;
 
+    fn get_num_periodic_col(&self) -> usize;
+
     /// Builds a query from the provided main trace frame and periodic values.
     ///
     /// Note: it should be possible to provide an implementation of this method based on the
     /// information returned from `get_oracles()`. However, this implementation is likely to be
     /// expensive compared to the hand-written implementation. However, we could provide a test
     /// which verifies that `get_oracles()` and `build_query()` methods are consistent.
-    fn build_query<E>(&self, frame: &EvaluationFrame<E>, periodic_values: &[E]) -> Self::Query<E>
+    fn build_query<E>(&self, frame: &EvaluationFrame<E>, periodic_values: &[E]) -> Vec<E>
     where
         E: FieldElement<BaseField = Self::BaseField>;
 
@@ -658,7 +672,7 @@ pub trait LogUpGkrEvaluator: Clone {
     ///   `evaluate_query()` and `get_oracles()` methods.
     fn evaluate_query<F, E>(
         &self,
-        query: &Self::Query<F>,
+        query: &[F],
         rand_values: &[E],
         numerator: &mut [E],
         denominator: &mut [E],
@@ -694,8 +708,6 @@ impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> {
 
     type PublicInputs = ();
 
-    type Query<E: FieldElement<BaseField = Self::BaseField>> = Vec<E>;
-
     fn get_oracles(&self) -> Vec<LogUpGkrOracle<Self::BaseField>> {
         todo!()
     }
@@ -704,7 +716,7 @@ impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> {
         todo!()
     }
 
-    fn build_query<E>(&self, frame: &EvaluationFrame<E>, periodic_values: &[E]) -> Self::Query<E>
+    fn build_query<E>(&self, frame: &EvaluationFrame<E>, periodic_values: &[E]) -> Vec<E>
     where
         E: FieldElement<BaseField = Self::BaseField>,
     {
@@ -713,7 +725,7 @@ impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> {
 
     fn evaluate_query<F, E>(
         &self,
-        query: &Self::Query<F>,
+        query: &[F],
         rand_values: &[E],
         numerator: &mut [E],
         denominator: &mut [E],
@@ -736,6 +748,10 @@ impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> {
     }
 
     fn max_degree(&self) -> usize {
+        todo!()
+    }
+
+    fn get_num_periodic_col(&self) -> usize {
         todo!()
     }
 }

@@ -46,7 +46,6 @@ pub use crypto;
 use crypto::{ElementHasher, Hasher, RandomCoin, VectorCommitment};
 use fri::FriVerifier;
 
-use libc_print::libc_println;
 pub use math;
 use math::{
     fields::{CubeExtension, QuadExtension},
@@ -374,7 +373,7 @@ fn verify_gkr<E: FieldElement, H: ElementHasher<BaseField = E::BaseField>>(
     }
 
     let gkr_rand_elements =
-        GkrRandElements::new(LagrangeKernelRandElements::new(eval_point), batching_randomness);
+        GkrRandElements::new(LagrangeKernelRandElements::new(eval_point), batching_randomness, openings, evaluator.get_oracles());
 
     Ok(gkr_rand_elements)
 }

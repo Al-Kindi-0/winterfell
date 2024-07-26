@@ -256,7 +256,11 @@ impl<B: StarkField> AirContext<B> {
 
     /// Returns the index of the auxiliary column which implements the Lagrange kernel, if any
     pub fn lagrange_kernel_aux_column_idx(&self) -> Option<usize> {
-        self.lagrange_kernel_aux_column_idx
+        if self.is_with_logup_gkr() {
+            Some(self.trace_info().aux_segment_width() - 1)
+        } else {
+            None
+        }
     }
 
     /// Returns true if the auxiliary trace segment contains a Lagrange kernel column

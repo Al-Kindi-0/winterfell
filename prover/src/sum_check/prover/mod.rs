@@ -177,7 +177,7 @@ fn sumcheck_round<E: FieldElement>(
             eq_x += eq_delta;
 
             evaluator.evaluate_query(
-                &evals_x.clone().into(),
+                &evals_x.clone(),
                 &log_up_randomness,
                 &mut numerators,
                 &mut denominators,

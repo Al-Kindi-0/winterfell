@@ -73,6 +73,13 @@ pub trait TraceLde<E: FieldElement>: Sync {
         frame: &mut LagrangeKernelEvaluationFrame<E>,
     );
 
+    fn read_s_col(
+        &self,
+        lde_step: usize,
+        col_idx: usize,
+        frame: &mut EvaluationFrame<E>,
+    );
+
     /// Returns trace table rows at the specified positions along with an opening proof to these
     /// rows.
     fn query(&self, positions: &[usize]) -> Vec<Queries>;

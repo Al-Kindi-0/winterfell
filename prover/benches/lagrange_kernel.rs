@@ -240,7 +240,7 @@ impl Prover for LagrangeProver {
             LagrangeKernelRandElements::new(rand_elements)
         };
 
-        ((), GkrRandElements::new(lagrange_kernel_rand_elements, Vec::new()))
+        ((), GkrRandElements::new(lagrange_kernel_rand_elements, Vec::new(), Vec::new(), Vec::new()))
     }
 
     fn build_aux_trace<E>(

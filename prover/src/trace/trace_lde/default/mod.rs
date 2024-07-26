@@ -246,6 +246,14 @@ where
     fn trace_info(&self) -> &TraceInfo {
         &self.trace_info
     }
+
+    fn read_s_col(&self, lde_step: usize, col_idx: usize, frame: &mut EvaluationFrame<E>) {
+        let next_lde_step = (lde_step + self.blowup()) % self.trace_len();
+
+        let segment = self.aux_segment_lde.as_ref().expect("expected aux segment to be present");
+        frame.current_mut().copy_from_slice(&[segment.row(lde_step)[col_idx]]);
+        frame.next_mut().copy_from_slice(&[segment.row(next_lde_step)[col_idx]]);
+    }
 }
 
 // HELPER FUNCTIONS

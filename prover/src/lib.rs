@@ -56,14 +56,11 @@ pub use crypto;
 use crypto::{ElementHasher, RandomCoin, VectorCommitment};
 use fri::FriProver;
 
-use libc_print::libc_println;
 use logup_gkr::prove_gkr;
 
 pub use math;
 use math::{
-    fft::infer_degree,
-    fields::{CubeExtension, QuadExtension},
-    ExtensibleField, FieldElement, StarkField, ToElements,
+    fft::infer_degree, fields::{CubeExtension, QuadExtension}, polynom::EqFunction, ExtensibleField, ExtensionOf, FieldElement, StarkField, ToElements
 };
 use tracing::{event, info_span, instrument, Level};
 pub use utils::{
@@ -241,6 +238,37 @@ pub trait Prover {
         unimplemented!("`Prover::build_aux_trace` needs to be implemented when the trace has an auxiliary segment.")
     }
 
+    /// Builds and returns the auxiliary trace.
+    #[allow(unused_variables)]
+    #[maybe_async]
+    fn build_aux_trace_wrapper<E>(
+        &self,
+        air: &Self::Air,
+        main_trace: &Self::Trace,
+        aux_rand_elements: &AuxRandElements<E>,
+    ) -> ColMatrix<E>
+    where
+        E: FieldElement<BaseField = Self::BaseField>,
+    {
+        let mut aux_trace = self.build_aux_trace(main_trace, aux_rand_elements);
+
+        if let Some(lagrange_randomness) = aux_rand_elements.lagrange() {
+            let evaluator = air.get_logup_gkr_evaluator::<E>();
+            let lagrange_col = build_lagrange_column(&lagrange_randomness);
+            let s_col = build_s_column(
+                main_trace,
+                aux_rand_elements.gkr_data().expect("should not be empty"),
+                &evaluator,
+                &lagrange_col,
+            );
+
+            aux_trace.merge_column(s_col);
+            aux_trace.merge_column(lagrange_col);
+        }
+
+       aux_trace
+    }
+
     /// Returns a STARK proof attesting to a correct execution of a computation defined by the
     /// provided trace.
     ///
@@ -325,8 +353,7 @@ pub trait Prover {
 
         // build the auxiliary trace segment, and append the resulting segments to trace commitment
         // and trace polynomial table structs
-        let aux_trace_with_metadata = if air.trace_info().is_multi_segment()
-        {
+        let aux_trace_with_metadata = if air.trace_info().is_multi_segment() {
             let (gkr_proof, aux_rand_elements) = if air.context().is_with_logup_gkr() {
                 let gkr_proof =
                     prove_gkr(&trace, &air.get_logup_gkr_evaluator::<E>(), channel.public_coin())
@@ -347,6 +374,8 @@ pub trait Prover {
                 let gkr_rand_elements = GkrRandElements::new(
                     LagrangeKernelRandElements::new(eval_point),
                     batching_randomness,
+                    openings,
+                    air.get_logup_gkr_evaluator::<E>().get_oracles(),
                 );
 
                 let rand_elements = air
@@ -364,7 +393,7 @@ pub trait Prover {
 
                 (None, AuxRandElements::new(rand_elements))
             };
-            let aux_trace = maybe_await!(self.build_aux_trace(&trace, &aux_rand_elements));
+            let aux_trace = maybe_await!(self.build_aux_trace_wrapper(&air, &trace, &aux_rand_elements));
 
             // commit to the auxiliary trace segment
             let aux_segment_polys = {
@@ -645,4 +674,52 @@ pub trait Prover {
 
         (constraint_commitment, composition_poly)
     }
+}
+
+fn build_s_column<E: FieldElement>(
+    main_trace: &impl Trace<BaseField = E::BaseField>,
+    gkr_data: GkrRandElements<E>,
+    evaluator: &impl LogUpGkrEvaluator<BaseField = E::BaseField>,
+    lagrange_kernel_col: &[E],
+) -> Vec<E> {
+    let GkrRandElements {
+        lagrange,
+        openings_combining_randomness,
+        openings,
+        oracles,
+    } = gkr_data;
+
+    let c =  openings[0] + inner_product(&openings_combining_randomness, &openings[1..]);
+    let main_segment = main_trace.main_segment();
+    let mean = c / E::from(E::BaseField::from(main_segment.num_rows() as u32));
+
+    let mut result = Vec::with_capacity(main_segment.num_rows());
+    let mut last_value = E::ZERO;
+    //result.push(last_value);
+
+    let mut main_frame = EvaluationFrame::new(main_trace.main_segment().num_cols());
+
+    for i in 0..main_segment.num_rows() {
+        main_trace.read_main_frame(i, &mut main_frame);
+
+        let query = evaluator.build_query(&main_frame, &[]);
+
+        let cur_value = last_value - mean + (E::from(query[0]) + inner_product(&query[1..], &openings_combining_randomness)) * lagrange_kernel_col[i];
+        result.push(cur_value);
+        last_value = cur_value;
+    }
+
+    result
+}
+
+fn build_lagrange_column<E: FieldElement>(lagrange_randomness: &[E]) -> Vec<E> {
+    EqFunction::new(lagrange_randomness.to_vec()).evaluations()
+}
+
+
+pub fn inner_product<E: FieldElement + ExtensionOf<F>, F: FieldElement>(
+    x: &[F],
+    y: &[E],
+) -> E {
+    x.iter().zip(y.iter()).fold(E::ZERO, |acc, (&x_i, &y_i)| acc + y_i.mul_base(x_i))
 }

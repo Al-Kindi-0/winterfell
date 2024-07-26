@@ -233,7 +233,7 @@ fn verify_final<
     let mut denominators = vec![E::ZERO; evaluator.get_num_fractions()];
 
     evaluator.evaluate_query(
-        &openings_claim.openings.clone().into(),
+        &openings_claim.openings.clone(),
         &log_up_randomness,
         &mut numerators,
         &mut denominators,

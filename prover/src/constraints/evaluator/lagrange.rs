@@ -6,12 +6,113 @@
 use alloc::vec::Vec;
 
 use air::{
-    Air, LagrangeConstraintsCompositionCoefficients, LagrangeKernelConstraints,
-    LagrangeKernelEvaluationFrame, LagrangeKernelRandElements,
+    Air, EvaluationFrame, GkrRandElements, LagrangeConstraintsCompositionCoefficients,
+    LagrangeKernelConstraints, LagrangeKernelEvaluationFrame, LagrangeKernelRandElements,
+    LogUpGkrEvaluator,
 };
 use math::{batch_inversion, FieldElement};
 
-use crate::{StarkDomain, TraceLde};
+use crate::{inner_product, StarkDomain, TraceLde};
+
+pub struct SColumnConstraints<'a, E: FieldElement, A: Air<BaseField = E::BaseField>> {
+    air: &'a A,
+    openings: Vec<E>,
+    batching_randomness: Vec<E>,
+    cc_coef: E,
+}
+
+impl<'a, E, A> SColumnConstraints<'a, E, A>
+where
+    E: FieldElement,
+    A: Air<BaseField = E::BaseField>,
+{
+    pub fn new(air: &'a A, logup_rand: &GkrRandElements<E>, cc_coef: E) -> Self {
+        let GkrRandElements {
+            lagrange,
+            openings_combining_randomness,
+            openings,
+            oracles,
+        } = logup_rand;
+
+        Self {
+            air,
+            openings: openings.to_vec(),
+            batching_randomness: openings_combining_randomness.to_vec(),
+            cc_coef,
+        }
+    }
+
+    /// Evaluates the transition and boundary constraints. Specifically, the constraint evaluations
+    /// are divided by their corresponding divisors, and the resulting terms are linearly combined
+    /// using the composition coefficients.
+    ///
+    /// Writes the evaluations in `combined_evaluations_acc` at the corresponding (constraint
+    /// evaluation) domain index.
+    pub fn evaluate_constraints<T>(
+        &self,
+        trace: &T,
+        domain: &StarkDomain<E::BaseField>,
+        combined_evaluations_acc: &mut [E],
+    ) where
+        T: TraceLde<E>,
+    {
+        let evaluator = self.air.get_logup_gkr_evaluator::<E>();
+        let lde_shift = domain.ce_to_lde_blowup().trailing_zeros();
+        let trans_constraints_divisors = compute_s_col_divisor(
+            domain.ce_domain_size(),
+            domain.ce_domain_generator(),
+            domain.offset(),
+            self.air.trace_length(),
+        );
+        let s_col_idx = trace.trace_info().aux_segment_width() - 2;
+        let l_col_idx = trace.trace_info().aux_segment_width() - 1;
+        let mut main_frame = EvaluationFrame::new(trace.trace_info().main_trace_width());
+        let mut aux_frame = EvaluationFrame::new(trace.trace_info().aux_segment_width());
+
+        let c = self.openings[0] + inner_product(&self.batching_randomness, &self.openings[1..]);
+        let mean = c / E::from(E::BaseField::from(trace.trace_info().length() as u32));
+
+        //let mut result = Vec::with_capacity(domain.ce_domain_size());
+        for step in 0..domain.ce_domain_size() {
+            trace.read_aux_trace_frame_into(step, &mut aux_frame);
+            trace.read_main_trace_frame_into(step << lde_shift, &mut main_frame);
+
+            let s_cur = aux_frame.current()[s_col_idx];
+            let s_nxt = aux_frame.next()[s_col_idx];
+            let l_cur = aux_frame.current()[l_col_idx];
+
+            let query = evaluator.build_query(&main_frame, &[]);
+
+            let batched_claim =
+                E::from(query[0]) + inner_product(&query[1..], &self.batching_randomness);
+
+            let rhs = s_cur - mean + batched_claim * l_cur;
+            let lhs = s_nxt;
+
+            combined_evaluations_acc[step] += (rhs - lhs) * self.cc_coef.mul_base(trans_constraints_divisors[step]);
+        }
+    }
+}
+
+fn compute_s_col_divisor<E: FieldElement>(
+    ce_domain_size: usize,
+    ce_domain_generator: E,
+    offset: E,
+    trace_length: usize,
+) -> Vec<E> {
+    let degree = trace_length as u32;
+    let mut cur = E::ONE;
+    let term = ce_domain_generator.exp(degree.into());
+    let offset_scaled = offset.exp(degree.into());
+
+    let mut result = Vec::with_capacity(ce_domain_size);
+
+    for _ in 0..ce_domain_size {
+        result.push(offset_scaled * cur - E::ONE);
+        cur *= term;
+    }
+    batch_inversion(&result)
+}
 
 /// Contains a specific strategy for evaluating the Lagrange kernel boundary and transition
 /// constraints where the divisors' evaluation is batched.

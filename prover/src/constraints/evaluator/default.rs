@@ -13,7 +13,8 @@ use utils::iter_mut;
 use utils::{iterators::*, rayon};
 
 use super::{
-    super::EvaluationTableFragment, lagrange::LagrangeKernelConstraintsBatchEvaluator,
+    super::EvaluationTableFragment,
+    lagrange::{LagrangeKernelConstraintsBatchEvaluator, SColumnConstraints},
     BoundaryConstraints, CompositionPolyTrace, ConstraintEvaluationTable, ConstraintEvaluator,
     PeriodicValueTable, StarkDomain, TraceLde,
 };
@@ -41,6 +42,7 @@ pub struct DefaultConstraintEvaluator<'a, A: Air, E: FieldElement<BaseField = A:
     boundary_constraints: BoundaryConstraints<E>,
     transition_constraints: TransitionConstraints<E>,
     lagrange_constraints_evaluator: Option<LagrangeKernelConstraintsBatchEvaluator<E>>,
+    s_col_evaluator: Option<SColumnConstraints<'a, E, A>>,
     aux_rand_elements: Option<AuxRandElements<E>>,
     periodic_values: PeriodicValueTable<E::BaseField>,
 }
@@ -121,6 +123,7 @@ where
         let combined_evaluations = {
             let mut constraints_evaluations = evaluation_table.combine();
             self.evaluate_lagrange_kernel_constraints(trace, domain, &mut constraints_evaluations);
+            self.evaluate_s_col_constraints(trace, domain, &mut constraints_evaluations);
 
             constraints_evaluations
         };
@@ -158,21 +161,29 @@ where
             &composition_coefficients.boundary,
         );
 
-        let lagrange_constraints_evaluator = if air.context().has_lagrange_kernel_aux_column() {
+        let (lagrange_constraints_evaluator, s_col_evaluator) = if air.context().is_with_logup_gkr()
+        {
             let aux_rand_elements =
                 aux_rand_elements.as_ref().expect("expected aux rand elements to be present");
             let lagrange_rand_elements = aux_rand_elements
                 .lagrange()
                 .expect("expected lagrange rand elements to be present");
-            Some(LagrangeKernelConstraintsBatchEvaluator::new(
-                air,
-                lagrange_rand_elements.clone(),
-                composition_coefficients
-                    .lagrange
-                    .expect("expected Lagrange kernel composition coefficients to be present"),
-            ))
+            (
+                Some(LagrangeKernelConstraintsBatchEvaluator::new(
+                    air,
+                    lagrange_rand_elements.clone(),
+                    composition_coefficients
+                        .lagrange
+                        .expect("expected Lagrange kernel composition coefficients to be present"),
+                )),
+                Some(SColumnConstraints::new(
+                    air,
+                    &aux_rand_elements.gkr_data().unwrap(),
+                    composition_coefficients.s_col.expect("should not be None"),
+                )),
+            )
         } else {
-            None
+            (None, None)
         };
 
         DefaultConstraintEvaluator {
@@ -182,6 +193,7 @@ where
             lagrange_constraints_evaluator,
             aux_rand_elements,
             periodic_values,
+            s_col_evaluator,
         }
     }
 
@@ -311,6 +323,21 @@ where
     ) {
         if let Some(ref lagrange_constraints_evaluator) = self.lagrange_constraints_evaluator {
             lagrange_constraints_evaluator.evaluate_constraints(
+                trace,
+                domain,
+                combined_evaluations_accumulator,
+            )
+        }
+    }
+
+    fn evaluate_s_col_constraints<T: TraceLde<E>>(
+        &self,
+        trace: &T,
+        domain: &StarkDomain<A::BaseField>,
+        combined_evaluations_accumulator: &mut [E],
+    ) {
+        if let Some(ref s_col_evaluator) = self.s_col_evaluator {
+            s_col_evaluator.evaluate_constraints(
                 trace,
                 domain,
                 combined_evaluations_accumulator,
