@@ -1,13 +1,16 @@
-use crate::FieldElement;
+use alloc::vec::Vec;
 
-use super::reduce_claim;
 use air::{
-    proof::{evaluate_composition_poly, FinalOpeningClaim, RoundProof, SumCheckProof, SumCheckRoundClaim},
+    proof::{
+        evaluate_composition_poly, FinalOpeningClaim, RoundProof, SumCheckProof, SumCheckRoundClaim,
+    },
     LogUpGkrEvaluator,
 };
-use alloc::vec::Vec;
 use crypto::{ElementHasher, RandomCoin};
 use math::polynom::{EqFunction, MultiLinearPoly, UnivariatePolyEvals};
+
+use super::reduce_claim;
+use crate::FieldElement;
 
 mod error;
 pub use self::error::Error;
@@ -177,7 +180,7 @@ fn sumcheck_round<E: FieldElement>(
             eq_x += eq_delta;
 
             evaluator.evaluate_query(
-                &evals_x.clone().into(),
+                &evals_x,
                 &log_up_randomness,
                 &mut numerators,
                 &mut denominators,

@@ -6,7 +6,8 @@
 use alloc::vec::Vec;
 
 use air::{
-    Air, AirContext, Assertion, DefaultLogUpGkrEval, EvaluationFrame, FieldExtension, ProofOptions, TraceInfo, TransitionConstraintDegree
+    Air, AirContext, Assertion, DefaultLogUpGkrEval, EvaluationFrame, FieldExtension, ProofOptions,
+    TraceInfo, TransitionConstraintDegree,
 };
 use math::{fields::f128::BaseElement, FieldElement, StarkField};
 
@@ -105,7 +106,7 @@ impl Air for MockAir {
     fn get_periodic_column_values(&self) -> Vec<Vec<Self::BaseField>> {
         self.periodic_columns.clone()
     }
-    
+
     type LogUpGkrEvaluator = DefaultLogUpGkrEval<Self::BaseField>;
 }
 

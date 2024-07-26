@@ -3,9 +3,8 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use core::{fmt::Debug, marker::PhantomData};
-
 use alloc::{collections::BTreeMap, vec::Vec};
+use core::{fmt::Debug, marker::PhantomData};
 
 use crypto::{RandomCoin, RandomCoinError};
 use math::{fft, ExtensibleField, ExtensionOf, FieldElement, StarkField, ToElements};
@@ -622,11 +621,6 @@ pub trait LogUpGkrEvaluator: Clone {
     /// Public inputs need to compute the final claim.
     type PublicInputs: ToElements<Self::BaseField> + Send;
 
-    /// Defines the query for this evaluator.
-    ///
-    /// This is intended to be a simple struct which would not require allocations.
-    type Query<E: FieldElement<BaseField = Self::BaseField>>: From<Vec<E>> + Debug;
-
     /// Gets a list of all oracles involved in LogUp-GKR; this is intended to be used in construction of
     /// MLEs.
     fn get_oracles(&self) -> Vec<LogUpGkrOracle<Self::BaseField>>;
@@ -645,7 +639,7 @@ pub trait LogUpGkrEvaluator: Clone {
     /// information returned from `get_oracles()`. However, this implementation is likely to be
     /// expensive compared to the hand-written implementation. However, we could provide a test
     /// which verifies that `get_oracles()` and `build_query()` methods are consistent.
-    fn build_query<E>(&self, frame: &EvaluationFrame<E>, periodic_values: &[E]) -> Self::Query<E>
+    fn build_query<E>(&self, frame: &EvaluationFrame<E>, periodic_values: &[E]) -> Vec<E>
     where
         E: FieldElement<BaseField = Self::BaseField>;
 
@@ -658,7 +652,7 @@ pub trait LogUpGkrEvaluator: Clone {
     ///   `evaluate_query()` and `get_oracles()` methods.
     fn evaluate_query<F, E>(
         &self,
-        query: &Self::Query<F>,
+        query: &[F],
         rand_values: &[E],
         numerator: &mut [E],
         denominator: &mut [E],
@@ -694,8 +688,6 @@ impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> {
 
     type PublicInputs = ();
 
-    type Query<E: FieldElement<BaseField = Self::BaseField>> = Vec<E>;
-
     fn get_oracles(&self) -> Vec<LogUpGkrOracle<Self::BaseField>> {
         todo!()
     }
@@ -704,7 +696,7 @@ impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> {
         todo!()
     }
 
-    fn build_query<E>(&self, frame: &EvaluationFrame<E>, periodic_values: &[E]) -> Self::Query<E>
+    fn build_query<E>(&self, frame: &EvaluationFrame<E>, periodic_values: &[E]) -> Vec<E>
     where
         E: FieldElement<BaseField = Self::BaseField>,
     {
@@ -713,7 +705,7 @@ impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> {
 
     fn evaluate_query<F, E>(
         &self,
-        query: &Self::Query<F>,
+        query: &[F],
         rand_values: &[E],
         numerator: &mut [E],
         denominator: &mut [E],

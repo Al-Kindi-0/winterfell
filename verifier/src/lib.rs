@@ -45,8 +45,6 @@ use air::{
 pub use crypto;
 use crypto::{ElementHasher, Hasher, RandomCoin, VectorCommitment};
 use fri::FriVerifier;
-
-use libc_print::libc_println;
 pub use math;
 use math::{
     fields::{CubeExtension, QuadExtension},

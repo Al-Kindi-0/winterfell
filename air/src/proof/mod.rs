@@ -33,7 +33,6 @@ pub use table::Table;
 mod logup_gkr;
 pub use logup_gkr::*;
 
-
 #[cfg(test)]
 mod tests;
 

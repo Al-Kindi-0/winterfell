@@ -42,6 +42,8 @@
 #[macro_use]
 extern crate alloc;
 
+use alloc::vec::Vec;
+
 use air::proof::FinalOpeningClaim;
 pub use air::{
     proof, proof::Proof, Air, AirContext, Assertion, AuxRandElements, BoundaryConstraint,
@@ -50,15 +52,10 @@ pub use air::{
     LagrangeKernelRandElements, LogUpGkrEvaluator, ProofOptions, TraceInfo,
     TransitionConstraintDegree,
 };
-
-use alloc::vec::Vec;
 pub use crypto;
 use crypto::{ElementHasher, RandomCoin, VectorCommitment};
 use fri::FriProver;
-
-use libc_print::libc_println;
 use logup_gkr::prove_gkr;
-
 pub use math;
 use math::{
     fft::infer_degree,
@@ -325,8 +322,7 @@ pub trait Prover {
 
         // build the auxiliary trace segment, and append the resulting segments to trace commitment
         // and trace polynomial table structs
-        let aux_trace_with_metadata = if air.trace_info().is_multi_segment()
-        {
+        let aux_trace_with_metadata = if air.trace_info().is_multi_segment() {
             let (gkr_proof, aux_rand_elements) = if air.context().is_with_logup_gkr() {
                 let gkr_proof =
                     prove_gkr(&trace, &air.get_logup_gkr_evaluator::<E>(), channel.public_coin())

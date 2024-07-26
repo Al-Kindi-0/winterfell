@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use air::{
     proof::{
         BeforeFinalLayerProof, CircuitLayer, CircuitLayerPolys, CircuitWire, FinalLayerProof,
@@ -5,7 +7,6 @@ use air::{
     },
     EvaluationFrame, LogUpGkrEvaluator,
 };
-use alloc::vec::Vec;
 use crypto::{ElementHasher, RandomCoin};
 use error::GkrProverError;
 use math::{

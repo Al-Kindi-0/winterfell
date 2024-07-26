@@ -3,17 +3,8 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use std::marker::PhantomData;
-use std::vec;
-use std::vec::Vec;
+use std::{marker::PhantomData, vec, vec::Vec};
 
-use crate::{
-    crypto::{hashers::Blake3_256, DefaultRandomCoin, RandomCoin},
-    math::{fields::f64::BaseElement, ExtensionOf, FieldElement},
-    matrix::ColMatrix,
-    DefaultConstraintEvaluator, DefaultTraceLde, Prover, ProverGkrProof, StarkDomain,
-    TracePolyTable,
-};
 use air::{
     Air, AirContext, Assertion, AuxRandElements, ConstraintCompositionCoefficients, FieldExtension,
     GkrRandElements, LagrangeKernelRandElements, LogUpGkrOracle, ProofOptions, TraceInfo,
@@ -21,6 +12,13 @@ use air::{
 use crypto::MerkleTree;
 
 use super::*;
+use crate::{
+    crypto::{hashers::Blake3_256, DefaultRandomCoin, RandomCoin},
+    math::{fields::f64::BaseElement, ExtensionOf, FieldElement},
+    matrix::ColMatrix,
+    DefaultConstraintEvaluator, DefaultTraceLde, Prover, ProverGkrProof, StarkDomain,
+    TracePolyTable,
+};
 
 #[test]
 fn test_logup_gkr() {
@@ -28,14 +26,14 @@ fn test_logup_gkr() {
 
     let prover = LogUpGkrSimpleProver::new(0);
 
-    let _proof = prover.prove(trace).unwrap();
+    let proof = prover.prove(trace).unwrap();
 
     verify::<
         LogUpGkrSimpleAir,
         Blake3_256<BaseElement>,
         DefaultRandomCoin<Blake3_256<BaseElement>>,
         MerkleTree<Blake3_256<BaseElement>>,
-    >(_proof, (), &AcceptableOptions::MinConjecturedSecurity(0))
+    >(proof, (), &AcceptableOptions::MinConjecturedSecurity(0))
     .unwrap()
 }
 
@@ -206,8 +204,6 @@ impl LogUpGkrEvaluator for PlainLogUpGkrEval<BaseElement> {
 
     type PublicInputs = ();
 
-    type Query<E: FieldElement<BaseField = Self::BaseField>> = Vec<E>;
-
     fn get_oracles(&self) -> Vec<LogUpGkrOracle<Self::BaseField>> {
         let committed_0 = LogUpGkrOracle::CurrentRow(0);
         let committed_1 = LogUpGkrOracle::CurrentRow(1);
@@ -229,7 +225,7 @@ impl LogUpGkrEvaluator for PlainLogUpGkrEval<BaseElement> {
         3
     }
 
-    fn build_query<E>(&self, frame: &EvaluationFrame<E>, _periodic_values: &[E]) -> Self::Query<E>
+    fn build_query<E>(&self, frame: &EvaluationFrame<E>, _periodic_values: &[E]) -> Vec<E>
     where
         E: FieldElement<BaseField = Self::BaseField>,
     {
@@ -239,7 +235,7 @@ impl LogUpGkrEvaluator for PlainLogUpGkrEval<BaseElement> {
 
     fn evaluate_query<F, E>(
         &self,
-        query: &Self::Query<F>,
+        query: &[F],
         rand_values: &[E],
         numerator: &mut [E],
         denominator: &mut [E],

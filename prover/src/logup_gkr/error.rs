@@ -1,6 +1,5 @@
 use crate::sum_check::SumCheckProverError;
 
-
 #[derive(Debug, thiserror::Error)]
 pub enum GkrProverError {
     //#[error("failed to generate multi-linear from the given evaluations")]

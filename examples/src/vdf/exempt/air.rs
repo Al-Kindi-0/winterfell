@@ -6,7 +6,9 @@
 use std::marker::PhantomData;
 
 use winterfell::{
-    math::{ExtensionOf, ToElements}, Air, AirContext, Assertion, EvaluationFrame, LogUpGkrEvaluator, LogUpGkrOracle, TraceInfo, TransitionConstraintDegree
+    math::{ExtensionOf, ToElements},
+    Air, AirContext, Assertion, EvaluationFrame, LogUpGkrEvaluator, LogUpGkrOracle, TraceInfo,
+    TransitionConstraintDegree,
 };
 
 use super::{BaseElement, FieldElement, ProofOptions, ALPHA, FORTY_TWO, TRACE_WIDTH};
@@ -83,18 +85,18 @@ impl Air for VdfAir {
     }
 }
 
-
 #[derive(Clone)]
 pub struct DefaultLogUpGkrEval<E: FieldElement> {
     _field: PhantomData<E>,
 }
 
-impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> where VdfInputs: ToElements<<G as FieldElement>::BaseField> {
+impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G>
+where
+    VdfInputs: ToElements<<G as FieldElement>::BaseField>,
+{
     type BaseField = G::BaseField;
 
     type PublicInputs = VdfInputs;
-
-    type Query<E: FieldElement<BaseField = Self::BaseField>> = Vec<E>;
 
     fn get_oracles(&self) -> Vec<LogUpGkrOracle<Self::BaseField>> {
         todo!()
@@ -104,7 +106,7 @@ impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> where VdfInpu
         todo!()
     }
 
-    fn build_query<E>(&self, frame: &EvaluationFrame<E>, periodic_values: &[E]) -> Self::Query<E>
+    fn build_query<E>(&self, frame: &EvaluationFrame<E>, periodic_values: &[E]) -> Vec<E>
     where
         E: FieldElement<BaseField = Self::BaseField>,
     {
@@ -113,7 +115,7 @@ impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> where VdfInpu
 
     fn evaluate_query<F, E>(
         &self,
-        query: &Self::Query<F>,
+        query: &[F],
         rand_values: &[E],
         numerator: &mut [E],
         denominator: &mut [E],
@@ -130,11 +132,11 @@ impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> where VdfInpu
     {
         todo!()
     }
-    
+
     fn get_num_fractions(&self) -> usize {
         todo!()
     }
-    
+
     fn max_degree(&self) -> usize {
         todo!()
     }

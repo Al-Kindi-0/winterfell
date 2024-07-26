@@ -1,12 +1,14 @@
+use alloc::vec::Vec;
 use core::ops::Add;
 
-use alloc::vec::Vec;
-use math::{polynom::{MultiLinearPoly, UnivariatePolyCoef}, FieldElement};
+use math::{
+    polynom::{MultiLinearPoly, UnivariatePolyCoef},
+    FieldElement,
+};
 use utils::{ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable};
 
 mod composition_polynomials;
 pub use composition_polynomials::*;
-
 
 // GKR CIRCUIT PROOF
 // ===============================================================================================
@@ -88,10 +90,7 @@ where
     E: FieldElement,
 {
     fn write_into<W: ByteWriter>(&self, target: &mut W) {
-        let Self {
-            before_merge_proof,
-            after_merge_proof,
-        } = self;
+        let Self { before_merge_proof, after_merge_proof } = self;
         before_merge_proof.write_into(target);
         after_merge_proof.write_into(target);
     }
@@ -108,7 +107,6 @@ where
         })
     }
 }
-
 
 // CIRCUIT LAYER POLYS
 // ===============================================================================================
@@ -152,10 +150,7 @@ where
     E: FieldElement,
 {
     fn write_into<W: ByteWriter>(&self, target: &mut W) {
-        let Self {
-            numerators,
-            denominators,
-        } = self;
+        let Self { numerators, denominators } = self;
         numerators.write_into(target);
         denominators.write_into(target);
     }
@@ -231,10 +226,7 @@ where
     pub fn new(numerator: E, denominator: E) -> Self {
         assert_ne!(denominator, E::ZERO);
 
-        Self {
-            numerator,
-            denominator,
-        }
+        Self { numerator, denominator }
     }
 }
 
@@ -252,11 +244,8 @@ where
     }
 }
 
-
-
 // SUM-CHECK
 // ===============================================================================================
-
 
 /// Represents an opening claim at an evaluation point against a batch of oracles.
 ///
@@ -272,10 +261,7 @@ pub struct FinalOpeningClaim<E> {
 
 impl<E: FieldElement> Serializable for FinalOpeningClaim<E> {
     fn write_into<W: ByteWriter>(&self, target: &mut W) {
-        let Self {
-            eval_point,
-            openings,
-        } = self;
+        let Self { eval_point, openings } = self;
         eval_point.write_into(target);
         openings.write_into(target);
     }
@@ -293,7 +279,6 @@ where
     }
 }
 
-
 /// A sum-check proof.
 ///
 /// Composed of the round proofs i.e., the polynomials sent by the Prover at each round as well as
@@ -304,7 +289,6 @@ pub struct SumCheckProof<E: FieldElement> {
     pub openings_claim: FinalOpeningClaim<E>,
     pub round_proofs: Vec<RoundProof<E>>,
 }
-
 
 /// A sum-check round proof.
 ///
@@ -334,7 +318,6 @@ where
         })
     }
 }
-
 
 impl<E> Serializable for SumCheckProof<E>
 where

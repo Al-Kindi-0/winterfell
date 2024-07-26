@@ -1,5 +1,7 @@
 mod sum_check;
 
+use alloc::vec::Vec;
+
 use air::{
     proof::{
         evaluate_composition_poly, CircuitLayerPolys, FinalLayerProof, FinalOpeningClaim,
@@ -7,7 +9,6 @@ use air::{
     },
     LogUpGkrEvaluator,
 };
-use alloc::vec::Vec;
 use crypto::{ElementHasher, RandomCoin};
 use math::{polynom::EqFunction, FieldElement};
 use sum_check::verify_rounds;
@@ -233,7 +234,7 @@ fn verify_final<
     let mut denominators = vec![E::ZERO; evaluator.get_num_fractions()];
 
     evaluator.evaluate_query(
-        &openings_claim.openings.clone().into(),
+        &openings_claim.openings,
         &log_up_randomness,
         &mut numerators,
         &mut denominators,

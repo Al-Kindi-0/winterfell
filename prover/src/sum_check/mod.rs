@@ -1,6 +1,8 @@
 use air::proof::{RoundProof, SumCheckRoundClaim};
 use math::FieldElement;
-pub use prover::{sum_check_prove_higher_degree, Error as SumCheckProverError, sumcheck_prove_plain};
+pub use prover::{
+    sum_check_prove_higher_degree, sumcheck_prove_plain, Error as SumCheckProverError,
+};
 
 mod prover;
 

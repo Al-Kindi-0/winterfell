@@ -1,4 +1,5 @@
-use alloc::vec::Vec; 
+use alloc::vec::Vec;
+
 use utils::{ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable};
 
 use crate::{batch_inversion, polynom, FieldElement};
@@ -6,14 +7,12 @@ use crate::{batch_inversion, polynom, FieldElement};
 // UNIVARIATE POLYNOMIAL (EVALUATION FORM)
 // ================================================================================================
 
-
 /// The coefficients of a univariate polynomial of degree n with the linear term coefficient
 /// omitted.
 #[derive(Clone, Debug)]
 pub struct UnivariatePolyCoef<E: FieldElement> {
     pub coefficients: Vec<E>,
 }
-
 
 impl<E: FieldElement> UnivariatePolyCoef<E> {
     /// Evaluates a polynomial at a challenge point using a round claim.
@@ -244,27 +243,26 @@ fn compute_m_entry<E: FieldElement>(
 
 #[test]
 fn test_poly_partial() {
- 
-
     use super::super::field::f64::BaseElement;
-   
+
     let degree = 1000;
     let mut points: Vec<BaseElement> = vec![BaseElement::ZERO; degree];
-    points.iter_mut().enumerate().for_each(|(i, node)| *node = BaseElement::from(i as u32));
+    points
+        .iter_mut()
+        .enumerate()
+        .for_each(|(i, node)| *node = BaseElement::from(i as u32));
 
-    let p: Vec<BaseElement> =  rand_utils::rand_vector(degree);
-    let evals =  polynom::eval_many(&p, &points);
+    let p: Vec<BaseElement> = rand_utils::rand_vector(degree);
+    let evals = polynom::eval_many(&p, &points);
 
     let mut partial_evals = evals.clone();
     partial_evals.remove(0);
 
-    let partial_poly = UnivariatePolyEvals {
-        partial_evaluations: partial_evals,
-    };
+    let partial_poly = UnivariatePolyEvals { partial_evaluations: partial_evals };
     let claim = evals[0] + evals[1];
     let poly_coeff = partial_poly.to_poly(claim);
 
-    let r =  rand_utils::rand_vector(1);
+    let r = rand_utils::rand_vector(1);
 
-    assert_eq!( polynom::eval(&p, r[0]), poly_coeff.evaluate_using_claim(&claim, &r[0]))
+    assert_eq!(polynom::eval(&p, r[0]), poly_coeff.evaluate_using_claim(&claim, &r[0]))
 }
