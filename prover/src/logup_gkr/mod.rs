@@ -1,10 +1,7 @@
-use core::marker::PhantomData;
-
 use air::{
     proof::{
-        BeforeFinalLayerProof, CircuitLayer, CircuitLayerPolys, CircuitWire, FinalClaimBuilder,
-        FinalLayerProof, FinalOpeningClaim, GkrCircuitProof, GkrComposition, RoundProof,
-        SumCheckProof, SumCheckRoundClaim,
+        BeforeFinalLayerProof, CircuitLayer, CircuitLayerPolys, CircuitWire, FinalLayerProof,
+        FinalOpeningClaim, GkrCircuitProof, SumCheckProof,
     },
     EvaluationFrame, LogUpGkrEvaluator,
 };
@@ -16,14 +13,9 @@ use math::{
     FieldElement,
 };
 
-use crate::{
-    matrix::ColMatrix, sum_check_prove_final, sumcheck_prove_plain, SumCheckProver, Trace,
-};
+use crate::{matrix::ColMatrix, sum_check_prove_higher_degree, sumcheck_prove_plain, Trace};
 
 mod error;
-
-#[cfg(test)]
-mod test;
 
 // EVALUATED CIRCUIT
 // ================================================================================================
@@ -240,16 +232,16 @@ pub fn prove_gkr<E: FieldElement>(
 
     // run the GKR prover for all layers except the input layer
     let (before_final_layer_proofs, gkr_claim) =
-        prove_before_final_circuit_layers(&mut circuit, public_coin)?;
+        prove_intermediate_layers(&mut circuit, public_coin)?;
 
+    // build the MLEs of the relevant main trace columns
     let (main_trace_mls, _periodic_values) =
         build_mls_from_main_trace_segment(evaluator.get_oracles(), main_trace.main_segment())?;
 
     // run the GKR prover for the input layer
     let num_rounds_before_merge = evaluator.get_num_fractions().ilog2() as usize - 1;
-    assert_eq!(num_rounds_before_merge, 1);
 
-    let final_layer_proof = prove_final_circuit_layer(
+    let final_layer_proof = prove_input_layer(
         evaluator,
         logup_randomness,
         main_trace_mls,
@@ -270,7 +262,7 @@ pub fn prove_gkr<E: FieldElement>(
 }
 
 /// Proves the final GKR layer which corresponds to the input circuit layer.
-fn prove_final_circuit_layer<
+fn prove_input_layer<
     E: FieldElement,
     C: RandomCoin<Hasher = H, BaseField = E::BaseField>,
     H: ElementHasher<BaseField = E::BaseField>,
@@ -299,7 +291,7 @@ fn prove_final_circuit_layer<
         layer.denominators.project_least_significant_variable();
 
     // run the sumcheck protocol
-    let ((before_merge_proof, claim), r_sum_check) = sum_check_prover_plain_full(
+    let ((before_merge_proof, claim), r_sum_check) = sum_check_prove_num_rounds_degree_3(
         num_rounds_merge,
         claimed_evaluation,
         &mut left_numerators,
@@ -317,7 +309,7 @@ fn prove_final_circuit_layer<
         vec![left_numerators, right_numerators, left_denominators, right_denominators, poly_x];
 
     // run the second sum-check protocol
-    let after_merge_proof = sum_check_prove_final(
+    let after_merge_proof = sum_check_prove_higher_degree(
         evaluator,
         claim,
         r_sum_check,
@@ -368,7 +360,7 @@ fn build_mls_from_main_trace_segment<E: FieldElement>(
 }
 
 /// Proves all GKR layers except for input layer.
-fn prove_before_final_circuit_layers<
+fn prove_intermediate_layers<
     E: FieldElement,
     C: RandomCoin<Hasher = H, BaseField = E::BaseField>,
     H: ElementHasher<BaseField = E::BaseField>,
@@ -410,7 +402,7 @@ fn prove_before_final_circuit_layers<
             inner_layer.denominators.project_least_significant_variable();
 
         // run the sumcheck protocol
-        let ((proof, _), _) = sum_check_prover_plain_full(
+        let ((proof, _), _) = sum_check_prove_num_rounds_degree_3(
             left_numerators.num_variables(),
             claim,
             &mut left_numerators,
@@ -507,36 +499,8 @@ where
     )
 }
 
-/// Runs the first sum-check prover for the input layer.
-#[allow(clippy::type_complexity)]
-fn sum_check_prover_plain_partial<
-    E: FieldElement,
-    C: RandomCoin<Hasher = H, BaseField = E::BaseField>,
-    H: ElementHasher<BaseField = E::BaseField>,
->(
-    claim: (E, E),
-    num_rounds: usize,
-    ml_polys: &mut [MultiLinearPoly<E>],
-    transcript: &mut C,
-) -> Result<((SumCheckRoundClaim<E>, Vec<RoundProof<E>>), E), GkrProverError> {
-    // generate challenge to batch two sumchecks
-    let data = vec![claim.0, claim.1];
-    transcript.reseed(H::hash_elements(&data));
-    let r_batch = transcript.draw().map_err(|_| GkrProverError::FailedToGenerateChallenge)?;
-    let claim = claim.0 + claim.1 * r_batch;
-
-    // generate the composition polynomial
-    let composer = GkrComposition::new(r_batch);
-
-    // run the sum-check protocol
-    let main_prover = SumCheckProver::new(composer, SimpleGkrFinalClaimBuilder(PhantomData));
-    let proof = main_prover.prove_rounds(claim, ml_polys, num_rounds, transcript)?;
-
-    Ok((proof, r_batch))
-}
-
 /// Runs the sum-check prover used in all but the input layer.
-fn sum_check_prover_plain_full<
+fn sum_check_prove_num_rounds_degree_3<
     E: FieldElement,
     C: RandomCoin<Hasher = H, BaseField = E::BaseField>,
     H: ElementHasher<BaseField = E::BaseField>,
@@ -558,25 +522,4 @@ fn sum_check_prover_plain_full<
     let proof = sumcheck_prove_plain(num_rounds, claim_, r_batch, p0, p1, q0, q1, eq, transcript)?;
 
     Ok((proof, r_batch))
-}
-
-/// Constructs [`FinalOpeningClaim`] for the sum-checks used in the GKR protocol.
-///
-/// TODO: currently, this just removes the EQ evaluation as it can be computed by the verifier.
-/// This should be generalized for other "transparent" multi-linears e.g., periodic columns.
-struct SimpleGkrFinalClaimBuilder<E: FieldElement>(PhantomData<E>);
-
-impl<E: FieldElement> FinalClaimBuilder for SimpleGkrFinalClaimBuilder<E> {
-    type Field = E;
-
-    fn build_claim(
-        &self,
-        openings: Vec<Self::Field>,
-        evaluation_point: &[Self::Field],
-    ) -> FinalOpeningClaim<Self::Field> {
-        FinalOpeningClaim {
-            eval_point: evaluation_point.to_vec(),
-            openings: (openings[..openings.len() - 1]).to_vec(),
-        }
-    }
 }

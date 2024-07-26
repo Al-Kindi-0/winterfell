@@ -1,55 +1,30 @@
-use math::FieldElement;
+use math::{polynom::MultiLinearPoly, FieldElement};
 
+pub fn evaluate_composition_poly<E: FieldElement>(
+    numerators: &[E],
+    denominators: &[E],
+    eq_eval: E,
+    r_sum_check: E,
+    tensored_merge_randomness: &[E],
+) -> E {
+    let numerators = MultiLinearPoly::from_evaluations(numerators.to_vec()).unwrap();
+    let denominators = MultiLinearPoly::from_evaluations(denominators.to_vec()).unwrap();
 
+    let (left_numerators, right_numerators) = numerators.project_least_significant_variable();
+    let (left_denominators, right_denominators) = denominators.project_least_significant_variable();
 
-/// A multi-variate polynomial for composing individual multi-linear polynomials.
-pub trait CompositionPolynomial<E: FieldElement> {
-    /// Maximum degree in all variables.
-    fn max_degree(&self) -> u32;
+    let eval_left_numerators =
+        left_numerators.evaluate_with_lagrange_kernel(&tensored_merge_randomness);
+    let eval_right_numerators =
+        right_numerators.evaluate_with_lagrange_kernel(&tensored_merge_randomness);
 
-    /// Given a query, of length equal the number of variables, evaluates [Self] at this query.
-    fn evaluate(&self, query: &[E]) -> E;
-}
+    let eval_left_denominators =
+        left_denominators.evaluate_with_lagrange_kernel(&tensored_merge_randomness);
+    let eval_right_denominators =
+        right_denominators.evaluate_with_lagrange_kernel(&tensored_merge_randomness);
 
-/// A composition polynomial used in the GKR protocol for all of its sum-checks except the final
-/// one.
-#[derive(Clone)]
-pub struct GkrComposition<E>
-where
-    E: FieldElement,
-{
-    pub combining_randomness: E,
-}
-
-impl<E> GkrComposition<E>
-where
-    E: FieldElement,
-{
-    pub fn new(combining_randomness: E) -> Self {
-        Self {
-            combining_randomness,
-        }
-    }
-}
-
-impl<E> CompositionPolynomial<E> for GkrComposition<E>
-where
-    E: FieldElement,
-{
-    fn max_degree(&self) -> u32 {
-        3
-    }
-
-    fn evaluate(&self, query: &[E]) -> E {
-        let eval_left_numerator = query[0];
-        let eval_right_numerator = query[1];
-        let eval_left_denominator = query[2];
-        let eval_right_denominator = query[3];
-        let eq_eval = query[4];
-        
-        eq_eval
-            * ((eval_left_numerator * eval_right_denominator
-                + eval_right_numerator * eval_left_denominator)
-                + eval_left_denominator * eval_right_denominator * self.combining_randomness)
-    }
+    eq_eval
+        * ((eval_left_numerators * eval_right_denominators
+            + eval_right_numerators * eval_left_denominators)
+            + eval_left_denominators * eval_right_denominators * r_sum_check)
 }

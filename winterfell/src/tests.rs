@@ -4,8 +4,8 @@
 // LICENSE file in the root directory of this source tree.
 
 use std::marker::PhantomData;
-use std::vec::{  Vec,};
 use std::vec;
+use std::vec::Vec;
 
 use crate::{
     crypto::{hashers::Blake3_256, DefaultRandomCoin, RandomCoin},
@@ -17,7 +17,7 @@ use crate::{
 use air::{
     Air, AirContext, Assertion, AuxRandElements, ConstraintCompositionCoefficients, FieldExtension,
     GkrRandElements, LagrangeKernelRandElements, LogUpGkrOracle, ProofOptions, TraceInfo,
-    };
+};
 use crypto::MerkleTree;
 
 use super::*;

@@ -51,6 +51,18 @@ fn main() {
 
     // instantiate and prepare the example
     let example = match options.example {
+        ExampleType::Vdf { num_steps } => vdf::regular::get_example(&options, num_steps),
+        ExampleType::VdfExempt { num_steps } => vdf::exempt::get_example(&options, num_steps),
+        ExampleType::Fib { sequence_length: _ } => todo!(),
+        ExampleType::Fib8 { sequence_length: _ } => todo!(),
+        ExampleType::Mulfib { sequence_length: _ } => todo!(),
+        ExampleType::Mulfib8 { sequence_length: _ } => todo!(),
+        ExampleType::FibSmall { sequence_length: _ } => todo!(),
+        ExampleType::Rescue { chain_length: _ } => todo!(),
+        ExampleType::RescueRaps { chain_length: _ } => todo!(),
+        ExampleType::Merkle { tree_depth: _ } => todo!(),
+        ExampleType::LamportA { num_signatures: _ } => todo!(),
+        ExampleType::LamportT { num_signers: _ } => todo!(),
         //ExampleType::Fib { sequence_length } => {
             //fibonacci::fib2::get_example(&options, sequence_length)
         //},
@@ -66,18 +78,6 @@ fn main() {
         //ExampleType::FibSmall { sequence_length } => {
             //fibonacci::fib_small::get_example(&options, sequence_length)
         //},
-        ExampleType::Vdf { num_steps } => vdf::regular::get_example(&options, num_steps),
-        ExampleType::VdfExempt { num_steps } => vdf::exempt::get_example(&options, num_steps),
-        ExampleType::Fib { sequence_length } => todo!(),
-        ExampleType::Fib8 { sequence_length } => todo!(),
-        ExampleType::Mulfib { sequence_length } => todo!(),
-        ExampleType::Mulfib8 { sequence_length } => todo!(),
-        ExampleType::FibSmall { sequence_length } => todo!(),
-        ExampleType::Rescue { chain_length } => todo!(),
-        ExampleType::RescueRaps { chain_length } => todo!(),
-        ExampleType::Merkle { tree_depth } => todo!(),
-        ExampleType::LamportA { num_signatures } => todo!(),
-        ExampleType::LamportT { num_signers } => todo!(),
         //ExampleType::Rescue { chain_length } => rescue::get_example(&options, chain_length),
         //#[cfg(feature = "std")]
         //ExampleType::RescueRaps { chain_length } => {

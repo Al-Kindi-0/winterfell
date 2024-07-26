@@ -1,8 +1,3 @@
-
-
-// GKR CIRCUIT PROOF
-// ===============================================================================================
-
 use core::ops::Add;
 
 use alloc::vec::Vec;
@@ -12,6 +7,9 @@ use utils::{ByteReader, ByteWriter, Deserializable, DeserializationError, Serial
 mod composition_polynomials;
 pub use composition_polynomials::*;
 
+
+// GKR CIRCUIT PROOF
+// ===============================================================================================
 
 /// A GKR proof for the correct evaluation of the sum of fractions circuit.
 #[derive(Debug, Clone)]
@@ -366,16 +364,4 @@ where
 pub struct SumCheckRoundClaim<E: FieldElement> {
     pub eval_point: Vec<E>,
     pub claim: E,
-}
-
-
-
-pub trait FinalClaimBuilder {
-    type Field: FieldElement;
-
-    fn build_claim(
-        &self,
-        openings: alloc::vec::Vec<Self::Field>,
-        evaluation_point: &[Self::Field],
-    ) -> FinalOpeningClaim<Self::Field>;
 }

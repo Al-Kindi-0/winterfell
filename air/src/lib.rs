@@ -50,5 +50,5 @@ pub use air::{
     LagrangeKernelTransitionConstraints, TraceInfo, TransitionConstraintDegree,
     TransitionConstraints,
 
-    DefaultLogUpGkrEval, LogUpGkrEvaluator, LogUpGkrOracle, 
+    DefaultLogUpGkrEval, LogUpGkrEvaluator, LogUpGkrOracle,
 };

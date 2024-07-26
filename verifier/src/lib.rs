@@ -33,13 +33,14 @@ extern crate alloc;
 
 use alloc::{string::ToString, vec::Vec};
 
-use air::{
-    proof::{FinalOpeningClaim, GkrCircuitProof}, AuxRandElements, GkrRandElements, LagrangeKernelRandElements, LogUpGkrEvaluator
-};
 pub use air::{
     proof::Proof, Air, AirContext, Assertion, BoundaryConstraint, BoundaryConstraintGroup,
     ConstraintCompositionCoefficients, ConstraintDivisor, DeepCompositionCoefficients,
     EvaluationFrame, FieldExtension, ProofOptions, TraceInfo, TransitionConstraintDegree,
+};
+use air::{
+    proof::{FinalOpeningClaim, GkrCircuitProof},
+    AuxRandElements, GkrRandElements, LagrangeKernelRandElements, LogUpGkrEvaluator,
 };
 pub use crypto;
 use crypto::{ElementHasher, Hasher, RandomCoin, VectorCommitment};
@@ -65,7 +66,7 @@ mod composer;
 use composer::DeepComposer;
 
 mod logup_gkr;
-use logup_gkr::{verify_virtual_bus, VerifierError as GkrVerifierError};
+use logup_gkr::{verify_logup_gkr, VerifierError as GkrVerifierError};
 
 mod errors;
 pub use errors::VerifierError;
@@ -184,9 +185,8 @@ where
     let aux_trace_rand_elements = if air.trace_info().is_multi_segment() {
         if air.context().is_with_logup_gkr() {
             let gkr_proof = {
-                let gkr_proof_serialized = channel
-                    .read_gkr_proof()
-                    .expect("Expected a GKR proof but there was none");
+                let gkr_proof_serialized =
+                    channel.read_gkr_proof().expect("Expected a GKR proof but there was none");
 
                 GkrCircuitProof::read_from_bytes(&gkr_proof_serialized)
                     .map_err(|err| VerifierError::ProofDeserializationError(err.to_string()))?
@@ -348,7 +348,7 @@ where
         .map_err(VerifierError::FriVerificationFailed)
 }
 
-fn verify_gkr<E: FieldElement, H: ElementHasher<BaseField = E::BaseField>,>(
+fn verify_gkr<E: FieldElement, H: ElementHasher<BaseField = E::BaseField>>(
     gkr_proof: GkrCircuitProof<E>,
     evaluator: &impl LogUpGkrEvaluator<BaseField = E::BaseField>,
     public_coin: &mut impl RandomCoin<BaseField = E::BaseField, Hasher = H>,
@@ -362,7 +362,7 @@ fn verify_gkr<E: FieldElement, H: ElementHasher<BaseField = E::BaseField>,>(
     }
 
     let final_eval_claim =
-        verify_virtual_bus(claim, evaluator, &gkr_proof, logup_randomness, public_coin)?;
+        verify_logup_gkr(claim, evaluator, &gkr_proof, logup_randomness, public_coin)?;
 
     let FinalOpeningClaim { eval_point, openings } = final_eval_claim;
 

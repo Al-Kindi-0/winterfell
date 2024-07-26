@@ -56,6 +56,7 @@ pub use crypto;
 use crypto::{ElementHasher, RandomCoin, VectorCommitment};
 use fri::FriProver;
 
+use libc_print::libc_println;
 use logup_gkr::prove_gkr;
 
 pub use math;
@@ -325,7 +326,6 @@ pub trait Prover {
         // build the auxiliary trace segment, and append the resulting segments to trace commitment
         // and trace polynomial table structs
         let aux_trace_with_metadata = if air.trace_info().is_multi_segment()
-            || air.context().is_with_logup_gkr()
         {
             let (gkr_proof, aux_rand_elements) = if air.context().is_with_logup_gkr() {
                 let gkr_proof =
@@ -338,7 +338,7 @@ pub trait Prover {
                 channel.public_coin().reseed(Self::HashFn::hash_elements(&openings));
 
                 let mut batching_randomness = Vec::with_capacity(openings.len() - 1);
- 
+
                 for _ in 0..openings.len() - 1 {
                     batching_randomness
                         .push(channel.public_coin().draw().expect("failed to generate randomness"))

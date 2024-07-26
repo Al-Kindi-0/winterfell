@@ -2,18 +2,16 @@ mod sum_check;
 
 use air::{
     proof::{
-        CircuitLayerPolys, FinalLayerProof, FinalOpeningClaim, GkrCircuitProof, GkrComposition,
-        SumCheckProof, SumCheckRoundClaim,
+        evaluate_composition_poly, CircuitLayerPolys, FinalLayerProof, FinalOpeningClaim,
+        GkrCircuitProof, SumCheckProof, SumCheckRoundClaim,
     },
     LogUpGkrEvaluator,
 };
-use alloc::{borrow::ToOwned, vec::Vec};
+use alloc::vec::Vec;
 use crypto::{ElementHasher, RandomCoin};
-use math::{polynom::{EqFunction, MultiLinearPoly}, FieldElement};
-use sum_check::{verify_rounds, verify_rounds_final};
-pub use sum_check::{
-    CompositionPolyQueryBuilder, Error as SumCheckVerifierError, SumCheckVerifier,
-};
+use math::{polynom::EqFunction, FieldElement};
+use sum_check::verify_rounds;
+pub use sum_check::Error as SumCheckVerifierError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum VerifierError {
@@ -27,8 +25,8 @@ pub enum VerifierError {
     FailedToVerifySumCheck(#[from] SumCheckVerifierError),
 }
 
-/// Verifies the validity of a GKR proof for the correct evaluation of a fractional sum circuit.
-pub fn verify_virtual_bus<
+/// Verifies the validity of a GKR proof for a LogUp-GKR relation.
+pub fn verify_logup_gkr<
     E: FieldElement,
     C: RandomCoin<Hasher = H, BaseField = E::BaseField>,
     H: ElementHasher<BaseField = E::BaseField>,
@@ -76,7 +74,7 @@ pub fn verify_virtual_bus<
     let num_layers = before_final_layer_proofs.proof.len();
     let mut rand = vec![r];
     for i in 0..num_layers {
-        let FinalOpeningClaim { eval_point, openings } = verify_sum_check_proof_before_last(
+        let FinalOpeningClaim { eval_point, openings } = verify_sum_check_intermediate_layers(
             &before_final_layer_proofs.proof[i],
             &rand,
             reduced_claim,
@@ -102,7 +100,7 @@ pub fn verify_virtual_bus<
 
     // verify the proof of the final GKR layer and pass final opening claim for verification
     // to the STARK
-    verify_sum_check_proof_last(
+    verify_sum_check_input_layer(
         evaluator,
         final_layer_proof,
         log_up_randomness,
@@ -114,7 +112,7 @@ pub fn verify_virtual_bus<
 
 /// Verifies sum-check proofs, as part of the GKR proof, for all GKR layers except for the last one
 /// i.e., the circuit input layer.
-pub fn verify_sum_check_proof_before_last<
+pub fn verify_sum_check_intermediate_layers<
     E: FieldElement,
     C: RandomCoin<Hasher = H, BaseField = E::BaseField>,
     H: ElementHasher<BaseField = E::BaseField>,
@@ -131,17 +129,45 @@ pub fn verify_sum_check_proof_before_last<
     // compute the claim for the batched sum-check
     let reduced_claim = claim.0 + claim.1 * r_batch;
 
-    // verify the sum-check protocol
-    let composition_poly = GkrComposition::new(r_batch);
-    let verifier =
-        SumCheckVerifier::new(composition_poly, GkrQueryBuilder::new(gkr_eval_point.to_owned()));
-    verifier
-        .verify(reduced_claim, proof, transcript)
-        .map_err(VerifierError::FailedToVerifySumCheck)
+    let SumCheckProof { openings_claim, round_proofs } = proof;
+
+    let final_round_claim = verify_rounds(reduced_claim, &round_proofs, transcript)?;
+    check_final_claim_intermediate_layers(
+        final_round_claim,
+        openings_claim.clone(),
+        gkr_eval_point,
+        r_batch,
+    )?;
+
+    Ok(openings_claim.clone())
+}
+
+fn check_final_claim_intermediate_layers<E: FieldElement>(
+    final_round_claim: SumCheckRoundClaim<E>,
+    openings_claim: FinalOpeningClaim<E>,
+    gkr_eval_point: &[E],
+    r_sum_check: E,
+) -> Result<(), SumCheckVerifierError> {
+    let FinalOpeningClaim { eval_point: eval_point_0, openings } = openings_claim;
+    let SumCheckRoundClaim { eval_point: eval_point_1, claim } = final_round_claim;
+    assert_eq!(eval_point_0, eval_point_1);
+
+    let p0 = openings[0];
+    let p1 = openings[1];
+    let q0 = openings[2];
+    let q1 = openings[3];
+
+    let eq = EqFunction::new(gkr_eval_point.to_vec()).evaluate(&eval_point_0);
+
+    if (p0 * q1 + p1 * q0 + r_sum_check * q0 * q1) * eq != claim {
+        Err(SumCheckVerifierError::FinalEvaluationCheckFailed)
+    } else {
+        Ok(())
+    }
 }
 
 /// Verifies the final sum-check proof as part of the GKR proof.
-pub fn verify_sum_check_proof_last<
+pub fn verify_sum_check_input_layer<
     E: FieldElement,
     C: RandomCoin<Hasher = H, BaseField = E::BaseField>,
     H: ElementHasher<BaseField = E::BaseField>,
@@ -162,15 +188,20 @@ pub fn verify_sum_check_proof_last<
     // compute the claim for the batched sum-check
     let reduced_claim = claim.0 + claim.1 * r_sum_check;
 
-    // verify the first part of the sum-check protocol
-    let composition_poly = GkrComposition::new(r_sum_check);
-    let _verifier: SumCheckVerifier<E, GkrComposition<E>, C, H, GkrQueryBuilder<E>> =
-        SumCheckVerifier::new(composition_poly, GkrQueryBuilder::new(gkr_eval_point.to_owned()));
     let SumCheckRoundClaim { eval_point: rand_merge, claim } =
-        verify_rounds(reduced_claim, before_merge_proof, transcript)?;
+        verify_rounds(reduced_claim, &before_merge_proof, transcript)?;
 
-    verify_final(claim, after_merge_proof, rand_merge, r_sum_check, log_up_randomness, gkr_eval_point, evaluator, transcript)
-        .map_err(VerifierError::FailedToVerifySumCheck)
+    verify_final(
+        claim,
+        after_merge_proof,
+        rand_merge,
+        r_sum_check,
+        log_up_randomness,
+        gkr_eval_point,
+        evaluator,
+        transcript,
+    )
+    .map_err(VerifierError::FailedToVerifySumCheck)
 }
 
 fn verify_final<
@@ -187,130 +218,44 @@ fn verify_final<
     evaluator: &impl LogUpGkrEvaluator<BaseField = E::BaseField>,
     transcript: &mut C,
 ) -> Result<FinalOpeningClaim<E>, SumCheckVerifierError> {
-    let SumCheckProof {
-            openings_claim,
-            round_proofs,
-        } = after_merge_proof;
+    let SumCheckProof { openings_claim, round_proofs } = after_merge_proof;
 
-        let SumCheckRoundClaim {
-            eval_point: evaluation_point,
-            claim: claimed_evaluation,
-        } = verify_rounds_final(claim, round_proofs, transcript)?;
+    let SumCheckRoundClaim {
+        eval_point: evaluation_point,
+        claim: claimed_evaluation,
+    } = verify_rounds(claim, round_proofs, transcript)?;
 
-        if openings_claim.eval_point != evaluation_point {
-            return Err(SumCheckVerifierError::WrongOpeningPoint);
-        }
-
-        let mut numerators = vec![E::ZERO; evaluator.get_num_fractions()];
-        let mut denominators = vec![E::ZERO; evaluator.get_num_fractions()];
-       
-
-        evaluator.evaluate_query(
-            &openings_claim.openings.clone().into(),
-            &log_up_randomness,
-            &mut numerators,
-            &mut denominators,
-        );
-
-        let lagrange_ker = EqFunction::new(gkr_eval_point.to_vec());
-        let mut pt = rand_merge.clone();
-
-        pt.extend_from_slice(&openings_claim.eval_point.clone());
-        let eq_eval = lagrange_ker.evaluate(&pt);
-        let expected_evaluation = evaluate_composition_poly(
-                &numerators,
-                &denominators,
-                eq_eval,
-                r_sum_check,
-                &rand_merge,
-            );
-
-        if expected_evaluation != claimed_evaluation {
-            Err(SumCheckVerifierError::FinalEvaluationCheckFailed)
-        } else {
-            Ok(openings_claim.clone())
-        }
-}
-
-/// A [`FinalQueryBuilder`] for the sum-check verifier used for all sum-checks but for the final
-/// one.
-#[derive(Default)]
-struct GkrQueryBuilder<E> {
-    gkr_eval_point: Vec<E>,
-}
-
-impl<E> GkrQueryBuilder<E> {
-    fn new(gkr_eval_point: Vec<E>) -> Self {
-        Self { gkr_eval_point }
+    if openings_claim.eval_point != evaluation_point {
+        return Err(SumCheckVerifierError::WrongOpeningPoint);
     }
-}
 
-impl<E: FieldElement> CompositionPolyQueryBuilder<E> for GkrQueryBuilder<E> {
-    fn build_query(&self, openings_claim: &FinalOpeningClaim<E>, evaluation_point: &[E]) -> Vec<E> {
-        let rand_sumcheck = evaluation_point;
-        let eq_at_gkr_eval_point = EqFunction::new(self.gkr_eval_point.clone());
-        let eq = eq_at_gkr_eval_point.evaluate(rand_sumcheck);
+    let mut numerators = vec![E::ZERO; evaluator.get_num_fractions()];
+    let mut denominators = vec![E::ZERO; evaluator.get_num_fractions()];
 
-        let mut query = openings_claim.openings.clone();
-        query.push(eq);
-        query
-    }
-}
+    evaluator.evaluate_query(
+        &openings_claim.openings.clone().into(),
+        &log_up_randomness,
+        &mut numerators,
+        &mut denominators,
+    );
 
-/// A [`FinalQueryBuilder`] for the sum-check verifier used for the final sum-check.
-#[derive(Default)]
-struct GkrMergeQueryBuilder<E> {
-    gkr_eval_point: Vec<E>,
-    merge_rand: Vec<E>,
-}
+    let lagrange_ker = EqFunction::new(gkr_eval_point.to_vec());
+    let mut gkr_point = rand_merge.clone();
 
-impl<E> GkrMergeQueryBuilder<E> {
-    fn _new(gkr_eval_point: Vec<E>, merge_rand: Vec<E>) -> Self {
-        Self { gkr_eval_point, merge_rand }
-    }
-}
-
-impl<E: FieldElement> CompositionPolyQueryBuilder<E> for GkrMergeQueryBuilder<E> {
-    fn build_query(&self, openings_claim: &FinalOpeningClaim<E>, evaluation_point: &[E]) -> Vec<E> {
-        let eq_at_gkr_eval_point = EqFunction::new(self.gkr_eval_point.clone());
-        let mut rand_sumcheck = self.merge_rand.clone();
-        rand_sumcheck.extend_from_slice(evaluation_point);
-        let eq = eq_at_gkr_eval_point.evaluate(&rand_sumcheck);
-        let mut query = openings_claim.openings.clone();
-        query.push(eq);
-        query
-    }
-}
-
-
-fn evaluate_composition_poly<E: FieldElement>(
-    numerators: &[E],
-    denominators: &[E],
-    eq_eval: E,
-    r_sum_check: E,
-    rand_merge: &[E],
-) -> E {
-    // TODO: compute it once and make it an input
+    gkr_point.extend_from_slice(&openings_claim.eval_point.clone());
+    let eq_eval = lagrange_ker.evaluate(&gkr_point);
     let tensored_merge_randomness = EqFunction::ml_at(rand_merge.to_vec()).evaluations().to_vec();
+    let expected_evaluation = evaluate_composition_poly(
+        &numerators,
+        &denominators,
+        eq_eval,
+        r_sum_check,
+        &tensored_merge_randomness,
+    );
 
-    let numerators = MultiLinearPoly::from_evaluations(numerators.to_vec()).unwrap();
-    let denominators = MultiLinearPoly::from_evaluations(denominators.to_vec()).unwrap();
-
-    let (left_numerators, right_numerators) = numerators.project_least_significant_variable();
-    let (left_denominators, right_denominators) = denominators.project_least_significant_variable();
-
-    let eval_left_numerators =
-        left_numerators.evaluate_with_lagrange_kernel(&tensored_merge_randomness);
-    let eval_right_numerators =
-        right_numerators.evaluate_with_lagrange_kernel(&tensored_merge_randomness);
-
-    let eval_left_denominators =
-        left_denominators.evaluate_with_lagrange_kernel(&tensored_merge_randomness);
-    let eval_right_denominators =
-        right_denominators.evaluate_with_lagrange_kernel(&tensored_merge_randomness);
-
-    eq_eval
-        * ((eval_left_numerators * eval_right_denominators
-            + eval_right_numerators * eval_left_denominators)
-            + eval_left_denominators * eval_right_denominators * r_sum_check)
+    if expected_evaluation != claimed_evaluation {
+        Err(SumCheckVerifierError::FinalEvaluationCheckFailed)
+    } else {
+        Ok(openings_claim.clone())
+    }
 }
