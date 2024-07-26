@@ -9,7 +9,7 @@ use crypto::{hashers::Blake3_256, DefaultRandomCoin, RandomCoin};
 use math::{fields::f64::BaseElement, get_power_series, polynom, FieldElement, StarkField};
 
 use super::{
-    Air, AirContext, Assertion, EvaluationFrame, ProofOptions, TraceInfo,
+    Air, AirContext, Assertion, DefaultLogUpGkrEval, EvaluationFrame, ProofOptions, TraceInfo,
     TransitionConstraintDegree,
 };
 use crate::FieldExtension;
@@ -257,6 +257,8 @@ impl Air for MockAir {
         _result: &mut [E],
     ) {
     }
+
+    type LogUpGkrEvaluator = DefaultLogUpGkrEval<Self::BaseField>;
 }
 
 // UTILITY FUNCTIONS

@@ -148,6 +148,7 @@ impl<B: StarkField, H: ElementHasher<BaseField = B>> RandomCoin for DefaultRando
             // return; otherwise try again
             if let Some(element) = E::from_random_bytes(bytes) {
                 return Ok(element);
+                //return Ok(-E::ONE * <E as FieldElement>::BaseField::from(1_u32).into());
             }
         }
 
