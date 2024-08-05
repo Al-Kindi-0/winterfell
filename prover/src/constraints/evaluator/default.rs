@@ -337,11 +337,7 @@ where
         combined_evaluations_accumulator: &mut [E],
     ) {
         if let Some(ref s_col_evaluator) = self.s_col_evaluator {
-            s_col_evaluator.evaluate_constraints(
-                trace,
-                domain,
-                combined_evaluations_accumulator,
-            )
+            s_col_evaluator.evaluate_constraints(trace, domain, combined_evaluations_accumulator)
         }
     }
 

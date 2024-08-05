@@ -1,4 +1,4 @@
-mod sum_check;
+use alloc::vec::Vec;
 
 use air::{
     proof::{
@@ -7,11 +7,11 @@ use air::{
     },
     LogUpGkrEvaluator,
 };
-use alloc::vec::Vec;
 use crypto::{ElementHasher, RandomCoin};
 use math::{polynom::EqFunction, FieldElement};
-use sum_check::verify_rounds;
-pub use sum_check::Error as SumCheckVerifierError;
+
+mod sum_check;
+use sum_check::{verify_rounds, Error as SumCheckVerifierError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum VerifierError {

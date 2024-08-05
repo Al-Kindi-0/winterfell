@@ -35,7 +35,7 @@ use crate::{field::FieldElement, utils::batch_inversion};
 mod tests;
 
 mod multi_linear;
-pub use multi_linear::{MultiLinearPoly, EqFunction, };
+pub use multi_linear::{EqFunction, MultiLinearPoly};
 
 mod univariate;
 pub use univariate::{UnivariatePolyCoef, UnivariatePolyEvals};

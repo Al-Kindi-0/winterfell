@@ -3,17 +3,8 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use std::{marker::PhantomData, println};
-use std::vec;
-use std::vec::Vec;
+use std::{marker::PhantomData, vec, vec::Vec};
 
-use crate::{
-    crypto::{hashers::Blake3_256, DefaultRandomCoin, RandomCoin},
-    math::{fields::f64::BaseElement, ExtensionOf, FieldElement},
-    matrix::ColMatrix,
-    DefaultConstraintEvaluator, DefaultTraceLde, Prover, ProverGkrProof, StarkDomain,
-    TracePolyTable,
-};
 use air::{
     Air, AirContext, Assertion, AuxRandElements, ConstraintCompositionCoefficients, FieldExtension,
     GkrRandElements, LagrangeKernelRandElements, LogUpGkrOracle, ProofOptions, TraceInfo,
@@ -21,6 +12,13 @@ use air::{
 use crypto::MerkleTree;
 
 use super::*;
+use crate::{
+    crypto::{hashers::Blake3_256, DefaultRandomCoin, RandomCoin},
+    math::{fields::f64::BaseElement, ExtensionOf, FieldElement},
+    matrix::ColMatrix,
+    DefaultConstraintEvaluator, DefaultTraceLde, Prover, ProverGkrProof, StarkDomain,
+    TracePolyTable,
+};
 
 #[test]
 fn test_logup_gkr() {
@@ -206,7 +204,6 @@ impl LogUpGkrEvaluator for PlainLogUpGkrEval<BaseElement> {
 
     type PublicInputs = ();
 
-
     fn get_oracles(&self) -> Vec<LogUpGkrOracle<Self::BaseField>> {
         let committed_0 = LogUpGkrOracle::CurrentRow(0);
         let committed_1 = LogUpGkrOracle::CurrentRow(1);
@@ -266,7 +263,7 @@ impl LogUpGkrEvaluator for PlainLogUpGkrEval<BaseElement> {
     {
         E::ZERO
     }
-    
+
     fn get_num_periodic_col(&self) -> usize {
         todo!()
     }
@@ -350,7 +347,10 @@ impl Prover for LogUpGkrSimpleProver {
             LagrangeKernelRandElements::new(rand_elements)
         };
 
-        ((), GkrRandElements::new(lagrange_kernel_rand_elements, Vec::new(), Vec::new(), Vec::new()))
+        (
+            (),
+            GkrRandElements::new(lagrange_kernel_rand_elements, Vec::new(), Vec::new(), Vec::new()),
+        )
     }
 
     fn build_aux_trace<E>(
@@ -362,7 +362,7 @@ impl Prover for LogUpGkrSimpleProver {
         E: FieldElement<BaseField = Self::BaseField>,
     {
         let main_trace = main_trace.main_segment();
- 
+
         let mut columns = Vec::new();
 
         let rand_summed = E::from(777_u32);

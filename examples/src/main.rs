@@ -64,34 +64,34 @@ fn main() {
         ExampleType::LamportA { num_signatures: _ } => todo!(),
         ExampleType::LamportT { num_signers: _ } => todo!(),
         //ExampleType::Fib { sequence_length } => {
-            //fibonacci::fib2::get_example(&options, sequence_length)
+        //fibonacci::fib2::get_example(&options, sequence_length)
         //},
         //ExampleType::Fib8 { sequence_length } => {
-            //fibonacci::fib8::get_example(&options, sequence_length)
+        //fibonacci::fib8::get_example(&options, sequence_length)
         //},
         //ExampleType::Mulfib { sequence_length } => {
-            //fibonacci::mulfib2::get_example(&options, sequence_length)
+        //fibonacci::mulfib2::get_example(&options, sequence_length)
         //},
         //ExampleType::Mulfib8 { sequence_length } => {
-            //fibonacci::mulfib8::get_example(&options, sequence_length)
+        //fibonacci::mulfib8::get_example(&options, sequence_length)
         //},
         //ExampleType::FibSmall { sequence_length } => {
-            //fibonacci::fib_small::get_example(&options, sequence_length)
+        //fibonacci::fib_small::get_example(&options, sequence_length)
         //},
         //ExampleType::Rescue { chain_length } => rescue::get_example(&options, chain_length),
         //#[cfg(feature = "std")]
         //ExampleType::RescueRaps { chain_length } => {
-            //rescue_raps::get_example(&options, chain_length)
+        //rescue_raps::get_example(&options, chain_length)
         //},
         //#[cfg(feature = "std")]
         //ExampleType::Merkle { tree_depth } => merkle::get_example(&options, tree_depth),
         //#[cfg(feature = "std")]
         //ExampleType::LamportA { num_signatures } => {
-            //lamport::aggregate::get_example(&options, num_signatures)
+        //lamport::aggregate::get_example(&options, num_signatures)
         //},
         //#[cfg(feature = "std")]
         //ExampleType::LamportT { num_signers } => {
-            //lamport::threshold::get_example(&options, num_signers)
+        //lamport::threshold::get_example(&options, num_signers)
         //},
     }
     .expect("The example failed to initialize.");

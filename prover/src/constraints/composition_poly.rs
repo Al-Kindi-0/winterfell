@@ -5,7 +5,6 @@
 
 use alloc::vec::Vec;
 
-use libc_print::libc_println;
 use math::{fft, polynom::degree_of, FieldElement};
 
 use super::{ColMatrix, StarkDomain};
@@ -124,9 +123,6 @@ fn segment<E: FieldElement>(
     trace_len: usize,
     num_cols: usize,
 ) -> Vec<Vec<E>> {
-    libc_println!("coefficients {:?}", degree_of(&coefficients));
-    libc_println!("trace_len {:?}", trace_len);
-    libc_println!("num_cols {:?}", num_cols);
     debug_assert!(degree_of(&coefficients) < trace_len * num_cols);
 
     coefficients

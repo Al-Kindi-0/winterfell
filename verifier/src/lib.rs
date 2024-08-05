@@ -45,7 +45,6 @@ use air::{
 pub use crypto;
 use crypto::{ElementHasher, Hasher, RandomCoin, VectorCommitment};
 use fri::FriVerifier;
-
 pub use math;
 use math::{
     fields::{CubeExtension, QuadExtension},
@@ -372,8 +371,12 @@ fn verify_gkr<E: FieldElement, H: ElementHasher<BaseField = E::BaseField>>(
         batching_randomness.push(public_coin.draw().expect("failed to generate randomness"))
     }
 
-    let gkr_rand_elements =
-        GkrRandElements::new(LagrangeKernelRandElements::new(eval_point), batching_randomness, openings, evaluator.get_oracles());
+    let gkr_rand_elements = GkrRandElements::new(
+        LagrangeKernelRandElements::new(eval_point),
+        batching_randomness,
+        openings,
+        evaluator.get_oracles(),
+    );
 
     Ok(gkr_rand_elements)
 }

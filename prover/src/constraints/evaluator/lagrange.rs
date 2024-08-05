@@ -10,7 +10,6 @@ use air::{
     LagrangeKernelConstraints, LagrangeKernelEvaluationFrame, LagrangeKernelRandElements,
     LogUpGkrEvaluator,
 };
-use libc_print::libc_println;
 use math::{batch_inversion, FieldElement};
 
 use crate::{inner_product, StarkDomain, TraceLde};
@@ -29,10 +28,10 @@ where
 {
     pub fn new(air: &'a A, logup_rand: &GkrRandElements<E>, cc_coef: E) -> Self {
         let GkrRandElements {
-            lagrange,
+            lagrange_kernel_eval_point: _,
             openings_combining_randomness,
             openings,
-            oracles,
+            oracles: _,
         } = logup_rand;
 
         Self {
@@ -59,23 +58,16 @@ where
     {
         let evaluator = self.air.get_logup_gkr_evaluator::<E>();
         let lde_shift = domain.ce_to_lde_blowup().trailing_zeros();
-        let trans_constraints_divisors = compute_s_col_divisor(
-            domain.ce_domain_size(),
-            domain.ce_domain_generator(),
-            domain.offset(),
-            domain,
-            self.air.trace_length(),
-        );
+        let trans_constraints_divisor =
+            compute_s_col_divisor::<E>(domain.ce_domain_size(), domain, self.air.trace_length());
         let s_col_idx = trace.trace_info().aux_segment_width() - 2;
         let l_col_idx = trace.trace_info().aux_segment_width() - 1;
         let mut main_frame = EvaluationFrame::new(trace.trace_info().main_trace_width());
         let mut aux_frame = EvaluationFrame::new(trace.trace_info().aux_segment_width());
 
         let c = self.openings[0] + inner_product(&self.batching_randomness, &self.openings[1..]);
-        //let c = E::ONE.mul_base(E::BaseField::from(128_u32)); 
         let mean = c / E::from(E::BaseField::from(trace.trace_info().length() as u32));
 
-        //let mut result = Vec::with_capacity(domain.ce_domain_size());
         for step in 0..domain.ce_domain_size() {
             trace.read_aux_trace_frame_into(step, &mut aux_frame);
             trace.read_main_trace_frame_into(step << lde_shift, &mut main_frame);
@@ -90,38 +82,28 @@ where
                 E::from(query[0]) + inner_product(&query[1..], &self.batching_randomness);
 
             let rhs = s_cur - mean + batched_claim * l_cur;
-            //let rhs = s_cur - mean + E::ONE;
             let lhs = s_nxt;
 
-            combined_evaluations_acc[step] += (rhs - lhs) * E::ONE.mul_base(trans_constraints_divisors[step]);
-            //combined_evaluations_acc[step] += (rhs - lhs) * self.cc_coef.mul_base(trans_constraints_divisors[step]);
+            combined_evaluations_acc[step] +=
+                (rhs - lhs) * self.cc_coef.mul_base(trans_constraints_divisor[step]);
         }
     }
 }
 
 fn compute_s_col_divisor<E: FieldElement>(
     ce_domain_size: usize,
-    ce_domain_generator: E,
-    offset: E,
     domain: &StarkDomain<E::BaseField>,
     trace_length: usize,
 ) -> Vec<E::BaseField> {
     let degree = trace_length as u32;
-    let mut cur = E::ONE;
-    let term = ce_domain_generator.exp(degree.into());
-    let offset_scaled = offset.exp(degree.into());
-
     let mut result = Vec::with_capacity(ce_domain_size);
-libc_println!("offset is {:?}", offset);
+
     for row in 0..ce_domain_size {
-        //result.push(offset_scaled * cur - E::ONE);
-        //cur *= term;
-        let x = (offset * ce_domain_generator).exp((row as u32 * degree).into()) - E::ONE;
         let x = domain.get_ce_x_at(row);
         let x = x.exp((degree as u32).into()) - E::BaseField::ONE;
-        result.push(x)
+
+        result.push(x);
     }
-    libc_println!("result {:?}", result);
     batch_inversion(&result)
 }
 

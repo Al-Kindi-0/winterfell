@@ -1,6 +1,6 @@
+use alloc::vec::Vec;
 use core::ops::Index;
 
-use alloc::vec::Vec;
 use utils::{ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable};
 
 use crate::FieldElement;
@@ -109,10 +109,7 @@ where
     E: FieldElement,
 {
     fn write_into<W: ByteWriter>(&self, target: &mut W) {
-        let Self {
-            num_variables,
-            evaluations,
-        } = self;
+        let Self { num_variables, evaluations } = self;
         num_variables.write_into(target);
         evaluations.write_into(target);
     }

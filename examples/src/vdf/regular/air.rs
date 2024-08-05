@@ -6,7 +6,9 @@
 use std::marker::PhantomData;
 
 use winterfell::{
-    math::{ExtensionOf, ToElements}, Air, AirContext, Assertion, EvaluationFrame, LogUpGkrEvaluator, LogUpGkrOracle, TraceInfo, TransitionConstraintDegree
+    math::{ExtensionOf, ToElements},
+    Air, AirContext, Assertion, EvaluationFrame, LogUpGkrEvaluator, LogUpGkrOracle, TraceInfo,
+    TransitionConstraintDegree,
 };
 
 use super::{BaseElement, FieldElement, ProofOptions, ALPHA, FORTY_TWO, TRACE_WIDTH};
@@ -71,17 +73,19 @@ impl Air for VdfAir {
     fn context(&self) -> &AirContext<Self::BaseField> {
         &self.context
     }
-    
+
     type LogUpGkrEvaluator = DefaultLogUpGkrEval<Self::BaseField>;
 }
-
 
 #[derive(Clone)]
 pub struct DefaultLogUpGkrEval<E: FieldElement> {
     _field: PhantomData<E>,
 }
 
-impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> where VdfInputs: ToElements<<G as FieldElement>::BaseField> {
+impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G>
+where
+    VdfInputs: ToElements<<G as FieldElement>::BaseField>,
+{
     type BaseField = G::BaseField;
 
     type PublicInputs = VdfInputs;
@@ -120,15 +124,15 @@ impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> where VdfInpu
     {
         todo!()
     }
-    
+
     fn get_num_fractions(&self) -> usize {
         todo!()
     }
-    
+
     fn max_degree(&self) -> usize {
         todo!()
     }
-    
+
     fn get_num_periodic_col(&self) -> usize {
         todo!()
     }

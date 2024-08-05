@@ -3,9 +3,8 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use core::{fmt::Debug, marker::PhantomData};
-
 use alloc::{collections::BTreeMap, vec::Vec};
+use core::{fmt::Debug, marker::PhantomData};
 
 use crypto::{RandomCoin, RandomCoinError};
 use math::{fft, ExtensibleField, ExtensionOf, FieldElement, StarkField, ToElements};
@@ -716,6 +715,7 @@ impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> {
         todo!()
     }
 
+    #[allow(unused_variables)]
     fn build_query<E>(&self, frame: &EvaluationFrame<E>, periodic_values: &[E]) -> Vec<E>
     where
         E: FieldElement<BaseField = Self::BaseField>,
@@ -723,6 +723,7 @@ impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> {
         todo!()
     }
 
+    #[allow(unused_variables)]
     fn evaluate_query<F, E>(
         &self,
         query: &[F],
@@ -736,6 +737,7 @@ impl<G: FieldElement> LogUpGkrEvaluator for DefaultLogUpGkrEval<G> {
         todo!()
     }
 
+    #[allow(unused_variables)]
     fn compute_claim<E>(&self, inputs: &Self::PublicInputs, rand_values: &[E]) -> E
     where
         E: FieldElement<BaseField = Self::BaseField>,

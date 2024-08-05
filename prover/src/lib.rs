@@ -42,7 +42,8 @@
 #[macro_use]
 extern crate alloc;
 
-use air::proof::FinalOpeningClaim;
+use alloc::vec::Vec;
+
 pub use air::{
     proof, proof::Proof, Air, AirContext, Assertion, AuxRandElements, BoundaryConstraint,
     BoundaryConstraintGroup, ConstraintCompositionCoefficients, ConstraintDivisor,
@@ -50,18 +51,16 @@ pub use air::{
     LagrangeKernelRandElements, LogUpGkrEvaluator, ProofOptions, TraceInfo,
     TransitionConstraintDegree,
 };
-
-use alloc::vec::Vec;
+use air::{proof::FinalOpeningClaim, LogUpGkrOracle};
 pub use crypto;
 use crypto::{ElementHasher, RandomCoin, VectorCommitment};
 use fri::FriProver;
-
-use libc_print::libc_println;
-use logup_gkr::prove_gkr;
-
 pub use math;
 use math::{
-    fft::infer_degree, fields::{CubeExtension, QuadExtension}, polynom::EqFunction, ExtensibleField, ExtensionOf, FieldElement, StarkField, ToElements
+    fft::infer_degree,
+    fields::{CubeExtension, QuadExtension},
+    polynom::EqFunction,
+    ExtensibleField, ExtensionOf, FieldElement, StarkField, ToElements,
 };
 use tracing::{event, info_span, instrument, Level};
 pub use utils::{
@@ -95,6 +94,7 @@ mod sum_check;
 pub use sum_check::*;
 
 mod logup_gkr;
+use logup_gkr::prove_gkr;
 
 mod channel;
 use channel::ProverChannel;
@@ -267,7 +267,7 @@ pub trait Prover {
             aux_trace.merge_column(lagrange_col);
         }
 
-       aux_trace
+        aux_trace
     }
 
     /// Returns a STARK proof attesting to a correct execution of a computation defined by the
@@ -360,23 +360,10 @@ pub trait Prover {
                     prove_gkr(&trace, &air.get_logup_gkr_evaluator::<E>(), channel.public_coin())
                         .map_err(|_| ProverError::FailedToGenerateGkrProof)?;
 
-                let FinalOpeningClaim { eval_point, openings } =
-                    gkr_proof.clone().final_layer_proof.after_merge_proof.openings_claim.clone();
-
-                channel.public_coin().reseed(Self::HashFn::hash_elements(&openings));
-
-                let mut batching_randomness = Vec::with_capacity(openings.len() - 1);
-
-                for _ in 0..openings.len() - 1 {
-                    batching_randomness
-                        .push(channel.public_coin().draw().expect("failed to generate randomness"))
-                }
-
-                let gkr_rand_elements = GkrRandElements::new(
-                    LagrangeKernelRandElements::new(eval_point),
-                    batching_randomness,
-                    openings,
+                let gkr_rand_elements = generate_gkr_randomness(
+                    gkr_proof.get_final_opening_claim(),
                     air.get_logup_gkr_evaluator::<E>().get_oracles(),
+                    channel.public_coin(),
                 );
 
                 let rand_elements = air
@@ -394,7 +381,8 @@ pub trait Prover {
 
                 (None, AuxRandElements::new(rand_elements))
             };
-            let aux_trace = maybe_await!(self.build_aux_trace_wrapper(&air, &trace, &aux_rand_elements));
+            let aux_trace =
+                maybe_await!(self.build_aux_trace_wrapper(&air, &trace, &aux_rand_elements));
 
             // commit to the auxiliary trace segment
             let aux_segment_polys = {
@@ -402,7 +390,6 @@ pub trait Prover {
                 let span = info_span!("commit_to_aux_trace_segment").entered();
                 let (aux_segment_polys, aux_segment_commitment) =
                     trace_lde.set_aux_trace(&aux_trace, &domain);
-                    libc_println!("aux polys {:?}", aux_segment_polys.num_cols());
 
                 // commit to the LDE of the extended auxiliary trace segment by writing its
                 // commitment into the channel
@@ -472,8 +459,6 @@ pub trait Prover {
             // z * g^2, z * g^4, ..., z * g^(2^(v-1)), where v = log(trace_len).
             let ood_trace_states = trace_polys.get_ood_frame(z);
             channel.send_ood_trace_states(&ood_trace_states);
-            libc_println!("ood prover {:?}", ood_trace_states.aux_frame());
-
 
             let ood_evaluations = composition_poly.evaluate_at(z);
             channel.send_ood_constraint_evaluations(&ood_evaluations);
@@ -680,6 +665,33 @@ pub trait Prover {
     }
 }
 
+fn generate_gkr_randomness<
+    E: FieldElement,
+    C: RandomCoin<Hasher = H, BaseField = E::BaseField>,
+    H: ElementHasher<BaseField = E::BaseField>,
+>(
+    final_opening_claim: FinalOpeningClaim<E>,
+    oracles: Vec<LogUpGkrOracle<E::BaseField>>,
+    public_coin: &mut C,
+) -> GkrRandElements<E> {
+    let FinalOpeningClaim { eval_point, openings } = final_opening_claim;
+
+    public_coin.reseed(H::hash_elements(&openings));
+
+    let mut batching_randomness = Vec::with_capacity(openings.len() - 1);
+
+    for _ in 0..openings.len() - 1 {
+        batching_randomness.push(public_coin.draw().expect("failed to generate randomness"))
+    }
+
+    GkrRandElements::new(
+        LagrangeKernelRandElements::new(eval_point),
+        batching_randomness,
+        openings,
+        oracles,
+    )
+}
+
 fn build_s_column<E: FieldElement>(
     main_trace: &impl Trace<BaseField = E::BaseField>,
     gkr_data: GkrRandElements<E>,
@@ -687,36 +699,33 @@ fn build_s_column<E: FieldElement>(
     lagrange_kernel_col: &[E],
 ) -> Vec<E> {
     let GkrRandElements {
-        lagrange,
+        lagrange_kernel_eval_point: _,
         openings_combining_randomness,
         openings,
-        oracles,
+        oracles: _,
     } = gkr_data;
 
-    let c =  openings[0] + inner_product(&openings_combining_randomness, &openings[1..]);
-    //let c = E::ONE.mul_base(E::BaseField::from(128_u32));
+    let c = openings[0] + inner_product(&openings_combining_randomness, &openings[1..]);
     let main_segment = main_trace.main_segment();
     let mean = c / E::from(E::BaseField::from(main_segment.num_rows() as u32));
 
     let mut result = Vec::with_capacity(main_segment.num_rows());
     let mut last_value = E::ZERO;
-    //let mut last_value = E::ONE;
     result.push(last_value);
 
     let mut main_frame = EvaluationFrame::new(main_trace.main_segment().num_cols());
 
-    for i in 0..main_segment.num_rows()-1 {
+    for i in 0..main_segment.num_rows() - 1 {
         main_trace.read_main_frame(i, &mut main_frame);
 
         let query = evaluator.build_query(&main_frame, &[]);
 
-        let cur_value = last_value - mean + (E::from(query[0]) + inner_product(&query[1..], &openings_combining_randomness)) * lagrange_kernel_col[i];
-        //let cur_value = last_value - mean + E::ONE ; //+ (E::from(query[0]) + inner_product(&query[1..], &openings_combining_randomness)) * lagrange_kernel_col[i];
+        let cur_value = last_value - mean
+            + (E::from(query[0]) + inner_product(&query[1..], &openings_combining_randomness))
+                * lagrange_kernel_col[i];
         result.push(cur_value);
         last_value = cur_value;
     }
-    libc_println!("result {:?}", result);
-    libc_println!("exp {:?}", last_value -mean + E::ONE );
 
     result
 }
@@ -725,10 +734,8 @@ fn build_lagrange_column<E: FieldElement>(lagrange_randomness: &[E]) -> Vec<E> {
     EqFunction::new(lagrange_randomness.to_vec()).evaluations()
 }
 
-
-pub fn inner_product<E: FieldElement + ExtensionOf<F>, F: FieldElement>(
-    x: &[F],
-    y: &[E],
-) -> E {
-    x.iter().zip(y.iter()).fold(E::ZERO, |acc, (&x_i, &y_i)| acc + y_i.mul_base(x_i))
+pub fn inner_product<E: FieldElement + ExtensionOf<F>, F: FieldElement>(x: &[F], y: &[E]) -> E {
+    x.iter()
+        .zip(y.iter())
+        .fold(E::ZERO, |acc, (&x_i, &y_i)| acc + y_i.mul_base(x_i))
 }
