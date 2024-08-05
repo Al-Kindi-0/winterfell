@@ -7,9 +7,9 @@ use alloc::vec::Vec;
 
 use air::{
     Air, AuxRandElements, ConstraintCompositionCoefficients, EvaluationFrame,
-    LagrangeKernelEvaluationFrame,
+    LagrangeKernelEvaluationFrame, LogUpGkrEvaluator,
 };
-use math::{polynom, FieldElement};
+use math::{polynom, ExtensionOf, FieldElement};
 
 // CONSTRAINT EVALUATION
 // ================================================================================================
@@ -115,7 +115,44 @@ pub fn evaluate_constraints<A: Air, E: FieldElement<BaseField = A::BaseField>>(
         );
 
         result += lagrange_constraints.boundary.evaluate_at(x, lagrange_kernel_column_frame);
+
+        let air::GkrRandElements {
+            lagrange,
+            openings_combining_randomness,
+            openings,
+            oracles,
+        } = aux_rand_elements.unwrap().gkr_data().unwrap();
+        let c = openings[0] + inner_product(&openings_combining_randomness, &openings[1..]);
+        //let c = E::ONE.mul_base(E::BaseField::from(128_u32)); 
+        let mean = c / E::from(E::BaseField::from(air.trace_length() as u32));
+
+        let s_col_idx = air.trace_info().aux_segment_width() -2;
+        let l_col_idx = air.trace_info().aux_segment_width() ;
+        let s_cur = aux_trace_frame.as_ref().unwrap().current()[s_col_idx];
+            let s_nxt = aux_trace_frame.as_ref().unwrap().next()[s_col_idx];
+            //let l_cur = aux_trace_frame.as_ref().unwrap().current()[l_col_idx];
+            let l_cur = lagrange_kernel_frame.unwrap().inner()[0];
+
+            let query = air.get_logup_gkr_evaluator::<E>().build_query(&main_trace_frame, &[]);
+
+            let batched_claim =
+                E::from(query[0]) + inner_product(&query[1..], &openings_combining_randomness);
+
+            let rhs = s_cur - mean + batched_claim * l_cur;
+            //let rhs = s_cur - mean + E::ONE;
+            let lhs = s_nxt;
+
+            let divisor = x.exp((air.trace_length() as u32).into()) - E::ONE;
+            result += (rhs - lhs) / divisor;
     }
 
     result
+}
+
+
+pub fn inner_product<E: FieldElement + ExtensionOf<F>, F: FieldElement>(
+    x: &[F],
+    y: &[E],
+) -> E {
+    x.iter().zip(y.iter()).fold(E::ZERO, |acc, (&x_i, &y_i)| acc + y_i.mul_base(x_i))
 }

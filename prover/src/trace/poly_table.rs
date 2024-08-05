@@ -6,6 +6,7 @@
 use alloc::vec::Vec;
 
 use air::{proof::TraceOodFrame, LagrangeKernelEvaluationFrame};
+use libc_print::libc_println;
 use math::{FieldElement, StarkField};
 
 use crate::{matrix::ColumnIter, ColMatrix};
@@ -55,6 +56,7 @@ impl<E: FieldElement> TracePolyTable<E> {
 
         let mut aux_trace_polys = aux_trace_polys;
         if let Some(index) = lagrange_kernel_column_idx {
+        libc_println!("kern index {:?}", index);
             self.lagrange_kernel_poly = Some(aux_trace_polys.remove_column(index));
         }
         self.aux_trace_polys = Some(aux_trace_polys);

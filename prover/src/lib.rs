@@ -56,6 +56,7 @@ pub use crypto;
 use crypto::{ElementHasher, RandomCoin, VectorCommitment};
 use fri::FriProver;
 
+use libc_print::libc_println;
 use logup_gkr::prove_gkr;
 
 pub use math;
@@ -401,6 +402,7 @@ pub trait Prover {
                 let span = info_span!("commit_to_aux_trace_segment").entered();
                 let (aux_segment_polys, aux_segment_commitment) =
                     trace_lde.set_aux_trace(&aux_trace, &domain);
+                    libc_println!("aux polys {:?}", aux_segment_polys.num_cols());
 
                 // commit to the LDE of the extended auxiliary trace segment by writing its
                 // commitment into the channel
@@ -470,6 +472,8 @@ pub trait Prover {
             // z * g^2, z * g^4, ..., z * g^(2^(v-1)), where v = log(trace_len).
             let ood_trace_states = trace_polys.get_ood_frame(z);
             channel.send_ood_trace_states(&ood_trace_states);
+            libc_println!("ood prover {:?}", ood_trace_states.aux_frame());
+
 
             let ood_evaluations = composition_poly.evaluate_at(z);
             channel.send_ood_constraint_evaluations(&ood_evaluations);
@@ -690,24 +694,29 @@ fn build_s_column<E: FieldElement>(
     } = gkr_data;
 
     let c =  openings[0] + inner_product(&openings_combining_randomness, &openings[1..]);
+    //let c = E::ONE.mul_base(E::BaseField::from(128_u32));
     let main_segment = main_trace.main_segment();
     let mean = c / E::from(E::BaseField::from(main_segment.num_rows() as u32));
 
     let mut result = Vec::with_capacity(main_segment.num_rows());
     let mut last_value = E::ZERO;
-    //result.push(last_value);
+    //let mut last_value = E::ONE;
+    result.push(last_value);
 
     let mut main_frame = EvaluationFrame::new(main_trace.main_segment().num_cols());
 
-    for i in 0..main_segment.num_rows() {
+    for i in 0..main_segment.num_rows()-1 {
         main_trace.read_main_frame(i, &mut main_frame);
 
         let query = evaluator.build_query(&main_frame, &[]);
 
         let cur_value = last_value - mean + (E::from(query[0]) + inner_product(&query[1..], &openings_combining_randomness)) * lagrange_kernel_col[i];
+        //let cur_value = last_value - mean + E::ONE ; //+ (E::from(query[0]) + inner_product(&query[1..], &openings_combining_randomness)) * lagrange_kernel_col[i];
         result.push(cur_value);
         last_value = cur_value;
     }
+    libc_println!("result {:?}", result);
+    libc_println!("exp {:?}", last_value -mean + E::ONE );
 
     result
 }
