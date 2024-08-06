@@ -108,5 +108,5 @@ pub mod fields {
 
 mod utils;
 pub use crate::utils::{
-    add_in_place, batch_inversion, get_power_series, get_power_series_with_offset, mul_acc,
+    add_in_place, batch_inversion, get_power_series, get_power_series_with_offset, mul_acc,inner_product
 };

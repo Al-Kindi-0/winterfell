@@ -47,7 +47,7 @@ use alloc::vec::Vec;
 pub use air::{
     proof, proof::Proof, Air, AirContext, Assertion, AuxRandElements, BoundaryConstraint,
     BoundaryConstraintGroup, ConstraintCompositionCoefficients, ConstraintDivisor,
-    DeepCompositionCoefficients, EvaluationFrame, FieldExtension, GkrRandElements,
+    DeepCompositionCoefficients, EvaluationFrame, FieldExtension, GkrData,
     LagrangeKernelRandElements, LogUpGkrEvaluator, ProofOptions, TraceInfo,
     TransitionConstraintDegree,
 };
@@ -60,7 +60,7 @@ use math::{
     fft::infer_degree,
     fields::{CubeExtension, QuadExtension},
     polynom::EqFunction,
-    ExtensibleField, ExtensionOf, FieldElement, StarkField, ToElements,
+    ExtensibleField, FieldElement, StarkField, ToElements,
 };
 use tracing::{event, info_span, instrument, Level};
 pub use utils::{
@@ -218,7 +218,7 @@ pub trait Prover {
         &self,
         main_trace: &Self::Trace,
         public_coin: &mut Self::RandomCoin,
-    ) -> (ProverGkrProof<Self>, GkrRandElements<E>)
+    ) -> (ProverGkrProof<Self>, GkrData<E>)
     where
         E: FieldElement<BaseField = Self::BaseField>,
     {
@@ -673,18 +673,17 @@ fn generate_gkr_randomness<
     final_opening_claim: FinalOpeningClaim<E>,
     oracles: Vec<LogUpGkrOracle<E::BaseField>>,
     public_coin: &mut C,
-) -> GkrRandElements<E> {
+) -> GkrData<E> {
     let FinalOpeningClaim { eval_point, openings } = final_opening_claim;
 
     public_coin.reseed(H::hash_elements(&openings));
 
     let mut batching_randomness = Vec::with_capacity(openings.len() - 1);
-
     for _ in 0..openings.len() - 1 {
         batching_randomness.push(public_coin.draw().expect("failed to generate randomness"))
     }
 
-    GkrRandElements::new(
+    GkrData::new(
         LagrangeKernelRandElements::new(eval_point),
         batching_randomness,
         openings,
@@ -694,18 +693,11 @@ fn generate_gkr_randomness<
 
 fn build_s_column<E: FieldElement>(
     main_trace: &impl Trace<BaseField = E::BaseField>,
-    gkr_data: GkrRandElements<E>,
+    gkr_data: GkrData<E>,
     evaluator: &impl LogUpGkrEvaluator<BaseField = E::BaseField>,
     lagrange_kernel_col: &[E],
 ) -> Vec<E> {
-    let GkrRandElements {
-        lagrange_kernel_eval_point: _,
-        openings_combining_randomness,
-        openings,
-        oracles: _,
-    } = gkr_data;
-
-    let c = openings[0] + inner_product(&openings_combining_randomness, &openings[1..]);
+    let c = gkr_data.compute_batched_claim();
     let main_segment = main_trace.main_segment();
     let mean = c / E::from(E::BaseField::from(main_segment.num_rows() as u32));
 
@@ -719,10 +711,9 @@ fn build_s_column<E: FieldElement>(
         main_trace.read_main_frame(i, &mut main_frame);
 
         let query = evaluator.build_query(&main_frame, &[]);
+        let cur_value =
+            last_value - mean + gkr_data.compute_batched_query(&query) * lagrange_kernel_col[i];
 
-        let cur_value = last_value - mean
-            + (E::from(query[0]) + inner_product(&query[1..], &openings_combining_randomness))
-                * lagrange_kernel_col[i];
         result.push(cur_value);
         last_value = cur_value;
     }
@@ -732,10 +723,4 @@ fn build_s_column<E: FieldElement>(
 
 fn build_lagrange_column<E: FieldElement>(lagrange_randomness: &[E]) -> Vec<E> {
     EqFunction::new(lagrange_randomness.to_vec()).evaluations()
-}
-
-pub fn inner_product<E: FieldElement + ExtensionOf<F>, F: FieldElement>(x: &[F], y: &[E]) -> E {
-    x.iter()
-        .zip(y.iter())
-        .fold(E::ZERO, |acc, (&x_i, &y_i)| acc + y_i.mul_base(x_i))
 }

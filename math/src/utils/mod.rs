@@ -214,3 +214,9 @@ fn serial_batch_inversion<E: FieldElement>(values: &[E], result: &mut [E]) {
         }
     }
 }
+
+pub fn inner_product<E: FieldElement + ExtensionOf<F>, F: FieldElement>(x: &[F], y: &[E]) -> E {
+    x.iter()
+        .zip(y.iter())
+        .fold(E::ZERO, |acc, (&x_i, &y_i)| acc + y_i.mul_base(x_i))
+}

@@ -7,7 +7,7 @@ use std::{marker::PhantomData, vec, vec::Vec};
 
 use air::{
     Air, AirContext, Assertion, AuxRandElements, ConstraintCompositionCoefficients, FieldExtension,
-    GkrRandElements, LagrangeKernelRandElements, LogUpGkrOracle, ProofOptions, TraceInfo,
+    GkrData, LagrangeKernelRandElements, LogUpGkrOracle, ProofOptions, TraceInfo,
 };
 use crypto::MerkleTree;
 
@@ -280,7 +280,7 @@ impl LogUpGkrSimpleProver {
     fn new(aux_trace_width: usize) -> Self {
         Self {
             aux_trace_width,
-            options: ProofOptions::new(1, 2, 0, FieldExtension::None, 2, 1),
+            options: ProofOptions::new(1, 8, 0, FieldExtension::None, 2, 1),
         }
     }
 }
@@ -332,7 +332,7 @@ impl Prover for LogUpGkrSimpleProver {
         &self,
         main_trace: &Self::Trace,
         public_coin: &mut Self::RandomCoin,
-    ) -> (ProverGkrProof<Self>, GkrRandElements<E>)
+    ) -> (ProverGkrProof<Self>, GkrData<E>)
     where
         E: FieldElement<BaseField = Self::BaseField>,
     {
@@ -349,7 +349,7 @@ impl Prover for LogUpGkrSimpleProver {
 
         (
             (),
-            GkrRandElements::new(lagrange_kernel_rand_elements, Vec::new(), Vec::new(), Vec::new()),
+            GkrData::new(lagrange_kernel_rand_elements, Vec::new(), Vec::new(), Vec::new()),
         )
     }
 

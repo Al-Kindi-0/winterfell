@@ -40,7 +40,7 @@ pub use air::{
 };
 use air::{
     proof::{FinalOpeningClaim, GkrCircuitProof},
-    AuxRandElements, GkrRandElements, LagrangeKernelRandElements, LogUpGkrEvaluator,
+    AuxRandElements, GkrData, LagrangeKernelRandElements, LogUpGkrEvaluator,
 };
 pub use crypto;
 use crypto::{ElementHasher, Hasher, RandomCoin, VectorCommitment};
@@ -350,7 +350,7 @@ fn verify_gkr<E: FieldElement, H: ElementHasher<BaseField = E::BaseField>>(
     gkr_proof: GkrCircuitProof<E>,
     evaluator: &impl LogUpGkrEvaluator<BaseField = E::BaseField>,
     public_coin: &mut impl RandomCoin<BaseField = E::BaseField, Hasher = H>,
-) -> Result<GkrRandElements<E>, GkrVerifierError> {
+) -> Result<GkrData<E>, GkrVerifierError> {
     let claim = E::ZERO;
     let num_logup_random_values = evaluator.get_num_rand_values();
     let mut logup_randomness: Vec<E> = Vec::with_capacity(num_logup_random_values);
@@ -371,7 +371,7 @@ fn verify_gkr<E: FieldElement, H: ElementHasher<BaseField = E::BaseField>>(
         batching_randomness.push(public_coin.draw().expect("failed to generate randomness"))
     }
 
-    let gkr_rand_elements = GkrRandElements::new(
+    let gkr_rand_elements = GkrData::new(
         LagrangeKernelRandElements::new(eval_point),
         batching_randomness,
         openings,

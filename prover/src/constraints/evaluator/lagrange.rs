@@ -5,135 +5,46 @@
 
 use alloc::vec::Vec;
 
+use crate::{StarkDomain, TraceLde};
 use air::{
-    Air, EvaluationFrame, GkrRandElements, LagrangeConstraintsCompositionCoefficients,
-    LagrangeKernelConstraints, LagrangeKernelEvaluationFrame, LagrangeKernelRandElements,
-    LogUpGkrEvaluator,
+    Air, EvaluationFrame, GkrData, LagrangeConstraintsCompositionCoefficients,
+    LagrangeKernelConstraints, LagrangeKernelEvaluationFrame, LogUpGkrEvaluator,
 };
 use math::{batch_inversion, FieldElement};
 
-use crate::{inner_product, StarkDomain, TraceLde};
-
-pub struct SColumnConstraints<'a, E: FieldElement, A: Air<BaseField = E::BaseField>> {
+/// Contains a specific strategy for evaluating the LogUp-GKR related boundary and transition
+/// constraints where the divisors' evaluation is batched. These include the constraints for
+/// the Lagrange kernel as well as those for the s-column.
+pub struct LogUpGkrConstraintsBatchEvaluator<'a, E: FieldElement, A: Air<BaseField = E::BaseField>>
+{
     air: &'a A,
-    openings: Vec<E>,
-    batching_randomness: Vec<E>,
-    cc_coef: E,
+    lagrange_kernel_constraints: LagrangeKernelConstraints<E>,
+    gkr_data: GkrData<E>,
+    s_col_composition_coefficient: E,
 }
 
-impl<'a, E, A> SColumnConstraints<'a, E, A>
+impl<'a, E, A> LogUpGkrConstraintsBatchEvaluator<'a, E, A>
 where
     E: FieldElement,
     A: Air<BaseField = E::BaseField>,
 {
-    pub fn new(air: &'a A, logup_rand: &GkrRandElements<E>, cc_coef: E) -> Self {
-        let GkrRandElements {
-            lagrange_kernel_eval_point: _,
-            openings_combining_randomness,
-            openings,
-            oracles: _,
-        } = logup_rand;
-
-        Self {
-            air,
-            openings: openings.to_vec(),
-            batching_randomness: openings_combining_randomness.to_vec(),
-            cc_coef,
-        }
-    }
-
-    /// Evaluates the transition and boundary constraints. Specifically, the constraint evaluations
-    /// are divided by their corresponding divisors, and the resulting terms are linearly combined
-    /// using the composition coefficients.
-    ///
-    /// Writes the evaluations in `combined_evaluations_acc` at the corresponding (constraint
-    /// evaluation) domain index.
-    pub fn evaluate_constraints<T>(
-        &self,
-        trace: &T,
-        domain: &StarkDomain<E::BaseField>,
-        combined_evaluations_acc: &mut [E],
-    ) where
-        T: TraceLde<E>,
-    {
-        let evaluator = self.air.get_logup_gkr_evaluator::<E>();
-        let lde_shift = domain.ce_to_lde_blowup().trailing_zeros();
-        let trans_constraints_divisor =
-            compute_s_col_divisor::<E>(domain.ce_domain_size(), domain, self.air.trace_length());
-        let s_col_idx = trace.trace_info().aux_segment_width() - 2;
-        let l_col_idx = trace.trace_info().aux_segment_width() - 1;
-        let mut main_frame = EvaluationFrame::new(trace.trace_info().main_trace_width());
-        let mut aux_frame = EvaluationFrame::new(trace.trace_info().aux_segment_width());
-
-        let c = self.openings[0] + inner_product(&self.batching_randomness, &self.openings[1..]);
-        let mean = c / E::from(E::BaseField::from(trace.trace_info().length() as u32));
-
-        for step in 0..domain.ce_domain_size() {
-            trace.read_aux_trace_frame_into(step, &mut aux_frame);
-            trace.read_main_trace_frame_into(step << lde_shift, &mut main_frame);
-
-            let s_cur = aux_frame.current()[s_col_idx];
-            let s_nxt = aux_frame.next()[s_col_idx];
-            let l_cur = aux_frame.current()[l_col_idx];
-
-            let query = evaluator.build_query(&main_frame, &[]);
-
-            let batched_claim =
-                E::from(query[0]) + inner_product(&query[1..], &self.batching_randomness);
-
-            let rhs = s_cur - mean + batched_claim * l_cur;
-            let lhs = s_nxt;
-
-            combined_evaluations_acc[step] +=
-                (rhs - lhs) * self.cc_coef.mul_base(trans_constraints_divisor[step]);
-        }
-    }
-}
-
-fn compute_s_col_divisor<E: FieldElement>(
-    ce_domain_size: usize,
-    domain: &StarkDomain<E::BaseField>,
-    trace_length: usize,
-) -> Vec<E::BaseField> {
-    let degree = trace_length as u32;
-    let mut result = Vec::with_capacity(ce_domain_size);
-
-    for row in 0..ce_domain_size {
-        let x = domain.get_ce_x_at(row);
-        let x = x.exp((degree as u32).into()) - E::BaseField::ONE;
-
-        result.push(x);
-    }
-    batch_inversion(&result)
-}
-
-/// Contains a specific strategy for evaluating the Lagrange kernel boundary and transition
-/// constraints where the divisors' evaluation is batched.
-///
-/// Specifically, [`batch_inversion`] is used to reduce the number of divisions performed.
-pub struct LagrangeKernelConstraintsBatchEvaluator<E: FieldElement> {
-    lagrange_kernel_constraints: LagrangeKernelConstraints<E>,
-    rand_elements: LagrangeKernelRandElements<E>,
-}
-
-impl<E: FieldElement> LagrangeKernelConstraintsBatchEvaluator<E> {
-    /// Constructs a new [`LagrangeConstraintsBatchEvaluator`].
-    pub fn new<A: Air>(
-        air: &A,
-        lagrange_kernel_rand_elements: LagrangeKernelRandElements<E>,
+    /// Constructs a new [`LogUpGkrConstraintsBatchEvaluator`].
+    pub fn new(
+        air: &'a A,
+        gkr_data: GkrData<E>,
         lagrange_composition_coefficients: LagrangeConstraintsCompositionCoefficients<E>,
-    ) -> Self
-    where
-        E: FieldElement<BaseField = A::BaseField>,
-    {
+        s_col_composition_coefficient: E,
+    ) -> Self {
         Self {
             lagrange_kernel_constraints: air
                 .get_lagrange_kernel_constraints(
                     lagrange_composition_coefficients,
-                    &lagrange_kernel_rand_elements,
+                    &gkr_data.lagrange_kernel_rand_elements(),
                 )
                 .expect("expected Lagrange kernel constraints to be present"),
-            rand_elements: lagrange_kernel_rand_elements,
+            air,
+            gkr_data,
+            s_col_composition_coefficient,
         }
     }
 
@@ -158,28 +69,41 @@ impl<E: FieldElement> LagrangeKernelConstraintsBatchEvaluator<E> {
         );
         let boundary_divisors_inv = self.compute_boundary_divisors_inv(domain);
 
-        let mut frame = LagrangeKernelEvaluationFrame::new_empty();
+        let mut lagrange_frame = LagrangeKernelEvaluationFrame::new_empty();
+
+        let evaluator = self.air.get_logup_gkr_evaluator::<E>();
+        let s_col_constraint_divisor =
+            compute_s_col_divisor::<E>(domain.ce_domain_size(), domain, self.air.trace_length());
+        let s_col_idx = trace.trace_info().aux_segment_width() - 2;
+        let l_col_idx = trace.trace_info().aux_segment_width() - 1;
+        let mut main_frame = EvaluationFrame::new(trace.trace_info().main_trace_width());
+        let mut aux_frame = EvaluationFrame::new(trace.trace_info().aux_segment_width());
+
+        let c = self.gkr_data.compute_batched_claim();
+        let mean = c / E::from(E::BaseField::from(trace.trace_info().length() as u32));
 
         for step in 0..domain.ce_domain_size() {
             // compute Lagrange kernel frame
             trace.read_lagrange_kernel_frame_into(
                 step << lde_shift,
                 self.lagrange_kernel_constraints.lagrange_kernel_col_idx,
-                &mut frame,
+                &mut lagrange_frame,
             );
 
             // Compute the combined transition and boundary constraints evaluations for this row
-            let combined_evaluations = {
+            let lagrange_combined_evaluations = {
                 let mut combined_evaluations = E::ZERO;
 
                 // combine transition constraints
                 for trans_constraint_idx in
                     0..self.lagrange_kernel_constraints.transition.num_constraints()
                 {
-                    let numerator = self
-                        .lagrange_kernel_constraints
-                        .transition
-                        .evaluate_ith_numerator(&frame, &self.rand_elements, trans_constraint_idx);
+                    let numerator =
+                        self.lagrange_kernel_constraints.transition.evaluate_ith_numerator(
+                            &lagrange_frame,
+                            &self.gkr_data.lagrange_kernel_eval_point,
+                            trans_constraint_idx,
+                        );
                     let inv_divisor = trans_constraints_divisors
                         .get_inverse_divisor_eval(trans_constraint_idx, step);
 
@@ -188,8 +112,10 @@ impl<E: FieldElement> LagrangeKernelConstraintsBatchEvaluator<E> {
 
                 // combine boundary constraints
                 {
-                    let boundary_numerator =
-                        self.lagrange_kernel_constraints.boundary.evaluate_numerator_at(&frame);
+                    let boundary_numerator = self
+                        .lagrange_kernel_constraints
+                        .boundary
+                        .evaluate_numerator_at(&lagrange_frame);
 
                     combined_evaluations += boundary_numerator * boundary_divisors_inv[step];
                 }
@@ -197,7 +123,28 @@ impl<E: FieldElement> LagrangeKernelConstraintsBatchEvaluator<E> {
                 combined_evaluations
             };
 
-            combined_evaluations_acc[step] += combined_evaluations;
+            let s_col_combined_evaluation = {
+                trace.read_main_trace_frame_into(step << lde_shift, &mut main_frame);
+                trace.read_aux_trace_frame_into(step << lde_shift, &mut aux_frame);
+
+                let l_cur = aux_frame.current()[l_col_idx];
+                let s_cur = aux_frame.current()[s_col_idx];
+                let s_nxt = aux_frame.next()[s_col_idx];
+
+                let query = evaluator.build_query(&main_frame, &[]);
+                let batched_query = self.gkr_data.compute_batched_query(&query);
+
+                let rhs = s_cur - mean + batched_query * l_cur;
+                let lhs = s_nxt;
+
+                (rhs - lhs)
+                    * self
+                        .s_col_composition_coefficient
+                        .mul_base(s_col_constraint_divisor[step % (domain.trace_to_ce_blowup())])
+            };
+
+            combined_evaluations_acc[step] +=
+                lagrange_combined_evaluations + s_col_combined_evaluation;
         }
     }
 
@@ -386,4 +333,21 @@ impl<E: FieldElement> TransitionDivisorEvaluator<E> {
         self.s_precomputes[trans_constraint_idx] * domain.get_ce_x_at(domain_idx)
             - E::BaseField::ONE
     }
+}
+
+fn compute_s_col_divisor<E: FieldElement>(
+    ce_domain_size: usize,
+    domain: &StarkDomain<E::BaseField>,
+    trace_length: usize,
+) -> Vec<E::BaseField> {
+    let degree = trace_length as u32;
+    let mut result = Vec::with_capacity(ce_domain_size);
+
+    for row in 0..domain.trace_to_ce_blowup() {
+        let x = domain.get_ce_x_at(row);
+        let x = x.exp((degree as u32).into()) - E::BaseField::ONE;
+
+        result.push(x);
+    }
+    batch_inversion(&result)
 }

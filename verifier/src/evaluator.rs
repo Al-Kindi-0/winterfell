@@ -93,7 +93,7 @@ pub fn evaluate_constraints<A: Air, E: FieldElement<BaseField = A::BaseField>>(
             .lagrange
             .expect("expected Lagrange kernel composition coefficients to be present");
 
-        let air::GkrRandElements {
+        let air::GkrData {
             lagrange_kernel_eval_point: lagrange_kernel_evaluation_point,
             openings_combining_randomness,
             openings,

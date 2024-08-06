@@ -12,7 +12,7 @@ use math::{fft, ExtensibleField, ExtensionOf, FieldElement, StarkField, ToElemen
 use crate::ProofOptions;
 
 mod aux;
-pub use aux::{AuxRandElements, GkrRandElements, GkrVerifier};
+pub use aux::{AuxRandElements, GkrData, GkrVerifier};
 
 mod trace_info;
 pub use trace_info::TraceInfo;
