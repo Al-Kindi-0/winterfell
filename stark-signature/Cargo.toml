@@ -8,7 +8,7 @@ edition = "2021"
 bench = false
 
 [[bench]]
-name = "signing"
+name = "sign_verify"
 harness = false
 
 [features]
