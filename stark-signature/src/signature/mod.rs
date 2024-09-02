@@ -1,5 +1,4 @@
 use air::ProofOptions;
-use crypto::hashers::Rp64_256;
 use math::{fields::f64::BaseElement, FieldElement};
 use prover::Proof;
 use rand::Rng;
@@ -8,6 +7,10 @@ use utils::{
 };
 
 use crate::stark::{hash, RpoSignature};
+
+use crypto::hashers::Rp64_256;
+//use crypto::hashers::Blake3_256;
+//type Rp64_256 = Blake3_256<BaseElement>;
 
 // PUBLIC KEY
 // ================================================================================================
