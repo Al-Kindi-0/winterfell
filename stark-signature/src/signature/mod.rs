@@ -8,9 +8,9 @@ use utils::{
 
 use crate::stark::{hash, RpoSignature};
 
-use crypto::hashers::Rp64_256;
-//use crypto::hashers::Blake3_256;
-//type Rp64_256 = Blake3_256<BaseElement>;
+//use crypto::hashers::Rp64_256;
+use crypto::hashers::Blake3_256;
+type Rp64_256 = Blake3_256<BaseElement>;
 
 // PUBLIC KEY
 // ================================================================================================
@@ -84,7 +84,9 @@ impl Signature {
 }
 
 fn get_proof_options() -> ProofOptions {
-    ProofOptions::new(89, 8, 0, ::air::FieldExtension::Cubic, 8, 31, true)
+    //ProofOptions::new(89, 8, 0, ::air::FieldExtension::Cubic, 8, 31, true)
+    //ProofOptions::new(140, 8, 0, ::air::FieldExtension::Quadratic, 8, 31, true)
+    ProofOptions::new(126, 8, 11, ::air::FieldExtension::Quadratic, 2, 255, true)
 }
 
 // SERIALIZATION / DESERIALIZATION
