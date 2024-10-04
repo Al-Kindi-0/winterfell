@@ -5,36 +5,24 @@
 
 use winterfell::{FieldExtension, ProofOptions};
 
-use super::{Rp64_256, AUX_TRACE_WIDTH};
+use super::Rp64_256;
 
 #[test]
 fn logup_gkr_small_test_basic_proof_verification() {
-    let logup_gkr = Box::new(super::LogUpGkrSimple::<Rp64_256>::new(
-        128,
-        AUX_TRACE_WIDTH,
-        build_options(false),
-    ));
+    let logup_gkr = Box::new(super::LogUpGkr::<Rp64_256>::new(16, 3, build_options(false)));
     crate::tests::test_basic_proof_verification(logup_gkr);
 }
 
 #[test]
 fn logup_gkr_small_test_basic_proof_verification_extension() {
-    let logup_gkr = Box::new(super::LogUpGkrSimple::<Rp64_256>::new(
-        128,
-        AUX_TRACE_WIDTH,
-        build_options(true),
-    ));
+    let logup_gkr = Box::new(super::LogUpGkr::<Rp64_256>::new(128, 5, build_options(true)));
     crate::tests::test_basic_proof_verification(logup_gkr);
 }
 
 #[ignore = "not relevant"]
 #[test]
 fn logup_gkr_small_test_basic_proof_verification_fail() {
-    let logup_gkr = Box::new(super::LogUpGkrSimple::<Rp64_256>::new(
-        128,
-        AUX_TRACE_WIDTH,
-        build_options(false),
-    ));
+    let logup_gkr = Box::new(super::LogUpGkr::<Rp64_256>::new(128, 5, build_options(false)));
     crate::tests::test_basic_proof_verification_fail(logup_gkr);
 }
 

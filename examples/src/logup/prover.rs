@@ -3,46 +3,48 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
+use core_utils::uninit_vector;
 use rand::prelude::*;
 use winterfell::{
-    crypto::MerkleTree, math::FieldElement, matrix::ColMatrix, Air, AuxRandElements,
-    ConstraintCompositionCoefficients, DefaultTraceLde, EvaluationFrame,
-    LogUpGkrConstraintEvaluator, StarkDomain, Trace, TraceInfo, TracePolyTable,
+    crypto::MerkleTree,
+    math::{batch_inversion, FieldElement},
+    matrix::ColMatrix,
+    Air, AuxRandElements, ConstraintCompositionCoefficients, DefaultConstraintEvaluator,
+    DefaultTraceLde, EvaluationFrame, StarkDomain, Trace, TraceInfo, TracePolyTable,
 };
 
 use super::{
-    air::LogUpGkrAir, BaseElement, DefaultRandomCoin, ElementHasher, PhantomData, ProofOptions,
-    Prover,
+    air::LogUpAir, BaseElement, DefaultRandomCoin, ElementHasher, PhantomData, ProofOptions, Prover,
 };
 
-pub(crate) struct LogUpGkrProver<H: ElementHasher<BaseField = BaseElement> + Sync + Send> {
+pub(crate) struct LogUpProver<H: ElementHasher<BaseField = BaseElement> + Sync + Send> {
     options: ProofOptions,
     _hasher: PhantomData<H>,
 }
 
-impl<H: ElementHasher<BaseField = BaseElement> + Sync + Send> LogUpGkrProver<H> {
+impl<H: ElementHasher<BaseField = BaseElement> + Sync + Send> LogUpProver<H> {
     pub(crate) fn new(options: ProofOptions) -> Self {
         Self { options, _hasher: PhantomData }
     }
 
     /// Builds an execution trace for computing a Fibonacci sequence of the specified length such
     /// that each row advances the sequence by 2 terms.
-    pub fn build_trace(&self, trace_len: usize, aux_segment_width: usize) -> LogUpGkrTrace {
-        LogUpGkrTrace::new(trace_len, aux_segment_width)
+    pub fn build_trace(&self, trace_len: usize, aux_segment_width: usize) -> LogUpTrace {
+        LogUpTrace::new(trace_len, aux_segment_width)
     }
 }
 
-impl<H: ElementHasher<BaseField = BaseElement> + Sync + Send> Prover for LogUpGkrProver<H> {
+impl<H: ElementHasher<BaseField = BaseElement> + Sync + Send> Prover for LogUpProver<H> {
     type BaseField = BaseElement;
-    type Air = LogUpGkrAir;
-    type Trace = LogUpGkrTrace;
+    type Air = LogUpAir;
+    type Trace = LogUpTrace;
     type HashFn = H;
     type VC = MerkleTree<Self::HashFn>;
     type RandomCoin = DefaultRandomCoin<Self::HashFn>;
     type TraceLde<E: FieldElement<BaseField = BaseElement>> =
         DefaultTraceLde<E, Self::HashFn, Self::VC>;
     type ConstraintEvaluator<'a, E: FieldElement<BaseField = BaseElement>> =
-        LogUpGkrConstraintEvaluator<'a, LogUpGkrAir, E>;
+        DefaultConstraintEvaluator<'a, LogUpAir, E>;
 
     fn get_pub_inputs(&self, _trace: &Self::Trace) -> <<Self as Prover>::Air as Air>::PublicInputs {
     }
@@ -72,41 +74,44 @@ impl<H: ElementHasher<BaseField = BaseElement> + Sync + Send> Prover for LogUpGk
     where
         E: FieldElement<BaseField = Self::BaseField>,
     {
-        LogUpGkrConstraintEvaluator::new(air, aux_rand_elements.unwrap(), composition_coefficients)
+        DefaultConstraintEvaluator::new(air, aux_rand_elements, composition_coefficients)
     }
 
-    fn build_aux_trace<E>(&self, main_trace: &Self::Trace, _aux_rand_elements: &[E]) -> ColMatrix<E>
+    fn build_aux_trace<E>(&self, main_trace: &Self::Trace, aux_rand_elements: &[E]) -> ColMatrix<E>
     where
         E: FieldElement<BaseField = Self::BaseField>,
     {
         let main_trace = main_trace.main_segment();
 
-        let mut columns = Vec::new();
+        let alpha = aux_rand_elements[0];
 
-        let rand_summed = E::from(777_u32);
-        for _ in 0..1 {
-            // building a dummy auxiliary column
-            let column = main_trace
-                .get_column(0)
-                .iter()
-                .map(|row_val| rand_summed.mul_base(*row_val))
-                .collect();
+        let num_witness_columns = main_trace.num_cols() - 2;
+        let mut columns =
+            vec![unsafe { uninit_vector(main_trace.num_rows()) }; (num_witness_columns + 1) / 2];
 
-            columns.push(column);
-        }
+        columns.iter_mut().enumerate().for_each(|(col_idx, col)| {
+            col.iter_mut().enumerate().for_each(|(row_idx, entry)| {
+                let col0 = main_trace.get(2 * col_idx, row_idx);
+                let col1 = main_trace.get(2 * col_idx + 1, row_idx);
+
+                *entry = (E::from(col0) - alpha) * (E::from(col1) - alpha);
+            });
+
+            *col = batch_inversion(&col);
+        });
 
         ColMatrix::new(columns)
     }
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct LogUpGkrTrace {
+pub(crate) struct LogUpTrace {
     // dummy main trace
     main_trace: ColMatrix<BaseElement>,
     info: TraceInfo,
 }
 
-impl LogUpGkrTrace {
+impl LogUpTrace {
     fn new(trace_len: usize, num_witness_columns: usize) -> Self {
         assert!(trace_len < u32::MAX.try_into().unwrap());
 
@@ -139,12 +144,14 @@ impl LogUpGkrTrace {
         Self {
             main_trace: ColMatrix::new(result),
             info: TraceInfo::new_multi_segment(
+                // +2 for the multiplicity and table columns
                 num_witness_columns + 2,
-                1,
+                // for each two denominators we need one auxiliary column. +1 for the table column
+                (num_witness_columns + 1) / 2,
                 1,
                 trace_len,
                 vec![],
-                true,
+                false,
             ),
         }
     }
@@ -154,7 +161,7 @@ impl LogUpGkrTrace {
     }
 }
 
-impl Trace for LogUpGkrTrace {
+impl Trace for LogUpTrace {
     type BaseField = BaseElement;
 
     fn info(&self) -> &TraceInfo {

@@ -12,6 +12,7 @@ use winterfell::{
 pub mod fibonacci;
 #[cfg(feature = "std")]
 pub mod lamport;
+pub mod logup;
 pub mod logup_gkr;
 #[cfg(feature = "std")]
 pub mod merkle;
@@ -201,8 +202,20 @@ pub enum ExampleType {
     /// LogUp-GKR
     LogUpGkr {
         /// Length of the trace; must be a power of two
-        #[structopt(short = "n", default_value = "65536")]
+        #[structopt(short = "l", default_value = "65536")]
         trace_length: usize,
+        // Number of witness columns, must be odd.
+        #[structopt(short = "w", default_value = "1")]
+        num_witness_columns: usize,
+    },
+    /// LogUp
+    LogUp {
+        /// Length of the trace; must be a power of two
+        #[structopt(short = "l", default_value = "65536")]
+        trace_length: usize,
+        // Number of witness columns, must be odd.
+        #[structopt(short = "w", default_value = "1")]
+        num_witness_columns: usize,
     },
 }
 

@@ -29,6 +29,7 @@ std = ["core-utils/std", "hex/std", "rand-utils", "winterfell/std"]
 blake3 = { version = "1.5", default-features = false }
 core-utils = { version = "0.9", path = "../utils/core", package = "winter-utils", default-features = false }
 hex = { version = "0.4", optional = true }
+rand =  { version = "0.8" }
 rand-utils = { version = "0.9", path = "../utils/rand", package = "winter-rand-utils", optional = true }
 structopt = { version = "0.3", default-features = false }
 tracing = { version = "0.1", default-features = false }

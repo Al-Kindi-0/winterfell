@@ -13,17 +13,18 @@ use winterfell::{
 
 use super::ProofOptions;
 
-pub const NUM_FRACTIONS: usize = 64;
-
-pub(crate) struct LogUpGkrSimpleAir {
+pub(crate) struct LogUpGkrAir {
     context: AirContext<BaseElement, ()>,
+    num_witness_cols: usize,
 }
 
-impl Air for LogUpGkrSimpleAir {
+impl Air for LogUpGkrAir {
     type BaseField = BaseElement;
     type PublicInputs = ();
 
     fn new(trace_info: TraceInfo, _pub_inputs: Self::PublicInputs, options: ProofOptions) -> Self {
+        let num_witness_cols = trace_info.main_segment_width() - 2;
+
         Self {
             context: AirContext::new_multi_segment(
                 trace_info,
@@ -34,6 +35,7 @@ impl Air for LogUpGkrSimpleAir {
                 0,
                 options,
             ),
+            num_witness_cols,
         }
     }
 
@@ -69,7 +71,6 @@ impl Air for LogUpGkrSimpleAir {
         F: FieldElement<BaseField = Self::BaseField>,
         E: FieldElement<BaseField = Self::BaseField> + ExtensionOf<F>,
     {
-        // do nothing
     }
 
     fn get_aux_assertions<E: FieldElement<BaseField = Self::BaseField>>(
@@ -83,7 +84,7 @@ impl Air for LogUpGkrSimpleAir {
         &self,
     ) -> impl LogUpGkrEvaluator<BaseField = Self::BaseField, PublicInputs = Self::PublicInputs>
     {
-        PlainLogUpGkrEval::new()
+        PlainLogUpGkrEval::new(self.num_witness_cols)
     }
 }
 
@@ -94,13 +95,11 @@ pub struct PlainLogUpGkrEval<B: FieldElement + StarkField> {
 }
 
 impl<B: FieldElement + StarkField> PlainLogUpGkrEval<B> {
-    pub fn new() -> Self {
-        let committed_0 = LogUpGkrOracle::CurrentRow(0);
-        let committed_1 = LogUpGkrOracle::CurrentRow(1);
-        let committed_2 = LogUpGkrOracle::CurrentRow(2);
-        let committed_3 = LogUpGkrOracle::CurrentRow(3);
-        let committed_4 = LogUpGkrOracle::CurrentRow(4);
-        let oracles = vec![committed_0, committed_1, committed_2, committed_3, committed_4];
+    pub fn new(num_witness_columns: usize) -> Self {
+        let oracles = (0..num_witness_columns + 2)
+            .into_iter()
+            .map(LogUpGkrOracle::CurrentRow)
+            .collect();
         Self { oracles, _field: PhantomData }
     }
 }
@@ -119,11 +118,12 @@ impl LogUpGkrEvaluator for PlainLogUpGkrEval<BaseElement> {
     }
 
     fn get_num_fractions(&self) -> usize {
-        NUM_FRACTIONS
+        // - 1 to exclude the multiplicity column
+        self.oracles.len() - 1
     }
 
     fn max_degree(&self) -> usize {
-        10
+        3
     }
 
     fn build_query<E>(&self, frame: &EvaluationFrame<E>, query: &mut [E])
@@ -146,20 +146,15 @@ impl LogUpGkrEvaluator for PlainLogUpGkrEval<BaseElement> {
     {
         assert_eq!(numerator.len(), self.get_num_fractions());
         assert_eq!(denominator.len(), self.get_num_fractions());
-        assert_eq!(query.len(), 5);
 
-        for i in (0..self.get_num_fractions()).step_by(4) {
-            numerator[i] = E::from(query[1]);
-            numerator[i + 1] = E::ONE;
-            numerator[i + 2] = E::ONE;
-            numerator[i + 3] = E::ONE;
+        let alpha = rand_values[0];
+        numerator[0] = (-query[query.len() - 1]).into();
+        for i in 1..self.get_num_fractions() {
+            numerator[i] = E::ONE;
         }
 
-        for i in (0..self.get_num_fractions()).step_by(4) {
-            denominator[i] = rand_values[0] - E::from(query[0]);
-            denominator[i + 1] = -(rand_values[0] - E::from(query[2]));
-            denominator[i + 2] = -(rand_values[0] - E::from(query[3]));
-            denominator[i + 3] = -(rand_values[0] - E::from(query[4]));
+        for i in 0..self.get_num_fractions() {
+            denominator[i] = alpha - E::from(query[i]);
         }
     }
 
