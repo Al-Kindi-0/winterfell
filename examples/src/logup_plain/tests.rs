@@ -9,7 +9,7 @@ use super::Rp64_256;
 
 #[test]
 fn logup_small_test_basic_proof_verification() {
-    let logup = Box::new(super::LogUp::<Rp64_256>::new(16, 4, build_options(false)));
+    let logup = Box::new(super::LogUp::<Rp64_256>::new(16, 5, build_options(false)));
     crate::tests::test_basic_proof_verification(logup);
 }
 

@@ -12,7 +12,7 @@ use winterfell::{
 pub mod fibonacci;
 #[cfg(feature = "std")]
 pub mod lamport;
-pub mod logup;
+pub mod logup_plain;
 pub mod logup_gkr;
 #[cfg(feature = "std")]
 pub mod merkle;

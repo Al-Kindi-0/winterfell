@@ -5,7 +5,7 @@
 
 use std::time::Instant;
 
-use examples::{fibonacci, logup, logup_gkr, rescue, vdf, ExampleOptions, ExampleType};
+use examples::{fibonacci, logup_plain, logup_gkr, rescue, vdf, ExampleOptions, ExampleType};
 #[cfg(feature = "std")]
 use examples::{lamport, merkle, rescue_raps};
 use structopt::StructOpt;
@@ -86,7 +86,7 @@ fn main() {
             logup_gkr::get_example(&options, trace_length, num_witness_columns)
         },
         ExampleType::LogUp { trace_length, num_witness_columns } => {
-            logup::get_example(&options, trace_length, num_witness_columns)
+            logup_plain::get_example(&options, trace_length, num_witness_columns)
         },
     }
     .expect("The example failed to initialize.");
