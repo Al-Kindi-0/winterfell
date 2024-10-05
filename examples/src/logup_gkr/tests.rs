@@ -3,13 +3,13 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-use winterfell::{FieldExtension, ProofOptions};
+use winterfell::{crypto::hashers::Blake3_192, math::fields::f64::BaseElement, FieldExtension, ProofOptions};
 
 use super::Rp64_256;
 
 #[test]
 fn logup_gkr_small_test_basic_proof_verification() {
-    let logup_gkr = Box::new(super::LogUpGkr::<Rp64_256>::new(16, 3, build_options(false)));
+    let logup_gkr = Box::new(super::LogUpGkr::<Blake3_192<BaseElement>>::new(128, 5, build_options(false)));
     crate::tests::test_basic_proof_verification(logup_gkr);
 }
 

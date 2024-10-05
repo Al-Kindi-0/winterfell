@@ -65,7 +65,6 @@ pub fn verify_sum_check_intermediate_layers<
     }
 
     if eval_batched_circuits != final_round_claim.claim {
-        assert_eq!(1, 0);
         return Err(SumCheckVerifierError::FinalEvaluationCheckFailed);
     }
 
@@ -164,7 +163,6 @@ pub fn verify_sum_check_input_layer<E: FieldElement, H: ElementHasher<BaseField 
     );
 
     if expected_evaluation != claim {
-        assert_eq!(1, 0);
         Err(SumCheckVerifierError::FinalEvaluationCheckFailed)
     } else {
         Ok(proof.0.openings_claim.clone())

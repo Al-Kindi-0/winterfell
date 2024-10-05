@@ -172,10 +172,10 @@ pub fn sumcheck_prove_plain_batched<E: FieldElement, H: ElementHasher<BaseField 
         #[cfg(feature = "concurrent")]
         let (all_round_poly_eval_at_0, all_round_poly_eval_at_2) = inner_layers
             .par_iter()
-            .zip(tensored_batching_randomness.par_iter())
+            .zip(tensored_batching_randomness)
             .fold(
                 || (E::ZERO, E::ZERO),
-                |(_acc_eval_0, _acc_eval_2), (inner_layer, batching_randomness)| {
+                |(mut acc_eval_0, mut acc_eval_2), (inner_layer, batching_randomness)| {
                     let (round_poly_eval_at_0, round_poly_eval_at_2) =
                         (0..len).fold((E::ZERO, E::ZERO), |(a, b), k| {
                             let p0_i_0 = inner_layer.numerators[2 * k];
@@ -210,10 +210,10 @@ pub fn sumcheck_prove_plain_batched<E: FieldElement, H: ElementHasher<BaseField 
                             (round_poly_eval_at_0 + a, round_poly_eval_at_2 + b)
                         });
 
-                    let tmp_round_poly_eval_at_1 = round_poly_eval_at_0 * *batching_randomness;
-                    let tmp_round_poly_eval_at_2 = round_poly_eval_at_2 * *batching_randomness;
+                    acc_eval_0 += round_poly_eval_at_0 * *batching_randomness;
+                    acc_eval_2 += round_poly_eval_at_2 * *batching_randomness;
 
-                    (tmp_round_poly_eval_at_1, tmp_round_poly_eval_at_2)
+                    (acc_eval_0, acc_eval_2)
                 },
             )
             .reduce(|| (E::ZERO, E::ZERO), |(a0, b0), (a1, b1)| (a0 + a1, b0 + b1));

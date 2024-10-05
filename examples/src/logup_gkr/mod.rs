@@ -39,7 +39,7 @@ pub fn get_example(
     trace_length: usize,
     num_witness_columns: usize,
 ) -> Result<Box<dyn Example>, String> {
-    let (options, hash_fn) = options.to_proof_options(28, 8);
+    let (options, hash_fn) = options.to_proof_options(28, 2);
 
     match hash_fn {
         HashFunction::Blake3_192 => Ok(Box::new(LogUpGkr::<Blake3_192>::new(
