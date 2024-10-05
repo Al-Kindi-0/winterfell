@@ -96,6 +96,7 @@ pub struct PlainLogUpGkrEval<B: FieldElement + StarkField> {
 
 impl<B: FieldElement + StarkField> PlainLogUpGkrEval<B> {
     pub fn new(num_witness_columns: usize) -> Self {
+        // + 2 for the multiplicity and table columns
         let oracles = (0..num_witness_columns + 2)
             .into_iter()
             .map(LogUpGkrOracle::CurrentRow)
@@ -118,7 +119,7 @@ impl LogUpGkrEvaluator for PlainLogUpGkrEval<BaseElement> {
     }
 
     fn get_num_fractions(&self) -> usize {
-        // - 1 to exclude the multiplicity column
+        // - 1 to exclude the multiplicity column to not count its fraction twice
         self.oracles.len() - 1
     }
 
@@ -148,11 +149,16 @@ impl LogUpGkrEvaluator for PlainLogUpGkrEval<BaseElement> {
         assert_eq!(denominator.len(), self.get_num_fractions());
 
         let alpha = rand_values[0];
+
+        // the multiplicity numerator
         numerator[0] = (-query[query.len() - 1]).into();
+
+        // the remaining numerators
         for i in 1..self.get_num_fractions() {
             numerator[i] = E::ONE;
         }
 
+        // the denominators
         for i in 0..self.get_num_fractions() {
             denominator[i] = alpha - E::from(query[i]);
         }

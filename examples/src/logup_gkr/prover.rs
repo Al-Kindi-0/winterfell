@@ -84,16 +84,14 @@ impl<H: ElementHasher<BaseField = BaseElement> + Sync + Send> Prover for LogUpGk
         let mut columns = Vec::new();
 
         let rand_summed = E::from(777_u32);
-        for _ in 0..1 {
-            // building a dummy auxiliary column
-            let column = main_trace
-                .get_column(0)
-                .iter()
-                .map(|row_val| rand_summed.mul_base(*row_val))
-                .collect();
+        // build a dummy auxiliary column
+        let column = main_trace
+            .get_column(0)
+            .iter()
+            .map(|row_val| rand_summed.mul_base(*row_val))
+            .collect();
 
-            columns.push(column);
-        }
+        columns.push(column);
 
         ColMatrix::new(columns)
     }
