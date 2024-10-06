@@ -37,6 +37,10 @@ pub trait LogUpGkrEvaluator: Clone + Sync {
     /// MLEs.
     fn get_oracles(&self) -> &[LogUpGkrOracle];
 
+    fn get_fractions(&self) -> &[LogUpGkrFraction] {
+        unimplemented!()
+    }
+
     /// A vector of virtual periodic columns defined by their values in some given cycle.
     /// Note that the cycle lengths must be powers of 2.
     fn get_periodic_column_values(&self) -> Vec<Vec<Self::BaseField>> {
@@ -136,6 +140,57 @@ pub trait LogUpGkrEvaluator: Clone + Sync {
             LagrangeKernelRandElements::new(eval_point),
             batching_randomness,
             batched_openings,
+            self.get_oracles().to_vec(),
+        )
+    }
+
+    fn generate_univariate_iop_for_multi_linear_opening_data_2<E, H>(
+        &self,
+        openings: Vec<(E, E)>,
+        eval_point: Vec<E>,
+        logup_randomness: &[E],
+        public_coin: &mut impl RandomCoin<Hasher = H, BaseField = E::BaseField>,
+    ) -> GkrData<E>
+    where
+        E: FieldElement<BaseField = Self::BaseField>,
+        H: ElementHasher<BaseField = E::BaseField>,
+    {
+        let fractions = self.get_fractions();
+
+
+        let alpha = logup_randomness[0];
+        let mut final_claims = vec![];
+        let mut multiplicity = E::ZERO;
+        for (idx, fraction) in fractions.iter().enumerate() {
+            let res = match fraction {
+                // this happens only for the m / (t - alpha) fraction
+                LogUpGkrFraction::Full(_num, _den) => {
+                    let (p, q) = openings[idx];
+                    multiplicity = -p;
+                    q + alpha
+                   // ((*num, -p), (*den, q + alpha))
+                },
+             LogUpGkrFraction::Partial(_den) => {
+                    let (p, q) = openings[idx];
+                    assert_eq!(p, E::ONE);
+                    q + alpha
+                    //((8000, p), (*den, q + alpha))
+                },
+            };
+            final_claims.push(res)
+        }
+        final_claims.push(multiplicity);
+
+        let mut batching_randomness = Vec::with_capacity(openings.len() - 1);
+        for _ in 0..openings.len() - 1 {
+            batching_randomness.push(public_coin.draw().expect("failed to generate randomness"))
+        }
+
+
+        GkrData::new(
+            LagrangeKernelRandElements::new(eval_point),
+            batching_randomness,
+            final_claims,
             self.get_oracles().to_vec(),
         )
     }
@@ -257,6 +312,12 @@ pub enum LogUpGkrOracle {
     CurrentRow(usize),
     /// A column with a given index in the main trace segment but shifted upwards.
     NextRow(usize),
+}
+
+#[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
+pub enum LogUpGkrFraction {
+    Full(usize, usize),
+    Partial(usize),
 }
 
 // PERIODIC COLUMNS FOR LOGUP

@@ -1,8 +1,10 @@
+use core::iter::successors;
+
 use alloc::vec::Vec;
 
 use air::{EvaluationFrame, GkrData, LogUpGkrEvaluator};
 use math::FieldElement;
-use sumcheck::{CircuitLayerPolys, CircuitWire, EqFunction, SumCheckProverError};
+use sumcheck::{CircuitLayerPolys, CircuitWire, EqFunction, MultiLinearPoly, SumCheckProverError};
 use tracing::instrument;
 use utils::{batch_iter_mut, uninit_vector};
 
@@ -61,28 +63,19 @@ pub struct EvaluatedCircuit<E: FieldElement> {
 impl<E: FieldElement> EvaluatedCircuit<E> {
     /// Creates a new [`EvaluatedCircuit`] by evaluating the circuit where the input layer is
     /// defined from the main trace columns.
-    #[instrument(skip_all, name = "evaluate_logup_gkr_circuit")]
+    //#[instrument(skip_all, name = "evaluate_logup_gkr_circuit")]
     pub fn new(
         main_trace_columns: &impl Trace<BaseField = E::BaseField>,
         evaluator: &impl LogUpGkrEvaluator<BaseField = E::BaseField>,
         log_up_randomness: &[E],
     ) -> Result<Self, GkrProverError> {
-        let mut layer_polys = Vec::new();
 
-        let input_layer =
-            Self::generate_input_layer(main_trace_columns, evaluator, log_up_randomness);
+        let all_circuits_evaluations =
+            Self::generate_all_circuits_evaluations(main_trace_columns, evaluator, log_up_randomness);
 
-        let mut current_layer =
-            Self::generate_second_layer(input_layer, evaluator.get_num_fractions());
-        while current_layer[0].len() > 1 {
-            let next_layer = Self::compute_next_layer(&current_layer);
+      
 
-            layer_polys.push(CircuitLayerPolys::from_circuit_layer(&current_layer));
-
-            current_layer = next_layer;
-        }
-
-        Ok(Self { layer_polys })
+        Ok(Self { layer_polys: all_circuits_evaluations })
     }
 
     /// Returns all layers of the evaluated circuit, starting from the input layer.
@@ -113,6 +106,63 @@ impl<E: FieldElement> EvaluatedCircuit<E> {
 
     // HELPERS
     // -------------------------------------------------------------------------------------------
+
+    /// Generates the input layer of the circuit from the main trace columns and some randomness
+    /// provided by the verifier.
+    fn generate_all_circuits_evaluations(
+        trace: &impl Trace<BaseField = E::BaseField>,
+        evaluator: &impl LogUpGkrEvaluator<BaseField = E::BaseField>,
+        log_up_randomness: &[E],
+    ) -> Vec<Vec<CircuitLayerPolys<E>>> {
+        
+        let fractions = evaluator.get_fractions();
+
+        let mut all_circuits = vec![];
+
+        for fraction in fractions {
+            let input_layer = match fraction {
+                air::LogUpGkrFraction::Full(num_idx, den_idx) => {
+                    let numerator = trace
+                        .main_segment()
+                        .get_column(*num_idx)
+                        .iter()
+                        .map(|x| E::from(*x))
+                        .collect();
+                    let denominator = trace
+                        .main_segment()
+                        .get_column(*den_idx)
+                        .iter()
+                        .map(|x| E::from(*x) - log_up_randomness[0])
+                        .collect();
+                    CircuitLayerPolys {
+                        numerators: MultiLinearPoly::from_evaluations(numerator),
+                        denominators: MultiLinearPoly::from_evaluations(denominator),
+                    }
+                },
+                air::LogUpGkrFraction::Partial(den_idx) => {
+                    let numerator = (0..trace.length()).map(|x| E::from(x as u32)).collect();
+                    let denominator = trace
+                        .main_segment()
+                        .get_column(*den_idx)
+                        .iter()
+                        .map(|x|log_up_randomness[0] - E::from(*x))
+                        .collect();
+
+                    CircuitLayerPolys {
+                        numerators: MultiLinearPoly::from_evaluations(numerator),
+                        denominators: MultiLinearPoly::from_evaluations(denominator),
+                    }
+                },
+            };
+
+            let layers: Vec<CircuitLayerPolys<E>> =
+                successors(Some(input_layer), |layer| layer.next_layer()).collect();
+
+            all_circuits.push(layers)
+        }
+
+        all_circuits
+    }
 
     /// Generates the input layer of the circuit from the main trace columns and some randomness
     /// provided by the verifier.
@@ -252,13 +302,6 @@ impl<E: FieldElement> EvaluatedCircuit<E> {
     }
 }
 
-/// Represents a claim to be proven by a subsequent call to the sum-check protocol.
-#[derive(Debug)]
-pub struct GkrClaim<E: FieldElement> {
-    pub evaluation_point: Vec<E>,
-    pub claimed_evaluations_per_circuit: Vec<(E, E)>,
-}
-
 /// Builds the auxiliary trace column for the univariate sum-check argument.
 ///
 /// Following Section 5.2 in [1] and using the inner product representation of multi-linear queries,
@@ -300,7 +343,7 @@ pub fn build_s_column<E: FieldElement>(
             trace.read_main_frame(i, &mut main_frame);
 
             evaluator.build_query(&main_frame, &mut query);
-            let cur_value = last_value - mean + gkr_data.compute_batched_query(&query) * *item;
+            let cur_value = last_value - mean + gkr_data.compute_batched_query(&main_frame.current()) * *item;
 
             result.push(cur_value);
             last_value = cur_value;

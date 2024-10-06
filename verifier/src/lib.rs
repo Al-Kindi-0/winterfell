@@ -27,8 +27,8 @@
 //! verification time should not exceed 50 ms.
 
 #![no_std]
-
 #[macro_use]
+
 extern crate alloc;
 
 use alloc::{string::ToString, vec::Vec};
@@ -191,7 +191,7 @@ where
             let gkr_proof = channel.read_gkr_proof()?;
             let logup_gkr_evaluator = air.get_logup_gkr_evaluator();
 
-            let FinalOpeningClaim { eval_point, openings } = verify_gkr::<A, _, _, _>(
+            let (eval_point, final_opening_claims, logup_randomness) = verify_gkr::<A, _, _, _>(
                 air.context().public_inputs(),
                 &gkr_proof,
                 &logup_gkr_evaluator,
@@ -200,9 +200,10 @@ where
             .map_err(|err| VerifierError::GkrProofVerificationFailed(err.to_string()))?;
 
             let gkr_data = logup_gkr_evaluator
-                .generate_univariate_iop_for_multi_linear_opening_data(
-                    openings,
+                .generate_univariate_iop_for_multi_linear_opening_data_2(
+                    final_opening_claims,
                     eval_point,
+                    &logup_randomness,
                     &mut public_coin,
                 );
 

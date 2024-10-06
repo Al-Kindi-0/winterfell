@@ -4,16 +4,14 @@ use air::{LogUpGkrEvaluator, LogUpGkrOracle, PeriodicTable};
 use crypto::{ElementHasher, RandomCoin};
 use math::FieldElement;
 use sumcheck::{
-    sum_check_prove_higher_degree, sumcheck_prove_plain_batched,
-    sumcheck_prove_plain_batched_serial, BeforeFinalLayerProof, CircuitOutput, EqFunction,
-    FinalLayerProof, GkrCircuitProof, MultiLinearPoly, SumCheckProof,
+    sum_check_prove_higher_degree, sumcheck_prove_plain_batched, sumcheck_prove_plain_batched_serial, BeforeFinalLayerProof, CircuitOutput, EqFunction, FinalLayerProof, GkrCircuitProof, GkrClaim, MultiLinearPoly, SumCheckProof
 };
 use tracing::instrument;
 #[cfg(feature = "concurrent")]
 use utils::rayon::prelude::*;
 use utils::{iter, iter_mut, uninit_vector};
 
-use super::{CircuitLayerPolys, EvaluatedCircuit, GkrClaim, GkrProverError};
+use super::{CircuitLayerPolys, EvaluatedCircuit, GkrProverError};
 use crate::{matrix::ColMatrix, Trace};
 
 // PROVER
@@ -58,7 +56,7 @@ use crate::{matrix::ColMatrix, Trace};
 /// As part of the final sum-check protocol, the openings {f_j(ρ)} are provided as part of a
 /// [`FinalOpeningClaim`]. This latter claim will be proven by the STARK prover later on using the
 /// auxiliary trace.
-#[instrument(skip_all)]
+//#[instrument(skip_all)]
 pub fn prove_gkr<E: FieldElement>(
     main_trace: &impl Trace<BaseField = E::BaseField>,
     evaluator: &impl LogUpGkrEvaluator<BaseField = E::BaseField>,
@@ -81,22 +79,7 @@ pub fn prove_gkr<E: FieldElement>(
     let (before_final_layer_proofs, gkr_claim, tensored_circuit_batching_randomness) =
         prove_intermediate_layers(circuits, public_coin)?;
 
-    // build the MLEs of the relevant main trace columns
-    let main_trace_mls =
-        build_mle_from_main_trace_segment(evaluator.get_oracles(), main_trace.main_segment())?;
-    // build the periodic table representing periodic columns as multi-linear extensions
-    let periodic_table = evaluator.build_periodic_values(main_trace.main_segment().num_rows());
 
-    // run the GKR prover for the input layer
-    let final_layer_proof = prove_input_layer(
-        evaluator,
-        logup_randomness,
-        main_trace_mls,
-        periodic_table,
-        gkr_claim,
-        &tensored_circuit_batching_randomness,
-        public_coin,
-    )?;
 
     let mut numerators_all_circuits = vec![];
     let mut denominators_all_circuits = vec![];
@@ -112,7 +95,8 @@ pub fn prove_gkr<E: FieldElement>(
             denominators: denominators_all_circuits,
         },
         before_final_layer_proofs,
-        final_layer_proof,
+        gkr_claim
+        //final_layer_proof,
     })
 }
 
@@ -200,7 +184,7 @@ fn build_mle_from_main_trace_segment<E: FieldElement>(
 }
 
 /// Proves all GKR layers except for input layer.
-#[instrument(skip_all)]
+// #[instrument(skip_all)]
 #[allow(clippy::type_complexity)]
 fn prove_intermediate_layers<
     E: FieldElement,
@@ -249,7 +233,7 @@ fn prove_intermediate_layers<
     // loop over all inner layers in order to iteratively reduce a layer in terms of its successor
     // layer. Note that we don't include the input layer, since its predecessor layer will be
     // reduced in terms of the input layer separately in `prove_final_circuit_layer`.
-    for inner_layer in circuit.layers().into_iter().rev().skip(1) {
+    for inner_layer in circuit.layers().into_iter().rev().skip(0) {
         // construct the Lagrange kernel evaluated at the previous GKR round randomness
         let mut eq_mle = EqFunction::ml_at(evaluation_point.clone().into());
 

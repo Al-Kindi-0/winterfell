@@ -253,7 +253,7 @@ pub trait Prover {
     /// execution `trace` is valid against this prover's AIR.
     /// TODO: make this function un-callable externally?
     #[doc(hidden)]
-    #[maybe_async]
+    //#[maybe_async]
     fn generate_proof<E>(&self, trace: Self::Trace) -> Result<Proof, ProverError>
     where
         E: FieldElement<BaseField = Self::BaseField>,
@@ -310,14 +310,16 @@ pub trait Prover {
                     prove_gkr(&trace, &air.get_logup_gkr_evaluator(), channel.public_coin())
                         .map_err(|_| ProverError::FailedToGenerateGkrProof)?;
 
-                let FinalOpeningClaim { eval_point, openings } =
-                    gkr_proof.get_final_opening_claim();
+                //let FinalOpeningClaim { eval_point, openings } =
+                    //gkr_proof.get_final_opening_claim();
 
                 let gkr_data = air
                     .get_logup_gkr_evaluator()
-                    .generate_univariate_iop_for_multi_linear_opening_data(
-                        openings,
-                        eval_point,
+                    .generate_univariate_iop_for_multi_linear_opening_data_2(
+                        //openings,
+                        //eval_point,
+                        gkr_proof.gkr_claim.evaluation_point.clone(),
+                        gkr_proof.gkr_claim.claimed_evaluations_per_circuit.clone(),
                         channel.public_coin(),
                     );
 

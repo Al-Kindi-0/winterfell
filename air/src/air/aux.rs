@@ -80,6 +80,7 @@ pub struct GkrData<E: FieldElement> {
     pub lagrange_kernel_eval_point: LagrangeKernelRandElements<E>,
     pub openings_combining_randomness: Vec<E>,
     pub openings: Vec<E>,
+    //pub openings: Vec<((usize, E), (usize, E))>,
     pub oracles: Vec<LogUpGkrOracle>,
 }
 
@@ -92,6 +93,7 @@ impl<E: FieldElement> GkrData<E> {
         lagrange_kernel_eval_point: LagrangeKernelRandElements<E>,
         openings_combining_randomness: Vec<E>,
         openings: Vec<E>,
+        //openings: Vec<((usize, E), (usize, E))>,
         oracles: Vec<LogUpGkrOracle>,
     ) -> Self {
         Self {
@@ -113,6 +115,7 @@ impl<E: FieldElement> GkrData<E> {
     }
 
     pub fn openings(&self) -> &[E] {
+    //pub fn openings(&self) -> &[((usize, E), (usize, E))] {
         &self.openings
     }
 

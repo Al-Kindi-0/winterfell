@@ -33,7 +33,7 @@ use logup_gkr::PhantomLogUpGkrEval;
 pub use logup_gkr::{
     LagrangeKernelBoundaryConstraint, LagrangeKernelConstraints, LagrangeKernelEvaluationFrame,
     LagrangeKernelRandElements, LagrangeKernelTransitionConstraints, LogUpGkrEvaluator,
-    LogUpGkrOracle, PeriodicTable,
+    LogUpGkrOracle, PeriodicTable, LogUpGkrFraction
 };
 
 mod coefficients;

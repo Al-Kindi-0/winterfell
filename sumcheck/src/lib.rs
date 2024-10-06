@@ -166,13 +166,14 @@ pub struct SumCheckRoundClaim<E: FieldElement> {
 pub struct GkrCircuitProof<E: FieldElement> {
     pub circuit_outputs: CircuitOutput<E>,
     pub before_final_layer_proofs: BeforeFinalLayerProof<E>,
-    pub final_layer_proof: FinalLayerProof<E>,
+    pub gkr_claim: GkrClaim<E>
+    //pub final_layer_proof: FinalLayerProof<E>,
 }
 
 impl<E: FieldElement> GkrCircuitProof<E> {
-    pub fn get_final_opening_claim(&self) -> FinalOpeningClaim<E> {
-        self.final_layer_proof.0.openings_claim.clone()
-    }
+    //pub fn get_final_opening_claim(&self) -> FinalOpeningClaim<E> {
+        //self.final_layer_proof.0.openings_claim.clone()
+    //}
 }
 
 impl<E> Serializable for GkrCircuitProof<E>
@@ -182,7 +183,8 @@ where
     fn write_into<W: ByteWriter>(&self, target: &mut W) {
         self.circuit_outputs.write_into(target);
         self.before_final_layer_proofs.write_into(target);
-        self.final_layer_proof.0.write_into(target);
+        self.gkr_claim.write_into(target);
+        //self.final_layer_proof.0.write_into(target);
     }
 }
 
@@ -194,7 +196,8 @@ where
         Ok(Self {
             circuit_outputs: CircuitOutput::read_from(source)?,
             before_final_layer_proofs: BeforeFinalLayerProof::read_from(source)?,
-            final_layer_proof: FinalLayerProof::read_from(source)?,
+            gkr_claim: GkrClaim::read_from(source)?
+            // final_layer_proof: FinalLayerProof::read_from(source)?,
         })
     }
 }
@@ -286,4 +289,35 @@ pub fn evaluate_composition_poly<E: FieldElement>(
             *eq_w * comb_func(*p0, *p1, *q0, *q1, eq_eval, r_sum_check)
         })
         .fold(E::ZERO, |acc, x| acc + x)
+}
+
+
+/// Represents a claim to be proven by a subsequent call to the sum-check protocol.
+#[derive(Debug, Clone)]
+pub struct GkrClaim<E: FieldElement> {
+    pub evaluation_point: Vec<E>,
+    pub claimed_evaluations_per_circuit: Vec<(E, E)>,
+}
+
+
+impl<E> Serializable for GkrClaim<E>
+where
+    E: FieldElement,
+{
+    fn write_into<W: ByteWriter>(&self, target: &mut W) {
+        self.evaluation_point.write_into(target);
+        self.claimed_evaluations_per_circuit.write_into(target);
+    }
+}
+
+impl<E> Deserializable for GkrClaim<E>
+where
+    E: FieldElement,
+{
+    fn read_from<R: ByteReader>(source: &mut R) -> Result<Self, DeserializationError> {
+        Ok(Self {
+            evaluation_point: Deserializable::read_from(source)?,
+            claimed_evaluations_per_circuit: Deserializable::read_from(source)?,
+        })
+    }
 }
