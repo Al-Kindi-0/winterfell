@@ -166,23 +166,20 @@ pub trait LogUpGkrEvaluator: Clone + Sync {
                 // this happens only for the m / (t - alpha) fraction
                 LogUpGkrFraction::Full(_num, _den) => {
                     let (p, q) = openings[idx];
-                    multiplicity = -p;
+                    multiplicity = p;
                     q + alpha
-                   // ((*num, -p), (*den, q + alpha))
                 },
              LogUpGkrFraction::Partial(_den) => {
                     let (p, q) = openings[idx];
                     assert_eq!(p, E::ONE);
-                    q + alpha
-                    //((8000, p), (*den, q + alpha))
+                    -q + alpha
                 },
             };
             final_claims.push(res)
         }
         final_claims.push(multiplicity);
-
-        let mut batching_randomness = Vec::with_capacity(openings.len() - 1);
-        for _ in 0..openings.len() - 1 {
+        let mut batching_randomness = Vec::with_capacity(final_claims.len() - 1);
+        for _ in 0..final_claims.len() - 1 {
             batching_randomness.push(public_coin.draw().expect("failed to generate randomness"))
         }
 

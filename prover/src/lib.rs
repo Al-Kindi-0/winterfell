@@ -49,6 +49,7 @@ pub use air::{
     TransitionConstraintDegree,
 };
 use air::{AuxRandElements, GkrData, LogUpGkrEvaluator};
+use alloc::vec::Vec;
 pub use crypto;
 use crypto::{ElementHasher, RandomCoin, VectorCommitment};
 use fri::FriProver;
@@ -58,7 +59,7 @@ use math::{
     fields::{CubeExtension, QuadExtension},
     ExtensibleField, FieldElement, StarkField, ToElements,
 };
-use sumcheck::FinalOpeningClaim;
+use sumcheck::GkrCircuitProof;
 use tracing::{event, info_span, instrument, Level};
 pub use utils::{
     iterators, ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable,
@@ -306,20 +307,16 @@ pub trait Prover {
             // build an object containing randomness and data related to the LogUp-GKR section of
             // the auxiliary trace segment.
             let (gkr_proof, gkr_rand_elements) = if air.context().logup_gkr_enabled() {
-                let gkr_proof =
+                let (gkr_proof, logup_randomness): (GkrCircuitProof<E>, Vec<E>) =
                     prove_gkr(&trace, &air.get_logup_gkr_evaluator(), channel.public_coin())
                         .map_err(|_| ProverError::FailedToGenerateGkrProof)?;
-
-                //let FinalOpeningClaim { eval_point, openings } =
-                    //gkr_proof.get_final_opening_claim();
 
                 let gkr_data = air
                     .get_logup_gkr_evaluator()
                     .generate_univariate_iop_for_multi_linear_opening_data_2(
-                        //openings,
-                        //eval_point,
-                        gkr_proof.gkr_claim.evaluation_point.clone(),
                         gkr_proof.gkr_claim.claimed_evaluations_per_circuit.clone(),
+                        gkr_proof.gkr_claim.evaluation_point.clone(),
+                        &logup_randomness,
                         channel.public_coin(),
                     );
 

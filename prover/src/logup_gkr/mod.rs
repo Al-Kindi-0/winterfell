@@ -1,4 +1,3 @@
-use core::iter::successors;
 
 use alloc::vec::Vec;
 
@@ -56,6 +55,7 @@ pub use utils::{
 ///
 /// This means that layer ν will be the output layer and will consist of four values
 /// (p_0[ν - 1], p_1[ν - 1], p_0[ν - 1], p_1[ν - 1]) ∈ 𝔽^ν.
+#[derive(Debug)]
 pub struct EvaluatedCircuit<E: FieldElement> {
     layer_polys: Vec<Vec<CircuitLayerPolys<E>>>,
 }
@@ -63,19 +63,26 @@ pub struct EvaluatedCircuit<E: FieldElement> {
 impl<E: FieldElement> EvaluatedCircuit<E> {
     /// Creates a new [`EvaluatedCircuit`] by evaluating the circuit where the input layer is
     /// defined from the main trace columns.
-    //#[instrument(skip_all, name = "evaluate_logup_gkr_circuit")]
+    #[instrument(skip_all, name = "evaluate_logup_gkr_circuit")]
     pub fn new(
         main_trace_columns: &impl Trace<BaseField = E::BaseField>,
         evaluator: &impl LogUpGkrEvaluator<BaseField = E::BaseField>,
         log_up_randomness: &[E],
     ) -> Result<Self, GkrProverError> {
+        let mut layer_polys = Vec::new();
 
-        let all_circuits_evaluations =
-            Self::generate_all_circuits_evaluations(main_trace_columns, evaluator, log_up_randomness);
+        let mut current_layer =
+            Self::generate_all_input_layers(main_trace_columns, evaluator, log_up_randomness);
 
-      
+        while current_layer[0].numerators.num_evaluations() > 1 {
+            let next_layer = Self::compute_next_layer_(&current_layer);
 
-        Ok(Self { layer_polys: all_circuits_evaluations })
+            layer_polys.push(current_layer);
+
+            current_layer = next_layer;
+        }
+
+        Ok(Self { layer_polys })
     }
 
     /// Returns all layers of the evaluated circuit, starting from the input layer.
@@ -109,63 +116,105 @@ impl<E: FieldElement> EvaluatedCircuit<E> {
 
     /// Generates the input layer of the circuit from the main trace columns and some randomness
     /// provided by the verifier.
-    fn generate_all_circuits_evaluations(
+    fn generate_all_input_layers(
         trace: &impl Trace<BaseField = E::BaseField>,
         evaluator: &impl LogUpGkrEvaluator<BaseField = E::BaseField>,
         log_up_randomness: &[E],
-    ) -> Vec<Vec<CircuitLayerPolys<E>>> {
-        
+    ) -> Vec<CircuitLayerPolys<E>> {
         let fractions = evaluator.get_fractions();
 
-        let mut all_circuits = vec![];
+        #[cfg(not(feature = "concurrent"))]
+        let all_circuits = {
+            let mut all_circuits = Vec::with_capacity(fractions.len());
 
-        for fraction in fractions {
-            let input_layer = match fraction {
-                air::LogUpGkrFraction::Full(num_idx, den_idx) => {
-                    let numerator = trace
-                        .main_segment()
-                        .get_column(*num_idx)
-                        .iter()
-                        .map(|x| E::from(*x))
-                        .collect();
-                    let denominator = trace
-                        .main_segment()
-                        .get_column(*den_idx)
-                        .iter()
-                        .map(|x| E::from(*x) - log_up_randomness[0])
-                        .collect();
-                    CircuitLayerPolys {
-                        numerators: MultiLinearPoly::from_evaluations(numerator),
-                        denominators: MultiLinearPoly::from_evaluations(denominator),
-                    }
-                },
-                air::LogUpGkrFraction::Partial(den_idx) => {
-                    let numerator = (0..trace.length()).map(|x| E::from(x as u32)).collect();
-                    let denominator = trace
-                        .main_segment()
-                        .get_column(*den_idx)
-                        .iter()
-                        .map(|x|log_up_randomness[0] - E::from(*x))
-                        .collect();
+            for fraction in fractions {
+                let input_layer = match fraction {
+                    air::LogUpGkrFraction::Full(num_idx, den_idx) => {
+                        let numerator: Vec<E> = trace
+                            .main_segment()
+                            .get_column(*num_idx)
+                            .iter()
+                            .map(|x| E::from(*x))
+                            .collect();
+                        let denominator: Vec<E> = trace
+                            .main_segment()
+                            .get_column(*den_idx)
+                            .iter()
+                            .map(|x| E::from(*x) - log_up_randomness[0])
+                            .collect();
+                        CircuitLayerPolys {
+                            numerators: MultiLinearPoly::from_evaluations(numerator),
+                            denominators: MultiLinearPoly::from_evaluations(denominator),
+                        }
+                    },
+                    air::LogUpGkrFraction::Partial(den_idx) => {
+                        let numerator = (0..trace.length()).map(|_x| E::ONE).collect();
+                        let denominator = trace
+                            .main_segment()
+                            .get_column(*den_idx)
+                            .iter()
+                            .map(|x| log_up_randomness[0] - E::from(*x))
+                            .collect();
 
-                    CircuitLayerPolys {
-                        numerators: MultiLinearPoly::from_evaluations(numerator),
-                        denominators: MultiLinearPoly::from_evaluations(denominator),
-                    }
-                },
-            };
+                        CircuitLayerPolys {
+                            numerators: MultiLinearPoly::from_evaluations(numerator),
+                            denominators: MultiLinearPoly::from_evaluations(denominator),
+                        }
+                    },
+                };
+                all_circuits.push(input_layer)
+            }
+            all_circuits
+        };
 
-            let layers: Vec<CircuitLayerPolys<E>> =
-                successors(Some(input_layer), |layer| layer.next_layer()).collect();
+        #[cfg(feature = "concurrent")]
+        let all_circuits = fractions
+            .par_iter()
+            .map(|fraction| {
+                let input_layer = match fraction {
+                    air::LogUpGkrFraction::Full(num_idx, den_idx) => {
+                        let numerator: Vec<E> = trace
+                            .main_segment()
+                            .get_column(*num_idx)
+                            .iter()
+                            .map(|x| E::from(*x))
+                            .collect();
+                        let denominator: Vec<E> = trace
+                            .main_segment()
+                            .get_column(*den_idx)
+                            .iter()
+                            .map(|x| E::from(*x) - log_up_randomness[0])
+                            .collect();
+                        CircuitLayerPolys {
+                            numerators: MultiLinearPoly::from_evaluations(numerator),
+                            denominators: MultiLinearPoly::from_evaluations(denominator),
+                        }
+                    },
+                    air::LogUpGkrFraction::Partial(den_idx) => {
+                        let numerator = (0..trace.length()).map(|_x| E::ONE).collect();
+                        let denominator = trace
+                            .main_segment()
+                            .get_column(*den_idx)
+                            .iter()
+                            .map(|x| log_up_randomness[0] - E::from(*x))
+                            .collect();
 
-            all_circuits.push(layers)
-        }
+                        CircuitLayerPolys {
+                            numerators: MultiLinearPoly::from_evaluations(numerator),
+                            denominators: MultiLinearPoly::from_evaluations(denominator),
+                        }
+                    },
+                };
+                input_layer
+            })
+            .collect();
 
         all_circuits
     }
 
     /// Generates the input layer of the circuit from the main trace columns and some randomness
     /// provided by the verifier.
+    #[allow(dead_code)]
     fn generate_input_layer(
         trace: &impl Trace<BaseField = E::BaseField>,
         evaluator: &impl LogUpGkrEvaluator<BaseField = E::BaseField>,
@@ -224,6 +273,7 @@ impl<E: FieldElement> EvaluatedCircuit<E> {
     }
 
     /// Computes the subsequent layer of the circuit from a given layer.
+    #[allow(dead_code)]
     fn compute_next_layer(prev_layers: &[Vec<CircuitWire<E>>]) -> Vec<Vec<CircuitWire<E>>> {
         let mut next_layers: Vec<Vec<CircuitWire<E>>> =
             vec![unsafe { uninit_vector(prev_layers[0].len() / 2) }; prev_layers.len()];
@@ -266,6 +316,7 @@ impl<E: FieldElement> EvaluatedCircuit<E> {
         next_layers
     }
 
+    #[allow(dead_code)]
     fn generate_second_layer(
         current_layer: Vec<CircuitWire<E>>,
         num_fractions: usize,
@@ -300,6 +351,24 @@ impl<E: FieldElement> EvaluatedCircuit<E> {
 
         result
     }
+
+    fn compute_next_layer_(current_layer: &[CircuitLayerPolys<E>]) -> Vec<CircuitLayerPolys<E>> {
+        #[cfg(not(feature = "concurrent"))]
+        let result = {
+            let mut result = Vec::with_capacity(current_layer.len());
+            for layer in current_layer {
+                let next_layer = layer.next_layer();
+                result.push(next_layer.unwrap())
+            }
+
+            result
+        };
+
+        #[cfg(feature = "concurrent")]
+        let result = { current_layer.par_iter().map(|layer| layer.next_layer().unwrap()).collect() };
+
+        result
+    }
 }
 
 /// Builds the auxiliary trace column for the univariate sum-check argument.
@@ -319,11 +388,10 @@ impl<E: FieldElement> EvaluatedCircuit<E> {
 pub fn build_s_column<E: FieldElement>(
     trace: &impl Trace<BaseField = E::BaseField>,
     gkr_data: &GkrData<E>,
-    evaluator: &impl LogUpGkrEvaluator<BaseField = E::BaseField>,
+    _evaluator: &impl LogUpGkrEvaluator<BaseField = E::BaseField>,
     lagrange_kernel_col: &[E],
 ) -> Vec<E> {
     let c = gkr_data.compute_batched_claim();
-    let num_oracles = evaluator.get_oracles().len();
 
     let main_segment = trace.main_segment();
     let num_cols = main_segment.num_cols();
@@ -336,14 +404,13 @@ pub fn build_s_column<E: FieldElement>(
         let mut last_value = E::ZERO;
         result.push(last_value);
 
-        let mut query = vec![E::BaseField::ZERO; num_oracles];
         let mut main_frame = EvaluationFrame::new(num_cols);
 
         for (i, item) in lagrange_kernel_col.iter().enumerate().take(num_rows - 1) {
             trace.read_main_frame(i, &mut main_frame);
 
-            evaluator.build_query(&main_frame, &mut query);
-            let cur_value = last_value - mean + gkr_data.compute_batched_query(&main_frame.current()) * *item;
+            let cur_value =
+                last_value - mean + gkr_data.compute_batched_query(&main_frame.current()) * *item;
 
             result.push(cur_value);
             last_value = cur_value;
@@ -358,14 +425,13 @@ pub fn build_s_column<E: FieldElement>(
         deltas[0] = E::ZERO;
         let batch_size = num_rows / rayon_num_threads().next_power_of_two();
         batch_iter_mut!(&mut deltas[1..], batch_size, |batch: &mut [E], batch_offset: usize| {
-            let mut query = vec![E::BaseField::ZERO; num_oracles];
             let mut main_frame = EvaluationFrame::<E::BaseField>::new(num_cols);
 
             for (i, v) in batch.iter_mut().enumerate() {
                 trace.read_main_frame(i + batch_offset, &mut main_frame);
 
-                evaluator.build_query(&main_frame, &mut query);
-                *v = gkr_data.compute_batched_query(&query) * lagrange_kernel_col[i + batch_offset]
+                *v = gkr_data.compute_batched_query(&main_frame.current())
+                    * lagrange_kernel_col[i + batch_offset]
                     - mean;
             }
         });

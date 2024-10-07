@@ -47,7 +47,6 @@ use math::{
     fields::{CubeExtension, QuadExtension},
     FieldElement, ToElements,
 };
-use sumcheck::FinalOpeningClaim;
 pub use utils::{
     ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable, SliceReader,
 };

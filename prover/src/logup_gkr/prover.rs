@@ -1,10 +1,12 @@
 use alloc::vec::Vec;
 
-use air::{LogUpGkrEvaluator, LogUpGkrOracle, PeriodicTable};
+use air::{LogUpGkrEvaluator, LogUpGkrOracle};
 use crypto::{ElementHasher, RandomCoin};
 use math::FieldElement;
 use sumcheck::{
-    sum_check_prove_higher_degree, sumcheck_prove_plain_batched, sumcheck_prove_plain_batched_serial, BeforeFinalLayerProof, CircuitOutput, EqFunction, FinalLayerProof, GkrCircuitProof, GkrClaim, MultiLinearPoly, SumCheckProof
+    sumcheck_prove_plain_batched,
+    sumcheck_prove_plain_batched_serial, BeforeFinalLayerProof, CircuitOutput, EqFunction,
+    GkrCircuitProof, GkrClaim, MultiLinearPoly, SumCheckProof,
 };
 use tracing::instrument;
 #[cfg(feature = "concurrent")]
@@ -56,12 +58,12 @@ use crate::{matrix::ColMatrix, Trace};
 /// As part of the final sum-check protocol, the openings {f_j(ρ)} are provided as part of a
 /// [`FinalOpeningClaim`]. This latter claim will be proven by the STARK prover later on using the
 /// auxiliary trace.
-//#[instrument(skip_all)]
+#[instrument(skip_all)]
 pub fn prove_gkr<E: FieldElement>(
     main_trace: &impl Trace<BaseField = E::BaseField>,
     evaluator: &impl LogUpGkrEvaluator<BaseField = E::BaseField>,
     public_coin: &mut impl RandomCoin<BaseField = E::BaseField>,
-) -> Result<GkrCircuitProof<E>, GkrProverError> {
+) -> Result<(GkrCircuitProof<E>, Vec<E>), GkrProverError> {
     let num_logup_random_values = evaluator.get_num_rand_values();
     let mut logup_randomness: Vec<E> = Vec::with_capacity(num_logup_random_values);
 
@@ -76,77 +78,28 @@ pub fn prove_gkr<E: FieldElement>(
     let output_layers = circuits.output_layers().clone();
 
     // run the GKR prover for all layers except the input layer
-    let (before_final_layer_proofs, gkr_claim, tensored_circuit_batching_randomness) =
+    let (before_final_layer_proofs, gkr_claim, _tensored_circuit_batching_randomness) =
         prove_intermediate_layers(circuits, public_coin)?;
 
-
-
-    let mut numerators_all_circuits = vec![];
-    let mut denominators_all_circuits = vec![];
+    let mut numerators_all_circuits = Vec::with_capacity(output_layers.len());
+    let mut denominators_all_circuits = Vec::with_capacity(output_layers.len());
     for output_layer in output_layers {
         let CircuitLayerPolys { numerators, denominators } = output_layer;
         numerators_all_circuits.push(numerators);
         denominators_all_circuits.push(denominators);
     }
 
-    Ok(GkrCircuitProof {
-        circuit_outputs: CircuitOutput {
-            numerators: numerators_all_circuits,
-            denominators: denominators_all_circuits,
+    Ok((
+        GkrCircuitProof {
+            circuit_outputs: CircuitOutput {
+                numerators: numerators_all_circuits,
+                denominators: denominators_all_circuits,
+            },
+            before_final_layer_proofs,
+            gkr_claim,
         },
-        before_final_layer_proofs,
-        gkr_claim
-        //final_layer_proof,
-    })
-}
-
-/// Proves the final GKR layer which corresponds to the input circuit layer.
-#[instrument(skip_all)]
-fn prove_input_layer<
-    E: FieldElement,
-    C: RandomCoin<Hasher = H, BaseField = E::BaseField>,
-    H: ElementHasher<BaseField = E::BaseField>,
->(
-    evaluator: &impl LogUpGkrEvaluator<BaseField = E::BaseField>,
-    log_up_randomness: Vec<E>,
-    multi_linear_ext_polys: Vec<MultiLinearPoly<E>>,
-    periodic_table: PeriodicTable<E>,
-    claim: GkrClaim<E>,
-    tensored_batching_randomness: &[E],
-    transcript: &mut C,
-) -> Result<FinalLayerProof<E>, GkrProverError> {
-    // parse the [GkrClaim] resulting from the previous GKR layer
-    let GkrClaim {
-        evaluation_point,
-        claimed_evaluations_per_circuit: claimed_evaluations,
-    } = claim;
-
-    let mut all_claims_concatenated = Vec::with_capacity(claimed_evaluations.len());
-    for claimed_evaluation in claimed_evaluations.iter() {
-        all_claims_concatenated.extend_from_slice(&[claimed_evaluation.0, claimed_evaluation.1]);
-    }
-    transcript.reseed(H::hash_elements(&all_claims_concatenated));
-
-    let r_batch = transcript.draw().map_err(|_| GkrProverError::FailedToGenerateChallenge)?;
-    let mut full_claim = E::ZERO;
-    for (circuit_idx, claimed_evaluation) in claimed_evaluations.iter().enumerate() {
-        let claim = claimed_evaluation.0 + claimed_evaluation.1 * r_batch;
-        full_claim += claim * tensored_batching_randomness[circuit_idx]
-    }
-
-    let proof = sum_check_prove_higher_degree(
-        evaluator,
-        evaluation_point,
-        full_claim,
-        r_batch,
-        log_up_randomness,
-        multi_linear_ext_polys,
-        periodic_table,
-        tensored_batching_randomness,
-        transcript,
-    )?;
-
-    Ok(FinalLayerProof::new(proof))
+        logup_randomness,
+    ))
 }
 
 /// Builds the multi-linear extension polynomials needed to run the final sum-check of GKR for
@@ -184,7 +137,7 @@ fn build_mle_from_main_trace_segment<E: FieldElement>(
 }
 
 /// Proves all GKR layers except for input layer.
-// #[instrument(skip_all)]
+#[instrument(skip_all)]
 #[allow(clippy::type_complexity)]
 fn prove_intermediate_layers<
     E: FieldElement,
@@ -233,7 +186,7 @@ fn prove_intermediate_layers<
     // loop over all inner layers in order to iteratively reduce a layer in terms of its successor
     // layer. Note that we don't include the input layer, since its predecessor layer will be
     // reduced in terms of the input layer separately in `prove_final_circuit_layer`.
-    for inner_layer in circuit.layers().into_iter().rev().skip(0) {
+    for inner_layer in circuit.layers().into_iter().skip(0).rev().skip(1) {
         // construct the Lagrange kernel evaluated at the previous GKR round randomness
         let mut eq_mle = EqFunction::ml_at(evaluation_point.clone().into());
 
@@ -311,7 +264,7 @@ fn sum_check_prove_num_rounds_degree_3<
         let claim = claim.0 + claim.1 * r_batch;
         batched_claims.push(claim)
     }
-    let proof = if inner_layers[0].numerators.num_evaluations() >= 16 {
+    let proof = if inner_layers[0].numerators.num_evaluations() >= 32 {
         sumcheck_prove_plain_batched(
             &batched_claims,
             evaluation_point,

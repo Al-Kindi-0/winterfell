@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 use winterfell::{
     math::{fields::f64::BaseElement, ExtensionOf, FieldElement, StarkField},
     Air, AirContext, Assertion, AuxRandElements, EvaluationFrame, LogUpGkrEvaluator,
-    LogUpGkrOracle, TraceInfo, TransitionConstraintDegree,
+    LogUpGkrFraction, LogUpGkrOracle, TraceInfo, TransitionConstraintDegree,
 };
 
 use super::ProofOptions;
@@ -91,6 +91,8 @@ impl Air for LogUpGkrAir {
 #[derive(Clone, Default)]
 pub struct PlainLogUpGkrEval<B: FieldElement + StarkField> {
     oracles: Vec<LogUpGkrOracle>,
+        fractions: Vec<LogUpGkrFraction>,
+
     _field: PhantomData<B>,
 }
 
@@ -101,7 +103,11 @@ impl<B: FieldElement + StarkField> PlainLogUpGkrEval<B> {
             .into_iter()
             .map(LogUpGkrOracle::CurrentRow)
             .collect();
-        Self { oracles, _field: PhantomData }
+        let mut fractions = vec![LogUpGkrFraction::Full(num_witness_columns + 1, 0)];
+        for i in 0..num_witness_columns {
+            fractions.push(LogUpGkrFraction::Partial(i + 1))
+        }
+        Self { oracles, _field: PhantomData, fractions }
     }
 }
 
@@ -125,6 +131,10 @@ impl LogUpGkrEvaluator for PlainLogUpGkrEval<BaseElement> {
 
     fn max_degree(&self) -> usize {
         3
+    }
+
+    fn get_fractions(&self) -> &[LogUpGkrFraction] {
+        &self.fractions
     }
 
     fn build_query<E>(&self, frame: &EvaluationFrame<E>, query: &mut [E])

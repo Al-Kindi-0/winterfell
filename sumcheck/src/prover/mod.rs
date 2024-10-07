@@ -17,7 +17,9 @@ pub use plain::{sumcheck_prove_plain_batched, sumcheck_prove_plain_batched_seria
 
 mod error;
 pub use error::SumCheckProverError;
-use utils::{uninit_vector, ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable};
+use utils::{
+    uninit_vector, ByteReader, ByteWriter, Deserializable, DeserializationError, Serializable,
+};
 
 use crate::MultiLinearPoly;
 
@@ -88,25 +90,34 @@ where
     pub fn from_mle(numerators: MultiLinearPoly<E>, denominators: MultiLinearPoly<E>) -> Self {
         Self { numerators, denominators }
     }
-    
+
     pub fn next_layer(&self) -> Option<CircuitLayerPolys<E>> {
+        if self.numerators.num_evaluations() > 1 {
+            let mut numerators = unsafe { uninit_vector(self.numerators.num_evaluations() / 2) };
+            let mut denominators =
+                unsafe { uninit_vector(self.denominators.num_evaluations() / 2) };
 
-        let mut numerators = unsafe { uninit_vector(self.numerators.num_evaluations() / 2) };
-        let mut denominators = unsafe { uninit_vector(self.denominators.num_evaluations() / 2) };
+            self.numerators
+                .evaluations()
+                .chunks(2)
+                .zip(self.denominators.evaluations().chunks(2))
+                .enumerate()
+                .for_each(|(idx, (num, den))| {
+                    let p0 = num[0];
+                    let p1 = num[1];
+                    let q0 = den[0];
+                    let q1 = den[1];
 
-        self.numerators.evaluations().chunks(2).zip(self.denominators.evaluations().chunks(2)).enumerate().for_each(|(idx, (num, den))| {
-            let p0 = num[0];
-            let p1 = num[1];
-            let q0 = den[0];
-            let q1 = den[1];
-
-            numerators[idx] = p0 * q1 + p1 * q0;
-            denominators[idx] = q0 * q1;
-        });
-        Some(CircuitLayerPolys{
-            numerators: MultiLinearPoly::from_evaluations(numerators),
-            denominators: MultiLinearPoly::from_evaluations(denominators)
-        })
+                    numerators[idx] = p0 * q1 + p1 * q0;
+                    denominators[idx] = q0 * q1;
+                });
+            Some(CircuitLayerPolys {
+                numerators: MultiLinearPoly::from_evaluations(numerators),
+                denominators: MultiLinearPoly::from_evaluations(denominators),
+            })
+        } else {
+            None
+        }
     }
 }
 

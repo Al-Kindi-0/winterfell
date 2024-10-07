@@ -4,8 +4,8 @@ use air::{Air, LogUpGkrEvaluator};
 use crypto::{ElementHasher, RandomCoin};
 use math::FieldElement;
 use sumcheck::{
-    verify_sum_check_input_layer, verify_sum_check_intermediate_layers, CircuitOutput, EqFunction,
-    FinalOpeningClaim, GkrCircuitProof, SumCheckVerifierError,
+    verify_sum_check_intermediate_layers, CircuitOutput, EqFunction, FinalOpeningClaim,
+    GkrCircuitProof, SumCheckVerifierError,
 };
 
 /// Verifies the validity of a GKR proof for a LogUp-GKR relation.
@@ -19,7 +19,7 @@ pub fn verify_gkr<
     proof: &GkrCircuitProof<E>,
     evaluator: &impl LogUpGkrEvaluator<BaseField = E::BaseField, PublicInputs = A::PublicInputs>,
     transcript: &mut C,
-) -> Result<(Vec<E>, Vec<(E, E), Vec<E>>), VerifierError> {
+) -> Result<(Vec<E>, Vec<(E, E)>, Vec<E>), VerifierError> {
     let num_logup_random_values = evaluator.get_num_rand_values();
     let mut logup_randomness: Vec<E> = Vec::with_capacity(num_logup_random_values);
 
@@ -30,8 +30,7 @@ pub fn verify_gkr<
     let GkrCircuitProof {
         circuit_outputs,
         before_final_layer_proofs,
-        gkr_claim
-        //final_layer_proof,
+        gkr_claim: _, //final_layer_proof,
     } = proof;
 
     let CircuitOutput { numerators, denominators } = circuit_outputs;
@@ -132,41 +131,7 @@ pub fn verify_gkr<
         evaluation_point = ext;
     }
 
-    //let fractions = evaluator.get_fractions();
-
-    //let mut final_claims = vec![];
-    //for (idx, fraction) in fractions.iter().enumerate() {
-        //let res = match fraction {
-            //air::LogUpGkrFraction::Full(num, den) => {
-                //let (p , q) = reduced_claims[idx];
-                //((*num, p), (*den, q))
-
-            //},
-            //air::LogUpGkrFraction::Partial(den) => {
-
-                //let (p , q) = reduced_claims[idx];
-                //assert_eq!(p, E::ONE);
-                //((8000, p), (*den, q))
-
-            //},
-        //};
-        //final_claims.push(res)
-    //}
-
     Ok((evaluation_point, reduced_claims, logup_randomness))
-
-    //// verify the proof of the final GKR layer and pass final opening claim for verification
-    //// to the STARK
-    //verify_sum_check_input_layer(
-        //evaluator,
-        //final_layer_proof,
-        //logup_randomness,
-        //&evaluation_point,
-        //reduced_claims,
-        //&tensored_circuit_batching_randomness,
-        //transcript,
-    //)
-    //.map_err(VerifierError::FailedToVerifySumCheck)
 }
 
 #[derive(Debug, thiserror::Error)]
