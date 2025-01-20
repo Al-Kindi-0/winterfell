@@ -84,9 +84,9 @@ impl Signature {
 }
 
 fn get_proof_options() -> ProofOptions {
-    ProofOptions::new(85, 8, 0, ::air::FieldExtension::Cubic, 8, 31, true)
+    ProofOptions::new(85, 8, 0, ::air::FieldExtension::Cubic, 8, 255, true)
     //ProofOptions::new(140, 8, 0, ::air::FieldExtension::Quadratic, 2, 255, true)
-    //ProofOptions::new(126, 8, 11, ::air::FieldExtension::Quadratic, 2, 255, true)
+    //ProofOptions::new(122, 8, 11, ::air::FieldExtension::Quadratic, 2, 255, true)
 }
 
 // SERIALIZATION / DESERIALIZATION
