@@ -9,8 +9,7 @@ use air::{
     Air, AuxRandElements, ConstraintCompositionCoefficients, EvaluationFrame,
     LagrangeKernelEvaluationFrame,
 };
-use libc_print::libc_println;
-use math::{polynom, FieldElement, StarkField};
+use math::{polynom, FieldElement};
 
 // CONSTRAINT EVALUATION
 // ================================================================================================
@@ -29,20 +28,7 @@ pub fn evaluate_constraints<A: Air, E: FieldElement<BaseField = A::BaseField>>(
 
     // initialize a buffer to hold transition constraint evaluations
     let t_constraints = air.get_transition_constraints(&composition_coefficients.transition);
-    air.get_periodic_column_polys().iter().skip(12).enumerate().for_each(|(poly_id, poly)| {
-        for (coef_index, coef) in poly.iter().enumerate() {
-            let coef_val = coef.as_int();
-        let multiline_string = format!(
-            r#"
-export.get_ark2_index_{poly_id}_poly_coef_{coef_index}
-    push.{coef} 
-end
-"#
-        );
-        libc_println!("{multiline_string}")
 
-        }
-    });
     // compute values of periodic columns at x
     let periodic_values = air
         .get_periodic_column_polys()
