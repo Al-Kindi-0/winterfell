@@ -47,7 +47,7 @@ pub struct VerifierChannel<
     fri_num_partitions: usize,
     // out-of-domain frame
     ood_trace_frame: Option<TraceOodFrame<E>>,
-    ood_constraint_evaluations: Option<Vec<E>>,
+    ood_constraint_evaluations: Option<TraceOodFrame<E>>,
     // query proof-of-work
     pow_nonce: u64,
 }
@@ -177,7 +177,7 @@ where
 
     /// Returns evaluations of composition polynomial columns at z^m, where z is the out-of-domain
     /// point, and m is the number of composition polynomial columns.
-    pub fn read_ood_constraint_evaluations(&mut self) -> Vec<E> {
+    pub fn read_ood_constraint_evaluations(&mut self) -> TraceOodFrame<E> {
         self.ood_constraint_evaluations.take().expect("already read")
     }
 

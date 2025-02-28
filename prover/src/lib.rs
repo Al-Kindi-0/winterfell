@@ -47,7 +47,7 @@ pub use air::{
     ConstraintCompositionCoefficients, ConstraintDivisor, DeepCompositionCoefficients,
     EvaluationFrame, FieldExtension, ProofOptions, TraceInfo, TransitionConstraintDegree,
 };
-use air::{AuxRandElements, PartitionOptions};
+use air::{proof::TraceOodFrame, AuxRandElements, PartitionOptions};
 pub use crypto;
 use crypto::{ElementHasher, RandomCoin, VectorCommitment};
 use fri::FriProver;
@@ -393,6 +393,8 @@ pub trait Prover {
             // point is drawn from, and we can potentially save on performance by only drawing this
             // point from an extension field, rather than increasing the size of the field overall.
             let z = channel.get_ood_point();
+            let log_trace_len = trace_polys.poly_size().ilog2();
+            let g = E::from(E::BaseField::get_root_of_unity(log_trace_len));
 
             // evaluate trace and constraint polynomials at the OOD point z, and send the results to
             // the verifier. the trace polynomials are actually evaluated over two points: z and z *
@@ -400,7 +402,9 @@ pub trait Prover {
             let ood_trace_states = trace_polys.get_ood_frame(z);
             channel.send_ood_trace_states(&ood_trace_states);
 
-            let ood_evaluations = composition_poly.evaluate_at(z);
+            let ood_evaluations_z = composition_poly.evaluate_at(z);
+            let ood_evaluations_gz = composition_poly.evaluate_at(g*z);
+            let ood_evaluations = TraceOodFrame::new(ood_evaluations_z, ood_evaluations_gz, composition_poly.num_columns());
             channel.send_ood_constraint_evaluations(&ood_evaluations);
 
             // draw random coefficients to use during DEEP polynomial composition, and use them to
@@ -414,7 +418,7 @@ pub trait Prover {
 
             // merge columns of constraint composition polynomial into the DEEP composition
             // polynomial
-            deep_composition_poly.add_composition_poly(composition_poly, ood_evaluations);
+            deep_composition_poly.add_composition_poly(composition_poly, ood_evaluations, g);
 
             event!(Level::DEBUG, "degree: {}", deep_composition_poly.degree());
 

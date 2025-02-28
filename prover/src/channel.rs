@@ -102,9 +102,9 @@ where
 
     /// Saves the evaluations of constraint composition polynomial columns at the out-of-domain
     /// point. This also reseeds the public coin wit the hash of the evaluations.
-    pub fn send_ood_constraint_evaluations(&mut self, evaluations: &[E]) {
-        self.ood_frame.set_constraint_evaluations(evaluations);
-        self.public_coin.reseed(H::hash_elements(evaluations));
+    pub fn send_ood_constraint_evaluations(&mut self, constraint_evaluations: &TraceOodFrame<E>) {
+        let constraint_evaluations_hash = self.ood_frame.set_constraint_evaluations::<E, H>(constraint_evaluations);
+        self.public_coin.reseed(constraint_evaluations_hash);
     }
 
     // PUBLIC COIN METHODS

@@ -81,10 +81,20 @@ impl OodFrame {
     /// Panics if:
     /// * Constraint evaluations have already been set.
     /// * `evaluations` is an empty vector.
-    pub fn set_constraint_evaluations<E: FieldElement>(&mut self, evaluations: &[E]) {
+    pub fn set_constraint_evaluations<E, H>(&mut self, evaluations: &TraceOodFrame<E>) -> H::Digest
+    where
+        E: FieldElement,
+        H: ElementHasher<BaseField = E::BaseField>,
+    {
         assert!(self.evaluations.is_empty(), "constraint evaluations have already been set");
-        assert!(!evaluations.is_empty(), "cannot set to empty constraint evaluations");
-        self.evaluations.write_many(evaluations);
+        let states = evaluations.to_trace_states();
+        // there are 2 frames: current and next
+        let frame_size: u8 = 2;
+        let frame_width: u8 = evaluations.num_columns() as u8;
+        self.evaluations.write_u8(frame_size);
+        self.evaluations.write_u8(frame_width);
+        self.evaluations.write_many(&states);
+        H::hash_elements(&states)
     }
 
     // PARSER
@@ -107,7 +117,7 @@ impl OodFrame {
         main_trace_width: usize,
         aux_trace_width: usize,
         num_evaluations: usize,
-    ) -> Result<(TraceOodFrame<E>, Vec<E>), DeserializationError> {
+    ) -> Result<(TraceOodFrame<E>, TraceOodFrame<E>), DeserializationError> {
         assert!(main_trace_width > 0, "trace width cannot be zero");
         assert!(num_evaluations > 0, "number of evaluations cannot be zero");
 
@@ -129,12 +139,18 @@ impl OodFrame {
 
         // parse the constraint evaluations
         let mut reader = SliceReader::new(&self.evaluations);
-        let evaluations = reader.read_many(num_evaluations)?;
+        let frame_size = reader.read_u8()? as usize;
+        let frame_width = reader.read_u8()? as usize;
+        let mut evaluations = reader.read_many(frame_size * frame_width)?;
+        let evaluations_next_row = evaluations.split_off(frame_width);
         if reader.has_more_bytes() {
             return Err(DeserializationError::UnconsumedBytes);
         }
 
-        Ok((TraceOodFrame::new(current_row, next_row, main_trace_width), evaluations))
+        Ok((
+            TraceOodFrame::new(current_row, next_row, main_trace_width),
+            TraceOodFrame::new(evaluations, evaluations_next_row, frame_width),
+        ))
     }
 }
 

@@ -5,7 +5,7 @@
 
 use alloc::vec::Vec;
 
-use air::{proof::Table, Air, DeepCompositionCoefficients, EvaluationFrame};
+use air::{proof::{Table, TraceOodFrame}, Air, DeepCompositionCoefficients, EvaluationFrame};
 use math::{batch_inversion, FieldElement};
 
 // DEEP COMPOSER
@@ -147,7 +147,7 @@ impl<E: FieldElement> DeepComposer<E> {
     pub fn compose_constraint_evaluations(
         &self,
         queried_evaluations: Table<E>,
-        ood_evaluations: Vec<E>,
+        ood_evaluations: TraceOodFrame<E>,
     ) -> Vec<E> {
         assert_eq!(queried_evaluations.num_rows(), self.x_coordinates.len());
 
@@ -156,18 +156,24 @@ impl<E: FieldElement> DeepComposer<E> {
         let mut result_den = Vec::<E>::with_capacity(n);
 
         let z = self.z[0];
+        let gz = self.z[1];
+        let ood_evaluations = [ood_evaluations.current_row(), ood_evaluations.next_row()];
 
         // combine composition polynomial columns separately for numerators and denominators;
         // this way we can use batch inversion in the end.
         for (query_values, &x) in queried_evaluations.rows().zip(&self.x_coordinates) {
-            let mut composition_num = E::ZERO;
+            let mut composition_num_1 = E::ZERO;
+            let mut composition_num_2 = E::ZERO;
             for (i, &evaluation) in query_values.iter().enumerate() {
                 // compute the numerator of H'_i(x) as (H_i(x) - H_i(z)), multiply it by a
                 // composition coefficient, and add the result to the numerator aggregator
-                composition_num += (evaluation - ood_evaluations[i]) * self.cc.constraints[i];
+                composition_num_1 += (evaluation - ood_evaluations[0][i]) * self.cc.constraints[i];
+                composition_num_2 += (evaluation - ood_evaluations[1][i]) * self.cc.constraints[i];
             }
-            result_num.push(composition_num);
-            result_den.push(x - z);
+            let t1_den = x - z;
+            let t2_den = x - gz;
+            result_num.push(composition_num_1 * t2_den + composition_num_2 * t1_den);
+            result_den.push(t1_den * t2_den);
         }
 
         result_den = batch_inversion(&result_den);

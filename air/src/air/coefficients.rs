@@ -176,24 +176,20 @@ impl<E: FieldElement> DeepCompositionCoefficients<E> {
         trace_width: usize,
         num_constraint_composition_columns: usize,
     ) -> Result<Self, RandomCoinError> {
-        let mut t_coefficients = Vec::new();
         let alpha: E = public_coin.draw()?;
-        t_coefficients.extend_from_slice(&get_power_series(alpha, trace_width));
+        let num_terms = trace_width + num_constraint_composition_columns;
+        let powers = get_power_series(alpha, num_terms);
+        let mut powers_rev: Vec<E> = powers.iter().copied().rev().collect();
 
-        let mut c_coefficients = Vec::new();
+        let powers_constraint = powers_rev.split_off(trace_width);
+        let powers_transition = powers_rev;
 
-        let alpha_pow_trace_width = alpha.exp((trace_width as u32).into());
-        c_coefficients.extend_from_slice(&get_power_series_with_offset(
-            alpha,
-            alpha_pow_trace_width,
-            num_constraint_composition_columns,
-        ));
-
-        assert_eq!(t_coefficients[trace_width - 1] * alpha, c_coefficients[0]);
+        assert_eq!(powers_transition.len(), trace_width);
+        assert_eq!(powers_constraint.len(), num_constraint_composition_columns);
 
         Ok(DeepCompositionCoefficients {
-            trace: t_coefficients,
-            constraints: c_coefficients,
+            trace: powers_transition,
+            constraints: powers_constraint,
         })
     }
 }
