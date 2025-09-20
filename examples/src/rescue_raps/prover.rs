@@ -5,10 +5,11 @@
 
 use air::ZkParameters;
 use core_utils::uninit_vector;
+use rand_chacha::ChaCha20Rng;
 use winterfell::{
     crypto::MerkleTree, matrix::ColMatrix, AuxRandElements, CompositionPoly, CompositionPolyTrace,
     ConstraintCompositionCoefficients, DefaultConstraintCommitment, DefaultConstraintEvaluator,
-    DefaultTraceLde, MockPrng, PartitionOptions, StarkDomain, Trace, TraceInfo, TracePolyTable,
+    DefaultTraceLde, PartitionOptions, StarkDomain, Trace, TraceInfo, TracePolyTable,
 };
 
 use super::{
@@ -110,7 +111,7 @@ where
         DefaultConstraintCommitment<E, H, Self::ZkPrng, Self::VC>;
     type ConstraintEvaluator<'a, E: FieldElement<BaseField = Self::BaseField>> =
         DefaultConstraintEvaluator<'a, Self::Air, E>;
-    type ZkPrng = MockPrng;
+    type ZkPrng = ChaCha20Rng;
 
     fn get_pub_inputs(&self, trace: &Self::Trace) -> PublicInputs {
         let last_step = trace.length() - 1;

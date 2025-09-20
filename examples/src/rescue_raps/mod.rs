@@ -126,9 +126,10 @@ where
                     tracing::Span::current().record("steps", trace.length());
                     trace
                 });
-
+        // Warning: this is not the right way to do this but is only used for illustration
+        let seed = [0; 32].into();
         // generate the proof
-        prover.prove(trace, None).unwrap()
+        prover.prove(trace, Some(seed)).unwrap()
     }
 
     fn verify(&self, proof: Proof) -> Result<(), VerifierError> {
