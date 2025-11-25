@@ -171,8 +171,7 @@ fn proven_security_protocol_for_given_proximity_parameter(
     // - For ALI/DEEP and query-phase we keep the structure as in prior work (e.g., 2024/1553 and
     //   2022/1216),
     // - For the FRI commit-phase in LDR we use the improved Johnson-regime bound from IACR ePrint
-    //   2025/2055 (Theorem 4.2 and Corollary 4.4) which tightens the dominant term and reduces the
-    //   scaling in n.
+    //   2025/2055 (Theorem 4.2) which tightens the dominant term and reduces the scaling in n.
     // Note: the range of m must ensure a positive slackness (η > 0 / valid Johnson gap τ > 0);
     // the caller (search over m) is responsible for selecting admissible values.
     let mut epsilons_bits_neg = vec![];
@@ -208,7 +207,7 @@ fn proven_security_protocol_for_given_proximity_parameter(
     };
     // LDR commit-phase improvement (per IACR ePrint 2025/2055 proximity-gap results):
     // - Replace n^2 with n in the pre-query term (O(n) “exceptions” instead of O(n^2)) in LDR
-    //   (e.g., Theorem 4.2 and Corollary 4.4 in IACR ePrint 2025/2055).
+    //   (e.g., Theorem 4.2 in IACR ePrint 2025/2055).
     // - Replace (m + 0.5)^7 with (m + 0.5)^5 (dominant term exponent tightened by the refined analysis).
     // Johnson-gap parameterization (Theorem 4.2 in IACR ePrint 2025/2055 and Theorem 5.1 in IACR ePrint 2020/654):
     //   Let J(δ) = 1 - sqrt(ρ) and τ = J(δ) - γ. Then
@@ -225,7 +224,24 @@ fn proven_security_protocol_for_given_proximity_parameter(
         );
     epsilons_bits_neg.push(epsilon_3_bits_neg);
 
-    // epsilon_i for i in [3..(k-1)], where k is number of rounds, are also negligible
+    // epsilon_i for i in [3..(k-1)] (intermediate FRI layers). Using Theorem 5 of IACR ePrint
+    // 2021/582 and Theorem 4.2 in IACR ePrint 2025/2055. Noting that t_i are the FRI
+    // folding factors, we include for layer j ≥ 0 a contribution of the form
+    //   ε_i ≈ ε_3 * (∏_{r=0}^{i-1} 1 / t_r)  and an additive term ~ (n / q).
+    let folding_factor = options.to_fri_options().folding_factor() as f64;
+    // With fixed folding factor across layers, intermediate errors decrease with layer index.
+    // Thus, we bound the entire intermediate range by the first intermediate round (k = 4):
+    //   from ε3:            term_from_e3 = ε3_bits_neg
+    //   from t_ℓ · C ·(n+1)/q: term_from_n_over_q = ext_bits - log2(folding_factor) - log2(lde_domain_size + 1)
+    //                                                 - log2(2m + 1) + 0.5 * log2(ρ)
+    let term_from_e3 = epsilon_3_bits_neg;
+    let term_from_n_over_q = extension_field_bits
+        - log2(folding_factor)
+        - log2(lde_domain_size + 1.0)
+        - log2(2.0 * m + 1.0)
+        + 0.5 * log2(rho);
+    let epsilon_i_min_bits_neg = term_from_e3.min(term_from_n_over_q);
+    epsilons_bits_neg.push(epsilon_i_min_bits_neg);
 
     // compute FRI query-phase soundness error
     let epsilon_k_bits_neg = options.grinding_factor() as f64 - log2(powf(alpha, num_fri_queries));
