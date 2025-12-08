@@ -128,6 +128,66 @@ impl ProvenSecurity {
         Self { unique_decoding, list_decoding }
     }
 
+    /// Computes the proven security level (in bits) using a per-round grinding schedule. In this
+    /// variant, schedule.fri_query overrides options.grinding_factor (no double counting). This is
+    /// a sketch API and is not used by default.
+    #[allow(clippy::too_many_arguments)]
+    pub fn compute_with_schedule(
+        options: &ProofOptions,
+        base_field_bits: u32,
+        trace_domain_size: usize,
+        collision_resistance: u32,
+        num_constraints: usize,
+        num_committed_polys: usize,
+        schedule: &GrindingSchedule,
+    ) -> Self {
+        let unique_decoding = cmp::min(
+            proven_security_protocol_unique_decoding_with_schedule(
+                options,
+                base_field_bits,
+                trace_domain_size,
+                num_constraints,
+                num_committed_polys,
+                schedule,
+            ),
+            collision_resistance as u64,
+        ) as u32;
+
+        // determine the interval to which the optimal `m` belongs
+        let m_min: usize = 3;
+        let m_max = compute_upper_m(trace_domain_size);
+
+        // search for optimal `m`
+        let m_optimal = (m_min as u32..m_max as u32)
+            .max_by_key(|&a| {
+                proven_security_protocol_for_given_proximity_parameter_with_schedule(
+                    options,
+                    base_field_bits,
+                    trace_domain_size,
+                    a as usize,
+                    num_constraints,
+                    num_committed_polys,
+                    schedule,
+                )
+            })
+            .expect("m_max > m_min for valid trace sizes");
+
+        let list_decoding = cmp::min(
+            proven_security_protocol_for_given_proximity_parameter_with_schedule(
+                options,
+                base_field_bits,
+                trace_domain_size,
+                m_optimal as usize,
+                num_constraints,
+                num_committed_polys,
+                schedule,
+            ),
+            collision_resistance as u64,
+        ) as u32;
+
+        Self { unique_decoding, list_decoding }
+    }
+
     /// Returns the proven security level (in bits) in the list decoding regime.
     pub fn ldr_bits(&self) -> u32 {
         self.list_decoding
@@ -143,6 +203,274 @@ impl ProvenSecurity {
     pub fn is_at_least(&self, bits: u32) -> bool {
         self.list_decoding >= bits || self.unique_decoding >= bits
     }
+}
+
+// GRINDING SCHEDULE (sketch-only API)
+// ================================================================================================
+// Represents per-round grinding bits to boost round-by-round soundness, as per the grinding lemma
+// in the ethSTARK paper (IACR ePrint 2021/582). Each value adds that many bits to the
+// corresponding round's epsilon in the round-by-round composition.
+//
+// Rounds (Johnson-regime, following our estimator's structure):
+//  - ali: randomness used to batch constraints in ALI
+//  - deep: randomness to choose out-of-domain (OOD) challenges
+//  - fri_batching: randomness to batch multiple words for the DEEP composition to be checked by FRI
+//  - fri_first_intermediate: first FRI intermediate round (bounds intermediates when folding factor
+//    is constant across layers)
+//  - fri_query: randomness for the FRI query seed; in schedule variants this overrides
+//    options.grinding_factor.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct GrindingSchedule {
+    pub ali: u32,
+    pub deep: u32,
+    pub fri_batching: u32,
+    pub fri_first_intermediate: u32,
+    pub fri_query: u32,
+}
+
+/// Computes a grinding schedule to reach a target security level in the list-decoding regime.
+///
+/// For each candidate proximity parameter m, this function computes the baseline security bits
+/// for each round without grinding. It then calculates the grinding deltas needed to lift all
+/// rounds to the target security level.
+///
+/// The optimal m is chosen to minimize total expected prover work, measured as the log-sum-exp
+/// of the grinding deltas: Σ 2^{delta_i} (in base 2). Ties are broken by L1 norm (Σ delta_i),
+/// then by preferring smaller m.
+///
+/// # Returns
+///
+/// Returns a tuple containing:
+/// - The absolute grinding schedule (suitable for `compute_with_schedule`)
+/// - The achieved security bits (capped by field/hash limits)
+/// - The chosen proximity parameter m
+///
+/// # Note
+///
+/// In schedule-aware computation paths, `schedule.fri_query` overrides `options.grinding_factor`
+/// to avoid double-counting grinding contributions.
+pub fn plan_grinding_schedule_ldr(
+    options: &ProofOptions,
+    base_field_bits: u32,
+    trace_domain_size: usize,
+    collision_resistance: u32,
+    num_constraints: usize,
+    num_committed_polys: usize,
+    target_bits: u32,
+) -> (GrindingSchedule, u32, u32) {
+    // Cap target by field/hash limits
+    let field_cap = base_field_bits * options.field_extension().degree();
+    let cap = field_cap.min(collision_resistance);
+    let t = target_bits.min(cap);
+
+    // Helper: compute per-round bits (no schedule, query grinding = 0) for a given m
+    fn round_bits_for_m(
+        options: &ProofOptions,
+        base_field_bits: u32,
+        trace_domain_size: usize,
+        m: usize,
+        num_constraints: usize,
+        num_committed_polys: usize,
+    ) -> (f64, f64, f64, f64, f64) {
+        let extension_field_bits = (base_field_bits * options.field_extension().degree()) as f64;
+        let num_fri_queries = options.num_queries() as f64;
+        let m = m as f64;
+        let rho = 1.0 / options.blowup_factor() as f64;
+        let alpha = (1.0 + 0.5 / m) * sqrt(rho);
+        let max_deg = options.blowup_factor() as f64 + 1.0;
+        let lde_domain_size = (trace_domain_size * options.blowup_factor()) as f64;
+        let trace_domain_size = trace_domain_size as f64;
+        let num_openings = 2.0;
+
+        // ALI
+        let l = m / (rho - (2.0 * m / lde_domain_size));
+        let batching_constraints = match options.constraint_batching_method() {
+            BatchingMethod::Linear => 1.0,
+            BatchingMethod::Algebraic | BatchingMethod::Horner => num_constraints as f64 - 1.0,
+        };
+        let b1 = -log2(l) - log2(batching_constraints) + extension_field_bits;
+
+        // DEEP
+        let b2 = -log2(
+            l * (max_deg * (trace_domain_size + num_openings - 1.0) + (trace_domain_size - 1.0)),
+        ) + extension_field_bits;
+
+        // FRI batching
+        let batching_deep = match options.deep_poly_batching_method() {
+            BatchingMethod::Linear => 1.0,
+            BatchingMethod::Algebraic | BatchingMethod::Horner => num_committed_polys as f64 - 1.0,
+        };
+        let b3 = extension_field_bits
+            - log2((2.0 * powf(m + 0.5, 5.0) / (3.0 * powf(rho, 1.5))) * lde_domain_size * batching_deep);
+
+        // First intermediate (ε4)
+        let folding_factor = options.to_fri_options().folding_factor() as f64;
+        let b4 = b3.min(
+            extension_field_bits - log2(folding_factor) - log2(lde_domain_size + 1.0) - log2(2.0 * m + 1.0)
+                + 0.5 * log2(rho),
+        );
+
+        // Query (no schedule, override)
+        let bq = -log2(powf(alpha, num_fri_queries));
+        (b1, b2, b3, b4, bq)
+    }
+
+    // Search for optimal m by minimizing Σ 2^{delta_i}
+    let m_min: usize = 3;
+    let m_max = compute_upper_m(trace_domain_size).max(4.0) as usize;
+    let mut best_cost_log2 = f64::INFINITY;
+    let mut best_l1 = u64::MAX;
+    let mut best_m = m_min as u32;
+    let mut best_schedule = GrindingSchedule::default();
+
+    for m in m_min..m_max {
+        let (b1, b2, b3, b4, bq) = round_bits_for_m(
+            options,
+            base_field_bits,
+            trace_domain_size,
+            m,
+            num_constraints,
+            num_committed_polys,
+        );
+        let d1 = (t as i64 - b1 as i64).max(0) as u32;
+        let d2 = (t as i64 - b2 as i64).max(0) as u32;
+        let d3 = (t as i64 - b3 as i64).max(0) as u32;
+        let d4 = (t as i64 - b4 as i64).max(0) as u32;
+        let dq = (t as i64 - bq as i64).max(0) as u32;
+        let deltas = [d1, d2, d3, d4, dq];
+
+        // log-sum-exp base-2 of 2^{d_i}
+        let maxd = deltas.iter().copied().max().unwrap_or(0) as f64;
+        let log2_cost = if maxd == 0.0 {
+            0.0
+        } else {
+            let sum = deltas
+                .iter()
+                .map(|&di| powf(2.0, di as f64 - maxd))
+                .fold(0.0, |a, b| a + b);
+            maxd + log2(sum)
+        };
+        let l1 = deltas.iter().map(|&di| di as u64).sum::<u64>();
+        let better = (log2_cost < best_cost_log2)
+            || ((log2_cost - best_cost_log2).abs() < 1e-9 && l1 < best_l1)
+            || ((log2_cost - best_cost_log2).abs() < 1e-9 && l1 == best_l1 && best_m > m as u32);
+
+        if better {
+            best_cost_log2 = log2_cost;
+            best_l1 = l1;
+            best_m = m as u32;
+            best_schedule = GrindingSchedule {
+                ali: d1,
+                deep: d2,
+                fri_batching: d3,
+                fri_first_intermediate: d4,
+                fri_query: dq,
+            };
+        }
+    }
+
+    let achieved = t; // by construction, schedule lifts all rounds to target t
+    (best_schedule, achieved, best_m)
+}
+
+/// Computes a grinding schedule to reach a target security level in the unique-decoding regime.
+///
+/// This function computes the baseline security bits for each round without grinding, then
+/// calculates the grinding deltas needed to lift all rounds to the target security level.
+///
+/// # Returns
+///
+/// Returns a tuple containing:
+/// - The absolute grinding schedule (suitable for `compute_with_schedule`)
+/// - The achieved security bits (capped by field/hash limits)
+///
+/// # Note
+///
+/// In schedule-aware computation paths, `schedule.fri_query` overrides `options.grinding_factor`
+/// to avoid double-counting grinding contributions.
+#[allow(dead_code)]
+pub fn plan_grinding_schedule_udr(
+    options: &ProofOptions,
+    base_field_bits: u32,
+    trace_domain_size: usize,
+    collision_resistance: u32,
+    num_constraints: usize,
+    num_committed_polys: usize,
+    target_bits: u32,
+) -> (GrindingSchedule, u32) {
+    // Cap target by field/hash limits
+    let field_cap = base_field_bits * options.field_extension().degree();
+    let cap = field_cap.min(collision_resistance);
+    let t = target_bits.min(cap);
+
+    // Helper: compute per-round bits (no schedule, query grinding = 0)
+    fn round_bits(
+        options: &ProofOptions,
+        base_field_bits: u32,
+        trace_domain_size: usize,
+        num_constraints: usize,
+        num_committed_polys: usize,
+    ) -> (f64, f64, f64, f64, f64) {
+        let extension_field_bits = (base_field_bits * options.field_extension().degree()) as f64;
+        let num_fri_queries = options.num_queries() as f64;
+        let lde_domain_size = (trace_domain_size * options.blowup_factor()) as f64;
+        let trace_domain_size = trace_domain_size as f64;
+        let num_openings = 2.0;
+        let rho_plus = (trace_domain_size + num_openings) / lde_domain_size;
+        let alpha = (1.0 + rho_plus) * 0.5;
+        let max_deg = options.blowup_factor() as f64 + 1.0;
+
+        // ALI
+        let batching_constraints = match options.constraint_batching_method() {
+            BatchingMethod::Linear => 1.0,
+            BatchingMethod::Algebraic | BatchingMethod::Horner => num_constraints as f64 - 1.0,
+        };
+        let b1 = -log2(batching_constraints) + extension_field_bits;
+
+        // DEEP
+        let b2 = -log2(max_deg * (trace_domain_size + num_openings - 1.0) + (trace_domain_size - 1.0))
+            + extension_field_bits;
+
+        // FRI batching (UDR commit-like)
+        let batching_deep = match options.deep_poly_batching_method() {
+            BatchingMethod::Linear => 1.0,
+            BatchingMethod::Algebraic | BatchingMethod::Horner => num_committed_polys as f64 - 1.0,
+        };
+        let b3 = extension_field_bits - log2(lde_domain_size * batching_deep);
+
+        // Intermediate layer bound (UDR analogue)
+        let folding_factor = options.to_fri_options().folding_factor() as f64;
+        let b4 = extension_field_bits - log2((folding_factor - 1.0) * (lde_domain_size + 1.0));
+
+        // Query (no schedule)
+        let bq = -log2(powf(alpha, num_fri_queries));
+        (b1, b2, b3, b4, bq)
+    }
+
+    let (b1, b2, b3, b4, bq) = round_bits(
+        options,
+        base_field_bits,
+        trace_domain_size,
+        num_constraints,
+        num_committed_polys,
+    );
+
+    let d1 = (t as i64 - b1 as i64).max(0) as u32;
+    let d2 = (t as i64 - b2 as i64).max(0) as u32;
+    let d3 = (t as i64 - b3 as i64).max(0) as u32;
+    let d4 = (t as i64 - b4 as i64).max(0) as u32;
+    let dq = (t as i64 - bq as i64).max(0) as u32;
+
+    let schedule = GrindingSchedule {
+        ali: d1,
+        deep: d2,
+        fri_batching: d3,
+        fri_first_intermediate: d4,
+        fri_query: dq,
+    };
+    let achieved = t;
+
+    (schedule, achieved)
 }
 
 /// Computes proven security level for the specified proof parameters for a fixed value of the
@@ -251,6 +579,84 @@ fn proven_security_protocol_for_given_proximity_parameter(
     epsilons_bits_neg.into_iter().fold(f64::INFINITY, |a, b| a.min(b)) as u64
 }
 
+/// LDR kernel with an explicit per-round grinding schedule. In this variant, fri_query grinding
+/// overrides options.grinding_factor; other rounds receive additive bits as per the schedule.
+#[allow(clippy::too_many_arguments)]
+fn proven_security_protocol_for_given_proximity_parameter_with_schedule(
+    options: &ProofOptions,
+    base_field_bits: u32,
+    trace_domain_size: usize,
+    m: usize,
+    num_constraints: usize,
+    num_committed_polys: usize,
+    schedule: &GrindingSchedule,
+) -> u64 {
+    let extension_field_bits = (base_field_bits * options.field_extension().degree()) as f64;
+    let num_fri_queries = options.num_queries() as f64;
+    let m = m as f64;
+    let rho = 1.0 / options.blowup_factor() as f64;
+    let alpha = (1.0 + 0.5 / m) * sqrt(rho);
+    let max_deg = options.blowup_factor() as f64 + 1.0;
+    let lde_domain_size = (trace_domain_size * options.blowup_factor()) as f64;
+    let trace_domain_size = trace_domain_size as f64;
+    let num_openings = 2.0;
+
+    let mut epsilons_bits_neg = vec![];
+
+    // ALI
+    let l = m / (rho - (2.0 * m / lde_domain_size));
+    let batching_factor = match options.constraint_batching_method() {
+        BatchingMethod::Linear => 1.0,
+        BatchingMethod::Algebraic | BatchingMethod::Horner => num_constraints as f64 - 1.0,
+    };
+    let mut epsilon_1_bits_neg = -log2(l) - log2(batching_factor) + extension_field_bits;
+    epsilon_1_bits_neg += schedule.ali as f64;
+    epsilons_bits_neg.push(epsilon_1_bits_neg);
+
+    // DEEP
+    let mut epsilon_2_bits_neg = -log2(
+     l * (max_deg * (trace_domain_size + num_openings - 1.0) + (trace_domain_size - 1.0)),
+    ) + extension_field_bits;
+    epsilon_2_bits_neg += schedule.deep as f64;
+    epsilons_bits_neg.push(epsilon_2_bits_neg);
+
+    // FRI batching (pre-query)
+    let batching_factor = match options.deep_poly_batching_method() {
+        BatchingMethod::Linear => 1.0,
+        BatchingMethod::Algebraic | BatchingMethod::Horner => num_committed_polys as f64 - 1.0,
+    };
+    let mut epsilon_3_bits_neg = extension_field_bits
+        - log2(
+            (2.0 * powf(m + 0.5, 5.0) / (3.0 * powf(rho, 1.5))) * lde_domain_size * batching_factor,
+        );
+    epsilon_3_bits_neg += schedule.fri_batching as f64;
+    epsilons_bits_neg.push(epsilon_3_bits_neg);
+
+    // First intermediate (bounds entire intermediate range for fixed folding factor)
+    let folding_factor = options.to_fri_options().folding_factor() as f64;
+    let mut epsilon_4_bits_neg = extension_field_bits
+        .min(
+            // from ε3 (no attenuation at first intermediate)
+            epsilon_3_bits_neg,
+        )
+        .min(
+            // additive path with constant C = (2m+1)/sqrt(ρ)
+            extension_field_bits
+                - log2(folding_factor)
+                - log2(lde_domain_size + 1.0)
+                - log2(2.0 * m + 1.0)
+                + 0.5 * log2(rho),
+        );
+    epsilon_4_bits_neg += schedule.fri_first_intermediate as f64;
+    epsilons_bits_neg.push(epsilon_4_bits_neg);
+
+    // FRI query (override options.grinding_factor)
+    let epsilon_k_bits_neg = schedule.fri_query as f64 - log2(powf(alpha, num_fri_queries));
+    epsilons_bits_neg.push(epsilon_k_bits_neg);
+
+    epsilons_bits_neg.into_iter().fold(f64::INFINITY, |a, b| a.min(b)) as u64
+}
+
 /// Computes proven security level for the specified proof parameters in the unique-decoding regime.
 fn proven_security_protocol_unique_decoding(
     options: &ProofOptions,
@@ -313,6 +719,67 @@ fn proven_security_protocol_unique_decoding(
     epsilons_bits_neg.push(epsilon_k_bits_neg);
 
     // return the round-by-round (RbR) soundness error
+    epsilons_bits_neg.into_iter().fold(f64::INFINITY, |a, b| a.min(b)) as u64
+}
+
+#[allow(clippy::too_many_arguments)]
+fn proven_security_protocol_unique_decoding_with_schedule(
+    options: &ProofOptions,
+    base_field_bits: u32,
+    trace_domain_size: usize,
+    num_constraints: usize,
+    num_committed_polys: usize,
+    schedule: &GrindingSchedule,
+) -> u64 {
+    let extension_field_bits = (base_field_bits * options.field_extension().degree()) as f64;
+    let num_fri_queries = options.num_queries() as f64;
+    let lde_domain_size = (trace_domain_size * options.blowup_factor()) as f64;
+    let trace_domain_size = trace_domain_size as f64;
+    let num_openings = 2.0;
+    let rho_plus = (trace_domain_size + num_openings) / lde_domain_size;
+    let alpha = (1.0 + rho_plus) * 0.5;
+    let max_deg = options.blowup_factor() as f64 + 1.0;
+
+    let mut epsilons_bits_neg = vec![];
+
+    // ALI
+    let batching_factor = match options.constraint_batching_method() {
+        BatchingMethod::Linear => 1.0,
+        BatchingMethod::Algebraic | BatchingMethod::Horner => num_constraints as f64 - 1.0,
+    };
+    let mut epsilon_1_bits_neg = -log2(batching_factor) + extension_field_bits;
+    epsilon_1_bits_neg += schedule.ali as f64;
+    epsilons_bits_neg.push(epsilon_1_bits_neg);
+
+    // DEEP
+    let mut epsilon_2_bits_neg =
+        -log2(max_deg * (trace_domain_size + num_openings - 1.0) + (trace_domain_size - 1.0))
+            + extension_field_bits;
+    epsilon_2_bits_neg += schedule.deep as f64;
+    epsilons_bits_neg.push(epsilon_2_bits_neg);
+
+    // FRI batching (commit-like term in UDR)
+    let batching_factor = match options.deep_poly_batching_method() {
+        BatchingMethod::Linear => 1.0,
+        BatchingMethod::Algebraic | BatchingMethod::Horner => num_committed_polys as f64 - 1.0,
+    };
+    let mut epsilon_3_bits_neg = extension_field_bits - log2(lde_domain_size * batching_factor);
+    epsilon_3_bits_neg += schedule.fri_batching as f64;
+    epsilons_bits_neg.push(epsilon_3_bits_neg);
+
+    // Intermediate layers (UDR analogue): include the per-layer minimal bound (as before)
+    let folding_factor = options.to_fri_options().folding_factor() as f64;
+    let _num_fri_layers = options.to_fri_options().num_fri_layers(lde_domain_size as usize);
+    let epsilon_i_min_bits_neg = extension_field_bits
+        - log2((folding_factor - 1.0) * (lde_domain_size + 1.0));
+    let mut epsilon_4_bits_neg = epsilon_i_min_bits_neg;
+    epsilon_4_bits_neg += schedule.fri_first_intermediate as f64;
+    epsilons_bits_neg.push(epsilon_4_bits_neg);
+
+    // Query phase (override options.grinding_factor)
+    let epsilon_k_bits_neg = schedule.fri_query as f64 - log2(powf(alpha, num_fri_queries));
+    epsilons_bits_neg.push(epsilon_k_bits_neg);
+
     epsilons_bits_neg.into_iter().fold(f64::INFINITY, |a, b| a.min(b)) as u64
 }
 
@@ -382,6 +849,7 @@ pub fn ceil(value: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    use libc_print::libc_println;
     use math::{fields::f64::BaseElement, StarkField};
 
     use super::ProofOptions;
@@ -768,6 +1236,60 @@ mod tests {
         );
 
         assert_eq!(list_decoding, 128);
+    }
+
+    #[test]
+    fn grinding_schedule_quadratic_reaches_target() {
+        // Show that the grinding schedule planner correctly reaches the target security level
+        // in LDR for the quadratic extension case.
+        let field_extension = FieldExtension::Quadratic;
+        let base_field_bits = BaseElement::MODULUS_BITS;
+        let fri_folding_factor = 8;
+        let fri_remainder_max_degree = 127;
+        let blowup_factor = 8;
+        let num_queries = 65;
+        let collision_resistance = 128;
+        let trace_length = 2_usize.pow(20);
+        let num_committed_polys = 200;
+        let num_constraints = 100;
+
+        let options = ProofOptions::new(
+            num_queries,
+            blowup_factor,
+            0, // baseline grinding factor is ignored by schedule variant
+            field_extension,
+            fri_folding_factor as usize,
+            fri_remainder_max_degree as usize,
+            BatchingMethod::Linear,
+            BatchingMethod::Linear,
+        );
+
+        // Plan a schedule to reach 110 bits in LDR and verify it achieves the target.
+        let target_bits = 110;
+        let (schedule, achieved, _m) = super::plan_grinding_schedule_ldr(
+            &options,
+            base_field_bits,
+            trace_length,
+            collision_resistance,
+            num_constraints,
+            num_committed_polys,
+            target_bits,
+        );
+libc_println!("schedule {:?}", schedule);
+        let ProvenSecurity { unique_decoding: _, list_decoding } =
+            ProvenSecurity::compute_with_schedule(
+                &options,
+                base_field_bits,
+                trace_length,
+                collision_resistance,
+                num_constraints,
+                num_committed_polys,
+                &schedule,
+            );
+
+        // Verify that the planner achieved the target and the computed security matches
+        assert_eq!(achieved, target_bits);
+        assert_eq!(list_decoding, target_bits);
     }
 
     #[test]
