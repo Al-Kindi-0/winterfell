@@ -46,3 +46,11 @@ harness = false
 [[bench]]
 name = "rescue"
 harness = false
+
+[[bench]]
+name = "mock72"
+harness = false
+
+[[bench]]
+name = "mock72_opening"
+harness = false

@@ -26,7 +26,9 @@ pub use hash::{Digest, ElementHasher, Hasher};
 pub mod hashers {
     //! Contains implementations of currently supported hash functions.
 
-    pub use super::hash::{Blake3_192, Blake3_256, Rp62_248, Rp64_256, RpJive64_256, Sha3_256};
+    pub use super::hash::{
+        Blake3_192, Blake3_256, Poseidon2, Rp62_248, Rp64_256, RpJive64_256, Sha3_256,
+    };
 }
 
 mod merkle;

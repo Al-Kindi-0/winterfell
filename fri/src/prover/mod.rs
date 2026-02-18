@@ -8,6 +8,7 @@ use core::marker::PhantomData;
 
 use crypto::{ElementHasher, Hasher, VectorCommitment};
 use math::{fft, FieldElement};
+use tracing::info_span;
 #[cfg(feature = "concurrent")]
 use utils::iterators::*;
 use utils::{
@@ -182,19 +183,32 @@ where
             "a prior proof generation request has not been completed yet"
         );
 
+        let commit_phase_span = info_span!(
+            "fri_commit_phase",
+            num_layers = self.options.num_fri_layers(evaluations.len())
+        )
+        .entered();
+
         // reduce the degree by folding_factor at each iteration until the remaining polynomial
         // has small enough degree
-        for _ in 0..self.options.num_fri_layers(evaluations.len()) {
-            match self.folding_factor() {
+        let num_layers = self.options.num_fri_layers(evaluations.len());
+        for layer_idx in 0..num_layers {
+            let domain_size = evaluations.len();
+            let folding_factor = self.folding_factor();
+            let span = info_span!("fri_layer", layer_idx, domain_size, folding_factor);
+            span.in_scope(|| match folding_factor {
                 2 => self.build_layer::<2>(channel, &mut evaluations),
                 4 => self.build_layer::<4>(channel, &mut evaluations),
                 8 => self.build_layer::<8>(channel, &mut evaluations),
                 16 => self.build_layer::<16>(channel, &mut evaluations),
-                _ => unimplemented!("folding factor {} is not supported", self.folding_factor()),
-            }
+                _ => unimplemented!("folding factor {} is not supported", folding_factor),
+            });
         }
 
-        self.set_remainder(channel, &mut evaluations);
+        let remainder_span = info_span!("fri_remainder", domain_size = evaluations.len());
+        remainder_span.in_scope(|| self.set_remainder(channel, &mut evaluations));
+
+        drop(commit_phase_span);
     }
 
     /// Builds a single FRI layer by first committing to the `evaluations`, then drawing a random
@@ -204,16 +218,22 @@ where
         // evaluations into a matrix of N columns, then hashing each row into a digest, and finally
         // commiting to vector of these digests; we do this so that we could de-commit to N values
         // with a single opening proof.
-        let transposed_evaluations = transpose_slice(evaluations);
-        let evaluation_vector_commitment =
-            build_layer_commitment::<_, _, V, N>(&transposed_evaluations)
+        let commit_span =
+            info_span!("fri_layer_commitment", domain_size = evaluations.len(), arity = N);
+        let (transposed_evaluations, evaluation_vector_commitment) = commit_span.in_scope(|| {
+            let transposed = transpose_slice(evaluations);
+            let commitment = build_layer_commitment::<_, _, V, N>(&transposed)
                 .expect("failed to construct FRI layer commitment");
+            (transposed, commitment)
+        });
         channel.commit_fri_layer(evaluation_vector_commitment.commitment());
 
         // draw a pseudo-random coefficient from the channel, and use it in degree-respecting
         // projection to reduce the degree of evaluations by N
         let alpha = channel.draw_fri_alpha();
-        *evaluations = apply_drp(&transposed_evaluations, self.domain_offset(), alpha);
+        let fold_span = info_span!("fri_layer_fold", domain_size = evaluations.len(), arity = N);
+        *evaluations =
+            fold_span.in_scope(|| apply_drp(&transposed_evaluations, self.domain_offset(), alpha));
         self.layers.push(FriLayer {
             commitment: evaluation_vector_commitment,
             evaluations: flatten_vector_elements(transposed_evaluations),
@@ -228,12 +248,22 @@ where
     /// evaluating the remainder polynomial on the verifier's end, using Horner's evaluation
     /// method, becomes easier.
     fn set_remainder(&mut self, channel: &mut C, evaluations: &mut [E]) {
-        let inv_twiddles = fft::get_inv_twiddles(evaluations.len());
-        fft::interpolate_poly_with_offset(evaluations, &inv_twiddles, self.options.domain_offset());
+        let interp_span = info_span!("fri_remainder_interpolate", domain_size = evaluations.len());
+        interp_span.in_scope(|| {
+            let inv_twiddles = fft::get_inv_twiddles(evaluations.len());
+            fft::interpolate_poly_with_offset(
+                evaluations,
+                &inv_twiddles,
+                self.options.domain_offset(),
+            );
+        });
         let remainder_poly_size = evaluations.len() / self.options.blowup_factor();
         let remainder_poly: Vec<_> =
             evaluations[..remainder_poly_size].iter().copied().rev().collect();
-        let commitment = <H as ElementHasher>::hash_elements(&remainder_poly);
+        let commitment_span =
+            info_span!("fri_remainder_commitment", remainder_size = remainder_poly.len());
+        let commitment =
+            commitment_span.in_scope(|| <H as ElementHasher>::hash_elements(&remainder_poly));
         channel.commit_fri_layer(commitment);
         self.remainder_poly = FriRemainder(remainder_poly);
     }
@@ -254,6 +284,12 @@ where
     pub fn build_proof(&mut self, positions: &[usize]) -> FriProof {
         assert!(!self.remainder_poly.0.is_empty(), "FRI layers have not been built yet");
 
+        let query_span = info_span!(
+            "fri_query_phase",
+            num_layers = self.layers.len(),
+            num_positions = positions.len()
+        )
+        .entered();
         let mut layers = Vec::with_capacity(self.layers.len());
 
         if !self.layers.is_empty() {
@@ -267,13 +303,20 @@ where
                 positions = fold_positions(&positions, domain_size, folding_factor);
 
                 // sort of a static dispatch for folding_factor parameter
-                let proof_layer = match folding_factor {
+                let layer_span = info_span!(
+                    "fri_query_layer",
+                    layer_idx = i,
+                    positions_len = positions.len(),
+                    domain_size,
+                    folding_factor
+                );
+                let proof_layer = layer_span.in_scope(|| match folding_factor {
                     2 => query_layer::<E, H, V, 2>(&self.layers[i], &positions),
                     4 => query_layer::<E, H, V, 4>(&self.layers[i], &positions),
                     8 => query_layer::<E, H, V, 8>(&self.layers[i], &positions),
                     16 => query_layer::<E, H, V, 16>(&self.layers[i], &positions),
                     _ => unimplemented!("folding factor {} is not supported", folding_factor),
-                };
+                });
 
                 layers.push(proof_layer);
                 domain_size /= folding_factor;
@@ -286,7 +329,9 @@ where
         // clear layers so that another proof can be generated
         self.reset();
 
-        FriProof::new(layers, remainder, 1)
+        let proof = FriProof::new(layers, remainder, 1);
+        drop(query_span);
+        proof
     }
 }
 
@@ -300,10 +345,18 @@ fn query_layer<E: FieldElement, H: Hasher, V: VectorCommitment<H>, const N: usiz
     positions: &[usize],
 ) -> FriProofLayer {
     // build a batch opening proof for all query positions
-    let proof = layer
-        .commitment
-        .open_many(positions)
-        .expect("failed to generate a batch opening proof for FRI layer queries");
+    let open_span = info_span!(
+        "fri_layer_open_many",
+        positions_len = positions.len(),
+        domain_size = layer.evaluations.len(),
+        arity = N
+    );
+    let proof = open_span.in_scope(|| {
+        layer
+            .commitment
+            .open_many(positions)
+            .expect("failed to generate a batch opening proof for FRI layer queries")
+    });
 
     // build a list of polynomial evaluations at each position; since evaluations in FRI layers
     // are stored in transposed form, a position refers to N evaluations which are committed
@@ -327,9 +380,12 @@ where
     V: VectorCommitment<H>,
 {
     let mut hashed_evaluations: Vec<H::Digest> = unsafe { uninit_vector(values.len()) };
-    iter_mut!(hashed_evaluations, 1024).zip(values).for_each(|(e, v)| {
-        let digest: H::Digest = H::hash_elements(v);
-        *e = digest
+    let hash_span = info_span!("fri_layer_hash", rows = values.len(), arity = N);
+    hash_span.in_scope(|| {
+        iter_mut!(hashed_evaluations, 1024).zip(values).for_each(|(e, v)| {
+            let digest: H::Digest = H::hash_elements(v);
+            *e = digest
+        });
     });
 
     V::new(hashed_evaluations)

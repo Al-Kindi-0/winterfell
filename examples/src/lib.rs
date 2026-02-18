@@ -5,7 +5,7 @@
 
 use structopt::StructOpt;
 use winterfell::{
-    crypto::hashers::{Rp64_256, RpJive64_256},
+    crypto::hashers::{Poseidon2, Rp64_256, RpJive64_256},
     math::fields::f128::BaseElement,
     BatchingMethod, FieldExtension, Proof, ProofOptions, VerifierError,
 };
@@ -15,6 +15,7 @@ pub mod fibonacci;
 pub mod lamport;
 #[cfg(feature = "std")]
 pub mod merkle;
+pub mod mock72;
 pub mod rescue;
 #[cfg(feature = "std")]
 pub mod rescue_raps;
@@ -30,6 +31,7 @@ mod tests;
 pub type Blake3_192 = winterfell::crypto::hashers::Blake3_192<BaseElement>;
 pub type Blake3_256 = winterfell::crypto::hashers::Blake3_256<BaseElement>;
 pub type Sha3_256 = winterfell::crypto::hashers::Sha3_256<BaseElement>;
+pub type Poseidon2_256 = winterfell::crypto::hashers::Poseidon2;
 
 pub trait Example {
     fn prove(&self) -> Proof;
@@ -86,6 +88,7 @@ impl ExampleOptions {
             "blake3_192" => HashFunction::Blake3_192,
             "blake3_256" => HashFunction::Blake3_256,
             "sha3_256" => HashFunction::Sha3_256,
+            "poseidon2" | "poseidon2_256" => HashFunction::Poseidon2_256,
             "rp64_256" => HashFunction::Rp64_256,
             "rp_jive64_256" => HashFunction::RpJive64_256,
             val => panic!("'{val}' is not a valid hash function option"),
@@ -112,6 +115,7 @@ impl ExampleOptions {
             "blake3_192" => proof.conjectured_security::<Blake3_192>(),
             "blake3_256" => proof.conjectured_security::<Blake3_256>(),
             "sha3_256" => proof.conjectured_security::<Sha3_256>(),
+            "poseidon2" | "poseidon2_256" => proof.conjectured_security::<Poseidon2>(),
             "rp64_256" => proof.conjectured_security::<Rp64_256>(),
             "rp_jive64_256" => proof.conjectured_security::<RpJive64_256>(),
             val => panic!("'{val}' is not a valid hash function option"),
@@ -126,6 +130,7 @@ impl ExampleOptions {
             "blake3_192" => proof.proven_security::<Blake3_192>(),
             "blake3_256" => proof.proven_security::<Blake3_256>(),
             "sha3_256" => proof.proven_security::<Sha3_256>(),
+            "poseidon2" | "poseidon2_256" => proof.proven_security::<Poseidon2>(),
             "rp64_256" => proof.proven_security::<Rp64_256>(),
             "rp_jive64_256" => proof.proven_security::<RpJive64_256>(),
             val => panic!("'{val}' is not a valid hash function option"),
@@ -167,6 +172,12 @@ pub enum ExampleType {
         /// Length of Fibonacci sequence; must be a power of two
         #[structopt(short = "n", default_value = "65536")]
         sequence_length: usize,
+    },
+    /// Mock trace with 72 main columns and 8 auxiliary columns in `f64` field.
+    Mock72 {
+        /// Trace length; must be a power of two
+        #[structopt(short = "n", default_value = "16384")]
+        trace_length: usize,
     },
     /// Execute a simple VDF function
     Vdf {
@@ -239,6 +250,11 @@ pub enum HashFunction {
     ///
     /// When this function is used in the STARK protocol, proof security cannot exceed 128 bits.
     Sha3_256,
+
+    /// Poseidon2 hash function with 256 bit output. It only works in `f64` field.
+    ///
+    /// When this function is used in the STARK protocol, proof security cannot exceed 128 bits.
+    Poseidon2_256,
 
     /// Rescue Prime hash function with 256 bit output. It only works in `f64` field.
     ///

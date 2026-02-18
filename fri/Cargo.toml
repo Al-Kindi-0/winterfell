@@ -31,6 +31,7 @@ std = ["crypto/std", "math/std", "utils/std"]
 [dependencies]
 crypto = { version = "0.13", path = "../crypto", package = "winter-crypto", default-features = false }
 math = { version = "0.13", path = "../math", package = "winter-math", default-features = false }
+tracing = { version = "0.1", default-features = false, features = ["attributes"] }
 utils = { version = "0.13", path = "../utils/core", package = "winter-utils", default-features = false }
 
 [dev-dependencies]

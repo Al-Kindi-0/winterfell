@@ -461,8 +461,6 @@ pub trait Prover {
             drop(span);
             query_positions
         };
-        drop(opening_span);
-
         // 8 ----- build proof object -------------------------------------------------------------
         let proof = {
             let span = info_span!("build_proof_object").entered();
@@ -489,6 +487,7 @@ pub trait Prover {
             drop(span);
             proof
         };
+        drop(opening_span);
 
         Ok(proof)
     }
